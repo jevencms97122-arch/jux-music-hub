@@ -1,27 +1,49 @@
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter, Route, Routes } from "react-router-dom";
-import { Toaster as Sonner } from "@/components/ui/sonner";
-import { Toaster } from "@/components/ui/toaster";
-import { TooltipProvider } from "@/components/ui/tooltip";
-import Index from "./pages/Index.tsx";
-import NotFound from "./pages/NotFound.tsx";
+import { useState } from 'react';
+import { AuthProvider, useAuth } from '@/contexts/AuthContext';
+import { PlayerProvider } from '@/contexts/PlayerContext';
+import Login from '@/pages/Login';
+import ProfileSetup from '@/pages/ProfileSetup';
+import Home from '@/pages/Home';
+import Upload from '@/pages/Upload';
+import MiniPlayer from '@/components/MiniPlayer';
+import PlayerPage from '@/components/PlayerPage';
+import BottomNav from '@/components/BottomNav';
+import MenuDrawer from '@/components/MenuDrawer';
 
-const queryClient = new QueryClient();
+function AppContent() {
+  const { user, loading } = useAuth();
+  const [page, setPage] = useState<'home' | 'upload'>('home');
+  const [menuOpen, setMenuOpen] = useState(false);
 
-const App = () => (
-  <QueryClientProvider client={queryClient}>
-    <TooltipProvider>
-      <Toaster />
-      <Sonner />
-      <BrowserRouter>
-        <Routes>
-          <Route path="/" element={<Index />} />
-          {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
-          <Route path="*" element={<NotFound />} />
-        </Routes>
-      </BrowserRouter>
-    </TooltipProvider>
-  </QueryClientProvider>
-);
+  if (loading) {
+    return (
+      <div className="flex min-h-screen items-center justify-center">
+        <div className="h-8 w-8 rounded-full border-2 border-primary border-t-transparent animate-spin" />
+      </div>
+    );
+  }
 
-export default App;
+  if (!user) return <Login />;
+  if (!user.profileCompleted) return <ProfileSetup />;
+
+  return (
+    <PlayerProvider>
+      <div className="min-h-screen">
+        {page === 'home' && <Home />}
+        {page === 'upload' && <Upload />}
+        <MiniPlayer />
+        <PlayerPage />
+        <BottomNav active={page} onNavigate={setPage} onMenuOpen={() => setMenuOpen(true)} />
+        <MenuDrawer open={menuOpen} onClose={() => setMenuOpen(false)} />
+      </div>
+    </PlayerProvider>
+  );
+}
+
+export default function App() {
+  return (
+    <AuthProvider>
+      <AppContent />
+    </AuthProvider>
+  );
+}

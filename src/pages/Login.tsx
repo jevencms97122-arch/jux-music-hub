@@ -3,9 +3,11 @@ import { useAuth } from '@/contexts/AuthContext';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import juxLogo from '@/assets/jux-logo.png';
+import { useNavigate } from 'react-router-dom';
 
 export default function Login() {
   const { login, signup } = useAuth();
+  const navigate = useNavigate();
   const [isSignup, setIsSignup] = useState(false);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -22,6 +24,8 @@ export default function Login() {
       } else {
         await login(email, password);
       }
+      // Rediriger vers la page d'accueil après connexion/inscription réussie
+      navigate('/');
     } catch (err: any) {
       setError(err?.message || 'Une erreur est survenue');
     } finally {

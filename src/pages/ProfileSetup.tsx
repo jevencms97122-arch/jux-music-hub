@@ -38,6 +38,8 @@ export default function ProfileSetup() {
       fd.append('lastName', lastName);
       if (avatarFile) fd.append('avatar', avatarFile);
       await updateProfile(fd);
+      // Rediriger vers la page d'accueil après succès
+      window.location.href = '/';
     } catch (err: any) {
       setError(err?.message || 'Erreur lors de la mise à jour');
     } finally {

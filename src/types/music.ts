@@ -20,7 +20,8 @@ export interface PBUser {
   firstName: string;
   lastName: string;
   avatar: string;
-  profileCompleted: boolean;
+  profileCompleted?: boolean;
+  profilCompleted?: boolean;
   collectionId: string;
   collectionName: string;
 }

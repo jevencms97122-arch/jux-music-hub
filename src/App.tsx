@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { AuthProvider, useAuth } from '@/contexts/AuthContext';
 import { PlayerProvider } from '@/contexts/PlayerContext';
+import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import Login from '@/pages/Login';
 import ProfileSetup from '@/pages/ProfileSetup';
 import Home from '@/pages/Home';
@@ -24,7 +25,8 @@ function AppContent() {
   }
 
   if (!user) return <Login />;
-  if (!user.profileCompleted) return <ProfileSetup />;
+  const profileCompleted = user.profileCompleted || user.profilCompleted || false;
+  if (!profileCompleted) return <ProfileSetup />;
 
   return (
     <PlayerProvider>
@@ -42,8 +44,10 @@ function AppContent() {
 
 export default function App() {
   return (
-    <AuthProvider>
-      <AppContent />
-    </AuthProvider>
+    <BrowserRouter>
+      <AuthProvider>
+        <AppContent />
+      </AuthProvider>
+    </BrowserRouter>
   );
 }

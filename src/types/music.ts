@@ -5,6 +5,9 @@ export interface Song {
   audioFile: string;
   coverImage: string;
   uploadedBy: string;
+  genre: string;
+  playCount: number;
+  likesCount: number;
   created: string;
   collectionId: string;
   collectionName: string;
@@ -35,3 +38,23 @@ export interface ListenHistory {
     song?: Song;
   };
 }
+
+export interface SongLike {
+  id: string;
+  user: string;
+  song: string;
+  created: string;
+}
+
+export const MUSIC_GENRES = [
+  "Afrobeat", "Alternative", "Ambient", "Blues", "Bossa Nova",
+  "Classique", "Country", "Dance", "Disco", "Drill",
+  "Drum & Bass", "Dub", "Dubstep", "EDM", "Electro",
+  "Folk", "Funk", "Garage", "Gospel", "Grime",
+  "Grunge", "Hard Rock", "Hip-Hop", "House", "Indie",
+  "Jazz", "Jungle", "K-Pop", "Latin", "Lo-fi",
+  "Métal", "Musique du monde", "Neo Soul", "New Wave", "Pop",
+  "Punk", "R&B", "Raï", "Rap", "Reggae",
+  "Reggaeton", "Rock", "Salsa", "Ska", "Soul",
+  "Techno", "Trap", "Trip-Hop", "Variété française", "Zouk"
+] as const;

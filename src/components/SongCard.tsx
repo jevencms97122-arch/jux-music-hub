@@ -11,12 +11,11 @@ interface SongCardProps {
 export default function SongCard({ song, size = 'md' }: SongCardProps) {
   const { playSong, currentSong, isPlaying } = usePlayer();
   const isActive = currentSong?.id === song.id;
-  const w = size === 'sm' ? 'w-32' : 'w-40';
 
   return (
     <button
       onClick={() => playSong(song)}
-      className={`${w} flex-shrink-0 text-left group`}
+      className={`${size === 'sm' ? 'w-full' : 'w-36 sm:w-40 flex-shrink-0'} text-left group`}
     >
       <div className="relative aspect-square rounded-lg overflow-hidden mb-2 bg-secondary">
         <img
@@ -29,10 +28,18 @@ export default function SongCard({ song, size = 'md' }: SongCardProps) {
           <Play className="h-10 w-10 text-foreground fill-foreground" />
         </div>
         {isActive && isPlaying && (
-          <div className="absolute bottom-2 left-2 flex gap-0.5">
-            {[0, 1, 2].map(i => (
-              <div key={i} className="w-1 bg-primary rounded-full animate-pulse-glow" style={{ height: 12 + i * 4, animationDelay: `${i * 0.2}s` }} />
-            ))}
+          <div className="absolute inset-0 bg-background/30 flex items-center justify-center">
+            <div className="flex items-end gap-[3px] h-8">
+              {[0, 1, 2, 3].map(i => (
+                <div
+                  key={i}
+                  className="w-[3px] bg-primary rounded-full"
+                  style={{
+                    animation: `equalizerBar 0.8s ease-in-out ${i * 0.15}s infinite alternate`,
+                  }}
+                />
+              ))}
+            </div>
           </div>
         )}
       </div>

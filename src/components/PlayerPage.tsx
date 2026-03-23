@@ -98,15 +98,6 @@ export default function PlayerPage() {
 
           {/* Bottom tabs */}
           <div className="flex border-t border-border safe-bottom">
-            <button
-              onClick={() => setTab('player')}
-              className={`flex-1 py-3 text-sm font-medium transition-colors ${tab === 'player' ? 'text-foreground border-b-2 border-foreground' : 'text-muted-foreground'}`}
-            >
-              À suivre
-            </button>
-          </div>
-          {/* Actually let's show the queue toggle */}
-          <div className="flex border-t border-border safe-bottom">
             {(['player', 'queue'] as const).map(t => (
               <button
                 key={t}

@@ -1,14 +1,15 @@
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import { useAuth } from '@/contexts/AuthContext';
 import { getUserAvatarUrl } from '@/lib/pocketbase';
-import { LogOut, User } from 'lucide-react';
+import { LogOut, User, UserCog } from 'lucide-react';
 
 interface MenuDrawerProps {
   open: boolean;
   onClose: () => void;
+  onEditProfile: () => void;
 }
 
-export default function MenuDrawer({ open, onClose }: MenuDrawerProps) {
+export default function MenuDrawer({ open, onClose, onEditProfile }: MenuDrawerProps) {
   const { user, logout } = useAuth();
 
   return (
@@ -21,11 +22,7 @@ export default function MenuDrawer({ open, onClose }: MenuDrawerProps) {
         {user && (
           <div className="flex items-center gap-3 px-2 py-4 mt-4 border-b border-border">
             {user.avatar ? (
-              <img
-                src={getUserAvatarUrl(user as any)}
-                alt={user.pseudo}
-                className="h-10 w-10 rounded-full object-cover"
-              />
+              <img src={getUserAvatarUrl(user as any)} alt={user.pseudo} className="h-10 w-10 rounded-full object-cover" />
             ) : (
               <div className="h-10 w-10 rounded-full bg-secondary flex items-center justify-center">
                 <User className="h-5 w-5 text-muted-foreground" />
@@ -39,6 +36,13 @@ export default function MenuDrawer({ open, onClose }: MenuDrawerProps) {
         )}
 
         <div className="mt-4 space-y-1 px-2">
+          <button
+            onClick={() => { onEditProfile(); onClose(); }}
+            className="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm text-muted-foreground hover:bg-secondary hover:text-foreground transition-colors"
+          >
+            <UserCog className="h-4 w-4" />
+            Modifier le profil
+          </button>
           <button
             onClick={() => { logout(); onClose(); }}
             className="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm text-muted-foreground hover:bg-secondary hover:text-foreground transition-colors"

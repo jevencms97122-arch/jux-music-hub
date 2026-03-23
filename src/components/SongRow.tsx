@@ -21,7 +21,7 @@ export default function SongRow({ title, songs, onSeeAll }: SongRowProps) {
           </button>
         )}
       </div>
-      <div className="flex gap-3 overflow-x-auto scrollbar-hide px-4">
+      <div className="flex gap-2 overflow-x-auto scrollbar-hide px-4">
         {songs.map(song => (
           <SongCard key={song.id} song={song} />
         ))}

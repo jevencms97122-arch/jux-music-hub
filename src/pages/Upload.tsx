@@ -151,7 +151,7 @@ export default function Upload() {
         )}
 
         {success && (
-          <p className="text-sm text-green-500 text-center">✓ Musique publiée avec succès !</p>
+          <p className="text-sm text-primary text-center">✓ Musique publiée avec succès !</p>
         )}
 
         <Button

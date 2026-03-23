@@ -32,6 +32,28 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
   const audioRef = useRef<HTMLAudioElement>(new Audio());
   const loadingMore = useRef(false);
 
+  const incrementPlayCount = useCallback(async (song: Song) => {
+    try {
+      await pb.collection('songs').update(song.id, { 'playCount+': 1 });
+    } catch (e) {
+      // fallback: try regular update
+      try {
+        await pb.collection('songs').update(song.id, { playCount: (song.playCount || 0) + 1 });
+      } catch { /* ignore */ }
+    }
+  }, []);
+
+  const recordListen = useCallback((song: Song) => {
+    if (pb.authStore.record) {
+      pb.collection('listen_history').create({
+        user: pb.authStore.record.id,
+        song: song.id,
+        listenedAt: new Date().toISOString(),
+      }).catch(console.error);
+    }
+    incrementPlayCount(song);
+  }, [incrementPlayCount]);
+
   const loadMoreQueue = useCallback(async (exclude: string[]) => {
     if (loadingMore.current) return;
     loadingMore.current = true;
@@ -52,19 +74,10 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
   const playSong = useCallback(async (song: Song, autoQueue = true) => {
     setCurrentSong(song);
     setPlayerOpen(true);
-    const url = getSongAudioUrl(song);
-    audioRef.current.src = url;
+    audioRef.current.src = getSongAudioUrl(song);
     audioRef.current.play().catch(console.error);
     setIsPlaying(true);
-
-    // Record listen history
-    if (pb.authStore.record) {
-      pb.collection('listen_history').create({
-        user: pb.authStore.record.id,
-        song: song.id,
-        listenedAt: new Date().toISOString(),
-      }).catch(console.error);
-    }
+    recordListen(song);
 
     if (autoQueue) {
       try {
@@ -73,15 +86,14 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
           filter: `id!="${song.id}"`,
           expand: 'uploadedBy',
         });
-        const newQueue = [song, ...(result.items as unknown as Song[])];
-        setQueue(newQueue);
+        setQueue([song, ...(result.items as unknown as Song[])]);
         setQueueIndex(0);
       } catch {
         setQueue([song]);
         setQueueIndex(0);
       }
     }
-  }, []);
+  }, [recordListen]);
 
   const next = useCallback(() => {
     if (queue.length === 0) return;
@@ -93,22 +105,13 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
       audioRef.current.src = getSongAudioUrl(nextSong);
       audioRef.current.play().catch(console.error);
       setIsPlaying(true);
+      recordListen(nextSong);
 
-      if (pb.authStore.record) {
-        pb.collection('listen_history').create({
-          user: pb.authStore.record.id,
-          song: nextSong.id,
-          listenedAt: new Date().toISOString(),
-        }).catch(console.error);
-      }
-
-      // Load more when 1 song left
-      const remaining = queue.length - nextIdx - 1;
-      if (remaining <= 1) {
+      if (queue.length - nextIdx - 1 <= 1) {
         loadMoreQueue(queue.map(s => s.id));
       }
     }
-  }, [queue, queueIndex, loadMoreQueue]);
+  }, [queue, queueIndex, loadMoreQueue, recordListen]);
 
   const previous = useCallback(() => {
     if (audioRef.current.currentTime > 3) {

@@ -1,20 +1,43 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { pb, getUserAvatarUrl } from '@/lib/pocketbase';
+import { pb, getUserAvatarUrl, getSongCoverUrl } from '@/lib/pocketbase';
 import { useAuth } from '@/contexts/AuthContext';
-import type { PBUser, Follow } from '@/types/music';
-import { User, UserCheck, UserX, Users, Bell } from 'lucide-react';
+import { usePlayer } from '@/contexts/PlayerContext';
+import type { PBUser, Follow, Song } from '@/types/music';
+import { User, UserCheck, UserX, Users, Bell, Newspaper, Heart, Music, Upload } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 
-type Tab = 'requests' | 'friends' | 'following';
+type Tab = 'feed' | 'requests' | 'friends' | 'following';
+
+interface FeedItem {
+  id: string;
+  type: 'like' | 'publish';
+  user: PBUser;
+  song: Song;
+  created: string;
+}
+
+function timeAgo(dateStr: string): string {
+  const diff = Date.now() - new Date(dateStr).getTime();
+  const mins = Math.floor(diff / 60000);
+  if (mins < 1) return "à l'instant";
+  if (mins < 60) return `il y a ${mins}min`;
+  const hours = Math.floor(mins / 60);
+  if (hours < 24) return `il y a ${hours}h`;
+  const days = Math.floor(hours / 24);
+  if (days < 7) return `il y a ${days}j`;
+  return new Date(dateStr).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' });
+}
 
 export default function Social() {
   const { user } = useAuth();
   const navigate = useNavigate();
-  const [tab, setTab] = useState<Tab>('requests');
+  const { playSong, currentSong, isPlaying } = usePlayer();
+  const [tab, setTab] = useState<Tab>('feed');
   const [pendingRequests, setPendingRequests] = useState<Follow[]>([]);
   const [friends, setFriends] = useState<PBUser[]>([]);
   const [following, setFollowing] = useState<Follow[]>([]);
+  const [feedItems, setFeedItems] = useState<FeedItem[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -26,7 +49,9 @@ export default function Social() {
     if (!user) return;
     setLoading(true);
     try {
-      if (tab === 'requests') {
+      if (tab === 'feed') {
+        await loadFeed();
+      } else if (tab === 'requests') {
         const res = await pb.collection('follows').getFullList({
           filter: `following="${user.id}" && status="pending"`,
           expand: 'follower',
@@ -34,7 +59,6 @@ export default function Social() {
         });
         setPendingRequests(res as unknown as Follow[]);
       } else if (tab === 'friends') {
-        // Friends = mutual accepted follows
         const myFollowers = await pb.collection('follows').getFullList({
           filter: `following="${user.id}" && status="accepted"`,
           expand: 'follower',
@@ -67,10 +91,76 @@ export default function Social() {
     }
   };
 
+  const loadFeed = async () => {
+    if (!user) return;
+    try {
+      // Get friends IDs
+      const myFollowing = await pb.collection('follows').getFullList({
+        filter: `follower="${user.id}" && status="accepted"`,
+      });
+      const friendIds = myFollowing.map((f: any) => f.following);
+      if (friendIds.length === 0) {
+        setFeedItems([]);
+        return;
+      }
+
+      const friendFilter = friendIds.map(id => `user="${id}"`).join('||');
+      const uploaderFilter = friendIds.map(id => `uploadedBy="${id}"`).join('||');
+
+      // Load recent likes and publications from friends in parallel
+      const [likesRes, songsRes] = await Promise.all([
+        pb.collection('song_likes').getList(1, 30, {
+          filter: friendFilter,
+          expand: 'user,song,song.uploadedBy',
+          sort: '-created',
+        }),
+        pb.collection('songs').getList(1, 20, {
+          filter: uploaderFilter,
+          expand: 'uploadedBy',
+          sort: '-created',
+        }),
+      ]);
+
+      const items: FeedItem[] = [];
+
+      for (const like of likesRes.items) {
+        const likeUser = (like as any).expand?.user;
+        const likeSong = (like as any).expand?.song;
+        if (likeUser && likeSong) {
+          items.push({
+            id: `like-${like.id}`,
+            type: 'like',
+            user: likeUser as PBUser,
+            song: likeSong as Song,
+            created: like.created,
+          });
+        }
+      }
+
+      for (const song of songsRes.items) {
+        const uploader = (song as any).expand?.uploadedBy;
+        if (uploader) {
+          items.push({
+            id: `pub-${song.id}`,
+            type: 'publish',
+            user: uploader as PBUser,
+            song: song as unknown as Song,
+            created: song.created,
+          });
+        }
+      }
+
+      // Sort by date descending
+      items.sort((a, b) => new Date(b.created).getTime() - new Date(a.created).getTime());
+      setFeedItems(items);
+    } catch (e) {
+      console.error('Error loading feed:', e);
+    }
+  };
+
   const acceptRequest = async (followId: string) => {
     try {
       await pb.collection('follows').update(followId, { status: 'accepted' });
-      // Auto-follow back to create friendship
       const follow = pendingRequests.find(f => f.id === followId);
       if (follow && user) {
         const existing = await pb.collection('follows').getList(1, 1, {
@@ -100,6 +190,7 @@ export default function Social() {
   };
 
   const tabs: { key: Tab; label: string; icon: any }[] = [
+    { key: 'feed', label: 'Fil', icon: Newspaper },
     { key: 'requests', label: 'Demandes', icon: Bell },
     { key: 'friends', label: 'Amis', icon: Users },
     { key: 'following', label: 'Suivis', icon: UserCheck },
@@ -112,19 +203,19 @@ export default function Social() {
       </div>
 
       {/* Tabs */}
-      <div className="flex border-b border-border">
+      <div className="flex border-b border-border overflow-x-auto">
         {tabs.map(t => (
           <button
             key={t.key}
             onClick={() => setTab(t.key)}
-            className={`flex-1 flex items-center justify-center gap-2 py-3 text-sm font-medium transition-colors ${
+            className={`flex-1 flex items-center justify-center gap-1.5 py-3 text-xs sm:text-sm font-medium transition-colors whitespace-nowrap ${
               tab === t.key ? 'text-foreground border-b-2 border-primary' : 'text-muted-foreground'
             }`}
           >
             <t.icon className="h-4 w-4" />
             {t.label}
             {t.key === 'requests' && pendingRequests.length > 0 && (
-              <span className="h-5 w-5 rounded-full bg-primary text-primary-foreground text-xs flex items-center justify-center">
+              <span className="h-4 w-4 rounded-full bg-primary text-primary-foreground text-[10px] flex items-center justify-center">
                 {pendingRequests.length}
               </span>
             )}
@@ -139,6 +230,76 @@ export default function Social() {
           </div>
         ) : (
           <>
+            {/* Feed tab */}
+            {tab === 'feed' && (
+              feedItems.length === 0 ? (
+                <div className="text-center py-12">
+                  <Newspaper className="h-10 w-10 text-muted-foreground mx-auto mb-3" />
+                  <p className="text-sm text-muted-foreground">Aucune activité récente</p>
+                  <p className="text-xs text-muted-foreground mt-1">Suivez des amis pour voir leur activité ici</p>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {feedItems.map(item => (
+                    <div key={item.id} className="flex gap-3 p-3 rounded-xl bg-card">
+                      {/* User avatar */}
+                      <button onClick={() => navigate(`/profile/${item.user.id}`)} className="shrink-0">
+                        <div className="h-10 w-10 rounded-full overflow-hidden">
+                          {item.user.avatar ? (
+                            <img src={getUserAvatarUrl(item.user as any)} alt={item.user.pseudo} className="h-full w-full object-cover" />
+                          ) : (
+                            <div className="h-full w-full bg-secondary flex items-center justify-center">
+                              <User className="h-5 w-5 text-muted-foreground" />
+                            </div>
+                          )}
+                        </div>
+                      </button>
+
+                      {/* Content */}
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm text-foreground">
+                          <button onClick={() => navigate(`/profile/${item.user.id}`)} className="font-semibold hover:underline">
+                            {item.user.pseudo}
+                          </button>
+                          {item.type === 'like' ? (
+                            <span className="text-muted-foreground"> a aimé </span>
+                          ) : (
+                            <span className="text-muted-foreground"> a publié </span>
+                          )}
+                          <span className="font-medium">{item.song.title}</span>
+                        </p>
+                        <p className="text-xs text-muted-foreground mt-0.5">{timeAgo(item.created)}</p>
+
+                        {/* Song card */}
+                        <button
+                          onClick={() => playSong(item.song)}
+                          className="flex items-center gap-3 mt-2 p-2 rounded-lg bg-secondary/50 hover:bg-secondary transition-colors w-full text-left"
+                        >
+                          <img
+                            src={getSongCoverUrl(item.song)}
+                            alt={item.song.title}
+                            className="h-12 w-12 rounded-md object-cover shrink-0"
+                          />
+                          <div className="min-w-0 flex-1">
+                            <p className="text-sm font-medium text-foreground truncate">{item.song.title}</p>
+                            <p className="text-xs text-muted-foreground truncate">{item.song.author}</p>
+                          </div>
+                          <div className="shrink-0">
+                            {item.type === 'like' ? (
+                              <Heart className="h-4 w-4 text-primary fill-primary" />
+                            ) : (
+                              <Upload className="h-4 w-4 text-primary" />
+                            )}
+                          </div>
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )
+            )}
+
+            {/* Requests tab */}
             {tab === 'requests' && (
               pendingRequests.length === 0 ? (
                 <p className="text-sm text-muted-foreground text-center py-8">Aucune demande en attente</p>
@@ -179,6 +340,7 @@ export default function Social() {
               )
             )}
 
+            {/* Friends tab */}
             {tab === 'friends' && (
               friends.length === 0 ? (
                 <p className="text-sm text-muted-foreground text-center py-8">Aucun ami pour le moment</p>
@@ -209,6 +371,7 @@ export default function Social() {
               )
             )}
 
+            {/* Following tab */}
             {tab === 'following' && (
               following.length === 0 ? (
                 <p className="text-sm text-muted-foreground text-center py-8">Vous ne suivez personne</p>

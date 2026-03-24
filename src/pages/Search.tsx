@@ -1,4 +1,5 @@
-﻿import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { pb } from '@/lib/pocketbase';
 import { getUserAvatarUrl } from '@/lib/pocketbase';
 import { usePlayer } from '@/contexts/PlayerContext';

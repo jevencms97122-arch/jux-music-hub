@@ -107,6 +107,11 @@ export default function PlayerPage() {
                 </button>
               </div>
 
+              {/* Social proof - friends who liked */}
+              {user && currentSong && (
+                <FriendsLikedBadge songId={currentSong.id} userId={user.id} />
+              )}
+
               <div className="w-full mb-6">
                 <input
                   type="range"

@@ -1,6 +1,6 @@
-import { useState, useEffect } from 'react';
+﻿import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { usePlayer } from '@/contexts/PlayerContext';
+import { usePlayer, usePlayerProgress } from '@/contexts/PlayerContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { getSongCoverUrl, pb } from '@/lib/pocketbase';
 import { ChevronDown, Play, Pause, SkipForward, SkipBack, Shuffle, Repeat, Heart, Headphones } from 'lucide-react';
@@ -14,7 +14,8 @@ function formatTime(s: number) {
 }
 
 export default function PlayerPage() {
-  const { currentSong, isPlaying, progress, duration, togglePlay, next, previous, seek, setPlayerOpen, playerOpen } = usePlayer();
+  const { currentSong, isPlaying, togglePlay, next, previous, seek, setPlayerOpen, playerOpen } = usePlayer();
+  const { progress, duration } = usePlayerProgress();
   const { user } = useAuth();
   const [tab, setTab] = useState<'player' | 'queue'>('player');
   const [liked, setLiked] = useState(false);
@@ -26,12 +27,10 @@ export default function PlayerPage() {
     setPlayCount(currentSong.playCount || 0);
     setLikesCount(currentSong.likesCount || 0);
 
-    // Check if user has liked this song
     if (user) {
       pb.collection('song_likes').getList(1, 1, {
         filter: `user="${user.id}" && song="${currentSong.id}"`,
-      }).then(r => setLiked(r.items.length > 0))
-        .catch(() => setLiked(false));
+      }).then(r => setLiked(r.items.length > 0)).catch(() => setLiked(false));
     }
   }, [currentSong, user]);
 
@@ -75,7 +74,7 @@ export default function PlayerPage() {
           className="fixed inset-0 z-50 bg-background flex flex-col"
         >
           <div className="flex items-center justify-between px-4 py-3">
-            <button onClick={() => { setPlayerOpen(false); setTab('player'); }} className="p-2 text-foreground">
+            <button onClick={() => { setPlayerOpen(false); setTab('player'); }} className="p-2 text-foreground" type="button">
               <ChevronDown className="h-6 w-6" />
             </button>
             <p className="text-xs text-muted-foreground">En cours de lecture</p>
@@ -96,13 +95,12 @@ export default function PlayerPage() {
                 </p>
               </div>
 
-              {/* Stats */}
               <div className="flex items-center gap-4 mb-4">
                 <div className="flex items-center gap-1 text-xs text-muted-foreground">
                   <Headphones className="h-3.5 w-3.5" />
                   <span>{playCount}</span>
                 </div>
-                <button onClick={toggleLike} className="flex items-center gap-1 text-xs text-muted-foreground">
+                <button onClick={toggleLike} className="flex items-center gap-1 text-xs text-muted-foreground" type="button">
                   <Heart className={`h-3.5 w-3.5 transition-colors ${liked ? 'fill-primary text-primary' : ''}`} />
                   <span>{likesCount}</span>
                 </button>
@@ -124,16 +122,16 @@ export default function PlayerPage() {
               </div>
 
               <div className="flex items-center justify-center gap-8">
-                <button className="p-2 text-muted-foreground"><Shuffle className="h-5 w-5" /></button>
-                <button onClick={previous} className="p-2 text-foreground"><SkipBack className="h-7 w-7 fill-foreground" /></button>
-                <button onClick={togglePlay} className="h-16 w-16 rounded-full bg-foreground flex items-center justify-center">
+                <button className="p-2 text-muted-foreground" type="button"><Shuffle className="h-5 w-5" /></button>
+                <button onClick={previous} className="p-2 text-foreground" type="button"><SkipBack className="h-7 w-7 fill-foreground" /></button>
+                <button onClick={togglePlay} className="h-16 w-16 rounded-full bg-foreground flex items-center justify-center" type="button">
                   {isPlaying
                     ? <Pause className="h-7 w-7 text-background fill-background" />
                     : <Play className="h-7 w-7 text-background fill-background ml-1" />
                   }
                 </button>
-                <button onClick={next} className="p-2 text-foreground"><SkipForward className="h-7 w-7 fill-foreground" /></button>
-                <button className="p-2 text-muted-foreground"><Repeat className="h-5 w-5" /></button>
+                <button onClick={next} className="p-2 text-foreground" type="button"><SkipForward className="h-7 w-7 fill-foreground" /></button>
+                <button className="p-2 text-muted-foreground" type="button"><Repeat className="h-5 w-5" /></button>
               </div>
             </div>
           ) : (
@@ -148,6 +146,7 @@ export default function PlayerPage() {
                 key={t}
                 onClick={() => setTab(t)}
                 className={`flex-1 py-3 text-sm font-medium transition-colors ${tab === t ? 'text-foreground border-b-2 border-foreground' : 'text-muted-foreground'}`}
+                type="button"
               >
                 {t === 'queue' ? 'À suivre' : 'Lecteur'}
               </button>

@@ -1,14 +1,27 @@
 import PocketBase from 'pocketbase';
 
-export const pb = new PocketBase('http://188.115.125.74:8090');
+export const pb = new PocketBase('http://188.115.125.74:8090').autoCancellation(false);
 
 export function getFileUrl(record: { id: string; collectionId: string; collectionName: string }, filename: string) {
-  return pb.files.getUrl(record, filename);
+  const url = pb.files.getURL(record, filename);
+  // Ensure absolute URL
+  if (url.startsWith('http')) {
+    return url;
+  }
+  if (url.startsWith('/')) {
+    return pb.baseUrl + url;
+  }
+  return pb.baseUrl + '/' + url;
 }
 
 export function getSongCoverUrl(song: { id: string; collectionId: string; collectionName: string; coverImage: string }) {
   if (!song.coverImage) return '/placeholder.svg';
-  return getFileUrl(song, song.coverImage);
+  
+  // Use the correct PocketBase file URL format
+  const baseUrl = pb.baseUrl.replace(/\/$/, ''); // Remove trailing slash if present
+  const url = `${baseUrl}/api/files/${song.collectionName}/${song.id}/${song.coverImage}?thumb=0x256&t=${Date.now()}`;
+  
+  return url;
 }
 
 export function getSongAudioUrl(song: { id: string; collectionId: string; collectionName: string; audioFile: string }) {

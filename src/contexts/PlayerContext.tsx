@@ -1,14 +1,14 @@
-import React, { createContext, useContext, useState, useRef, useEffect, useCallback } from 'react';
+﻿import React, { createContext, useContext, useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import { pb, getSongAudioUrl } from '@/lib/pocketbase';
+import { showMediaNotification, closeMediaNotification, setupMediaControlListeners } from '@/lib/notifications';
 import type { Song } from '@/types/music';
 
 interface PlayerContextType {
   currentSong: Song | null;
   queue: Song[];
   isPlaying: boolean;
-  progress: number;
-  duration: number;
   playerOpen: boolean;
+  likedSongs: Set<string>;
   playSong: (song: Song, autoQueue?: boolean) => void;
   pause: () => void;
   resume: () => void;
@@ -17,9 +17,16 @@ interface PlayerContextType {
   previous: () => void;
   seek: (time: number) => void;
   setPlayerOpen: (open: boolean) => void;
+  toggleLike: (song: Song) => Promise<void>;
+}
+
+interface PlayerProgressContextType {
+  progress: number;
+  duration: number;
 }
 
 const PlayerContext = createContext<PlayerContextType | null>(null);
+const PlayerProgressContext = createContext<PlayerProgressContextType | null>(null);
 
 export function PlayerProvider({ children }: { children: React.ReactNode }) {
   const [currentSong, setCurrentSong] = useState<Song | null>(null);
@@ -29,17 +36,20 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
   const [progress, setProgress] = useState(0);
   const [duration, setDuration] = useState(0);
   const [playerOpen, setPlayerOpen] = useState(false);
+  const [likedSongs, setLikedSongs] = useState<Set<string>>(new Set());
   const audioRef = useRef<HTMLAudioElement>(new Audio());
   const loadingMore = useRef(false);
+  const lastProgressRef = useRef(0);
 
   const incrementPlayCount = useCallback(async (song: Song) => {
     try {
       await pb.collection('songs').update(song.id, { 'playCount+': 1 });
-    } catch (e) {
-      // fallback: try regular update
+    } catch {
       try {
         await pb.collection('songs').update(song.id, { playCount: (song.playCount || 0) + 1 });
-      } catch { /* ignore */ }
+      } catch {
+        // ignore
+      }
     }
   }, []);
 
@@ -127,21 +137,72 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
       audioRef.current.play().catch(console.error);
       setIsPlaying(true);
     }
-  }, [queue, queueIndex]);
+  }, [queueIndex]);
 
   const pause = useCallback(() => { audioRef.current.pause(); setIsPlaying(false); }, []);
   const resume = useCallback(() => { audioRef.current.play().catch(console.error); setIsPlaying(true); }, []);
   const togglePlay = useCallback(() => { isPlaying ? pause() : resume(); }, [isPlaying, pause, resume]);
   const seek = useCallback((time: number) => { audioRef.current.currentTime = time; }, []);
 
+  const toggleLike = useCallback(async (song: Song) => {
+    if (!pb.authStore.record) return;
+    const userId = pb.authStore.record.id;
+    const isCurrentlyLiked = likedSongs.has(song.id);
+
+    try {
+      if (isCurrentlyLiked) {
+        const likes = await pb.collection('song_likes').getFullList({
+          filter: `user="${userId}" && song="${song.id}"`,
+        });
+        for (const like of likes) {
+          await pb.collection('song_likes').delete(like.id);
+        }
+        setLikedSongs(prev => {
+          const newSet = new Set(prev);
+          newSet.delete(song.id);
+          return newSet;
+        });
+      } else {
+        await pb.collection('song_likes').create({ user: userId, song: song.id });
+        setLikedSongs(prev => new Set(prev).add(song.id));
+      }
+    } catch (error) {
+      console.error('Error toggling like:', error);
+    }
+  }, [likedSongs]);
+
+  useEffect(() => {
+    const loadLikedSongs = async () => {
+      if (!pb.authStore.record) return;
+      try {
+        const likes = await pb.collection('song_likes').getFullList({
+          filter: `user="${pb.authStore.record.id}"`,
+        });
+        const likedIds = new Set(likes.map((like: any) => like.song));
+        setLikedSongs(likedIds);
+      } catch (error) {
+        console.error('Error loading liked songs:', error);
+      }
+    };
+    loadLikedSongs();
+  }, []);
+
   useEffect(() => {
     const audio = audioRef.current;
-    const onTime = () => setProgress(audio.currentTime);
-    const onDur = () => setDuration(audio.duration);
+    const onTime = () => {
+      const currentTime = audio.currentTime;
+      if (Math.abs(currentTime - lastProgressRef.current) >= 0.25 || currentTime === 0 || currentTime >= audio.duration) {
+        lastProgressRef.current = currentTime;
+        setProgress(currentTime);
+      }
+    };
+    const onDur = () => setDuration(audio.duration || 0);
     const onEnd = () => next();
+
     audio.addEventListener('timeupdate', onTime);
     audio.addEventListener('loadedmetadata', onDur);
     audio.addEventListener('ended', onEnd);
+
     return () => {
       audio.removeEventListener('timeupdate', onTime);
       audio.removeEventListener('loadedmetadata', onDur);
@@ -149,12 +210,54 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
     };
   }, [next]);
 
+  useEffect(() => {
+    setupMediaControlListeners({
+      onPlay: () => { audioRef.current.play().catch(console.error); setIsPlaying(true); },
+      onPause: () => { audioRef.current.pause(); setIsPlaying(false); },
+      onNext: () => next(),
+      onPrevious: () => previous(),
+      onLike: () => { if (currentSong) toggleLike(currentSong); },
+    });
+  }, [currentSong, next, previous, toggleLike]);
+
+  useEffect(() => {
+    if (currentSong && isPlaying) {
+      showMediaNotification(currentSong, true, likedSongs.has(currentSong.id));
+    } else if (!isPlaying && currentSong) {
+      showMediaNotification(currentSong, false, likedSongs.has(currentSong.id));
+    }
+  }, [currentSong, isPlaying, likedSongs]);
+
+  useEffect(() => {
+    if (!currentSong) {
+      closeMediaNotification();
+    }
+  }, [currentSong]);
+
+  const playerValue = useMemo(() => ({
+    currentSong,
+    queue,
+    isPlaying,
+    playerOpen,
+    likedSongs,
+    playSong,
+    pause,
+    resume,
+    togglePlay,
+    next,
+    previous,
+    seek,
+    setPlayerOpen,
+    toggleLike,
+  }), [currentSong, queue, isPlaying, playerOpen, likedSongs, playSong, pause, resume, togglePlay, next, previous, seek, setPlayerOpen, toggleLike]);
+
+  const progressValue = useMemo(() => ({ progress, duration }), [progress, duration]);
+
   return (
-    <PlayerContext.Provider value={{
-      currentSong, queue, isPlaying, progress, duration, playerOpen,
-      playSong, pause, resume, togglePlay, next, previous, seek, setPlayerOpen,
-    }}>
-      {children}
+    <PlayerContext.Provider value={playerValue}>
+      <PlayerProgressContext.Provider value={progressValue}>
+        {children}
+      </PlayerProgressContext.Provider>
     </PlayerContext.Provider>
   );
 }
@@ -162,5 +265,11 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
 export function usePlayer() {
   const ctx = useContext(PlayerContext);
   if (!ctx) throw new Error('usePlayer must be inside PlayerProvider');
+  return ctx;
+}
+
+export function usePlayerProgress() {
+  const ctx = useContext(PlayerProgressContext);
+  if (!ctx) throw new Error('usePlayerProgress must be inside PlayerProvider');
   return ctx;
 }

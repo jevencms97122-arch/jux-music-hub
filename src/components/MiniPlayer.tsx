@@ -1,12 +1,14 @@
-import { usePlayer } from '@/contexts/PlayerContext';
+﻿import { usePlayer, usePlayerProgress } from '@/contexts/PlayerContext';
 import { getSongCoverUrl } from '@/lib/pocketbase';
-import { Play, Pause, SkipForward } from 'lucide-react';
+import { Play, Pause, SkipForward, Heart } from 'lucide-react';
 
 export default function MiniPlayer() {
-  const { currentSong, isPlaying, togglePlay, next, setPlayerOpen, progress, duration } = usePlayer();
+  const { currentSong, isPlaying, togglePlay, next, setPlayerOpen, likedSongs, toggleLike } = usePlayer();
+  const { progress, duration } = usePlayerProgress();
   if (!currentSong) return null;
 
   const pct = duration > 0 ? (progress / duration) * 100 : 0;
+  const isLiked = likedSongs.has(currentSong.id);
 
   return (
     <div
@@ -26,10 +28,17 @@ export default function MiniPlayer() {
           <p className="text-sm font-medium text-foreground truncate">{currentSong.title}</p>
           <p className="text-xs text-muted-foreground truncate">{currentSong.author}</p>
         </div>
-        <button onClick={e => { e.stopPropagation(); togglePlay(); }} className="p-2 text-foreground">
+        <button
+          onClick={e => { e.stopPropagation(); toggleLike(currentSong); }}
+          className="p-2 text-foreground hover:text-primary transition-colors"
+          type="button"
+        >
+          <Heart className={`h-5 w-5 ${isLiked ? 'fill-current text-primary' : ''}`} />
+        </button>
+        <button onClick={e => { e.stopPropagation(); togglePlay(); }} className="p-2 text-foreground" type="button">
           {isPlaying ? <Pause className="h-5 w-5" /> : <Play className="h-5 w-5" />}
         </button>
-        <button onClick={e => { e.stopPropagation(); next(); }} className="p-2 text-foreground">
+        <button onClick={e => { e.stopPropagation(); next(); }} className="p-2 text-foreground" type="button">
           <SkipForward className="h-5 w-5" />
         </button>
       </div>

@@ -1,6 +1,8 @@
-import type { Song } from '@/types/music';
+﻿import type { Song } from '@/types/music';
 import SongCard from './SongCard';
 import { ChevronRight } from 'lucide-react';
+import React from 'react';
+import { usePlayer } from '@/contexts/PlayerContext';
 
 interface SongRowProps {
   title: string;
@@ -8,7 +10,9 @@ interface SongRowProps {
   onSeeAll?: () => void;
 }
 
-export default function SongRow({ title, songs, onSeeAll }: SongRowProps) {
+function SongRow({ title, songs, onSeeAll }: SongRowProps) {
+  const { playSong, currentSong, isPlaying } = usePlayer();
+
   if (songs.length === 0) return null;
 
   return (
@@ -23,9 +27,17 @@ export default function SongRow({ title, songs, onSeeAll }: SongRowProps) {
       </div>
       <div className="flex gap-2 overflow-x-auto scrollbar-hide px-4">
         {songs.map(song => (
-          <SongCard key={song.id} song={song} />
+          <SongCard
+            key={song.id}
+            song={song}
+            isActive={currentSong?.id === song.id}
+            isPlaying={isPlaying}
+            onPlay={playSong}
+          />
         ))}
       </div>
     </section>
   );
 }
+
+export default React.memo(SongRow);

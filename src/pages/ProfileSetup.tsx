@@ -1,11 +1,13 @@
 import { useState, useRef } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
+import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Camera } from 'lucide-react';
 
 export default function ProfileSetup() {
   const { updateProfile } = useAuth();
+  const navigate = useNavigate();
   const [pseudo, setPseudo] = useState('');
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
@@ -39,7 +41,7 @@ export default function ProfileSetup() {
       if (avatarFile) fd.append('avatar', avatarFile);
       await updateProfile(fd);
       // Rediriger vers la page d'accueil après succès
-      window.location.href = '/';
+      navigate('/jux');
     } catch (err: any) {
       setError(err?.message || 'Erreur lors de la mise à jour');
     } finally {

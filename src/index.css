@@ -1,4 +1,4 @@
-@tailwind base;
+﻿@tailwind base;
 @tailwind components;
 @tailwind utilities;
 
@@ -57,6 +57,11 @@
   }
   .safe-bottom {
     padding-bottom: env(safe-area-inset-bottom, 0px);
+  }
+  .animate-equalizer {
+    animation: equalizerBar 0.8s ease-in-out infinite alternate;
+    will-change: transform;
+    transform: translateZ(0);
   }
 }
 

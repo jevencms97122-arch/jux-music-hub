@@ -18,69 +18,98 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<PBUser | null>(null);
   const [loading, setLoading] = useState(true);
 
+  const saveAuth = (extra: { email?: string; password?: string } = {}) => {
+    const auth = pb.authStore.exportToObject();
+    if (!auth.token || !auth.record) return;
+    localStorage.setItem('jux_auth', JSON.stringify({
+      token: auth.token,
+      record: auth.record,
+      ...extra,
+    }));
+  };
+
+  const clearAuth = () => {
+    pb.authStore.clear();
+    setUser(null);
+    localStorage.removeItem('jux_auth');
+  };
+
   const refreshUser = useCallback(async () => {
-    if (pb.authStore.isValid && pb.authStore.record) {
-      try {
-        const u = await pb.collection('users').getOne(pb.authStore.record.id);
-        setUser(u as unknown as PBUser);
-      } catch (error) {
-        console.error('Erreur lors du rafraîchissement de l\'utilisateur:', error);
-        pb.authStore.clear();
-        setUser(null);
-        localStorage.removeItem('pb_auth');
-      }
+    if (!pb.authStore.isValid) {
+      console.debug('[Auth] pb.authStore non valide');
+      return;
+    }
+
+    const userId = pb.authStore.record?.id;
+    if (!userId) {
+      console.warn('[Auth] userId introuvable lors du refreshUser');
+      return;
+    }
+
+    try {
+      const u = await pb.collection('users').getOne(userId);
+      setUser(u as unknown as PBUser);
+      console.debug('[Auth] user rafraîchi', u.id);
+    } catch (error) {
+      console.error('Erreur lors du rafraîchissement de l\'utilisateur:', error);
+      clearAuth();
     }
   }, []);
 
   useEffect(() => {
-    // Vérifier si l'utilisateur est déjà connecté via le localStorage
-    const savedAuth = localStorage.getItem('pb_auth');
-    if (savedAuth) {
+    const initAuth = async () => {
       try {
-        const authData = JSON.parse(savedAuth);
-        // Restaurer l'état d'authentification de Pocketbase
-        pb.authStore.save(authData.token, authData.model);
-        
-        // Vérifier si l'authentification est toujours valide
-        if (pb.authStore.isValid) {
-          refreshUser().finally(() => setLoading(false));
-        } else {
-          // Si l'authentification n'est plus valide, essayer de se reconnecter
-          if (authData.email && authData.password) {
-            pb.collection('users').authWithPassword(authData.email, authData.password)
-              .then(() => refreshUser())
-              .finally(() => setLoading(false))
-              .catch(() => {
-                localStorage.removeItem('pb_auth');
-                setLoading(false);
-              });
-          } else {
-            localStorage.removeItem('pb_auth');
-            setLoading(false);
+        // Use the build-in pb.authStore persistence source first.
+        if (pb.authStore.isValid && pb.authStore.record) {
+          setUser(pb.authStore.record as PBUser);
+          try {
+            await refreshUser();
+          } catch (error) {
+            console.error('[Auth] refreshUser failed, clearing auth', error);
+            clearAuth();
+          }
+          setLoading(false);
+          return;
+        }
+
+        // Fallback for jux_auth legacy format (token + record)
+        const savedAuth = localStorage.getItem('jux_auth');
+        if (savedAuth) {
+          const authData = JSON.parse(savedAuth);
+          if (authData.token && authData.record) {
+            pb.authStore.save(authData.token, authData.record);
+            if (pb.authStore.isValid && pb.authStore.record) {
+              setUser(pb.authStore.record as PBUser);
+              try {
+                await refreshUser();
+              } catch (error) {
+                console.error('[Auth] refreshUser failed, clearing auth', error);
+                clearAuth();
+              }
+              setLoading(false);
+              return;
+            }
           }
         }
+
+        // Nothing valid
+        clearAuth();
       } catch (error) {
         console.error('Erreur lors de la restauration de l\'authentification:', error);
-        localStorage.removeItem('pb_auth');
+        clearAuth();
+      } finally {
         setLoading(false);
       }
-    } else if (pb.authStore.isValid && pb.authStore.record) {
-      refreshUser().finally(() => setLoading(false));
-    } else {
-      setLoading(false);
-    }
+    };
+
+    initAuth();
 
     const unsub = pb.authStore.onChange(() => {
       if (pb.authStore.isValid && pb.authStore.record) {
         refreshUser();
-        // Sauvegarder l'état d'authentification
-        localStorage.setItem('pb_auth', JSON.stringify({
-          token: pb.authStore.token,
-          model: pb.authStore.record
-        }));
+        saveAuth();
       } else {
-        setUser(null);
-        localStorage.removeItem('pb_auth');
+        clearAuth();
       }
     });
 
@@ -90,14 +119,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const login = async (email: string, password: string) => {
     await pb.collection('users').authWithPassword(email, password);
     await refreshUser();
-    // Sauvegarder l'état d'authentification complet avec email et mot de passe
     if (pb.authStore.isValid && pb.authStore.record) {
-      localStorage.setItem('pb_auth', JSON.stringify({
-        token: pb.authStore.token,
-        model: pb.authStore.record,
-        email: email,
-        password: password
-      }));
+      saveAuth({ email, password });
     }
   };
 
@@ -111,21 +134,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     });
     await pb.collection('users').authWithPassword(email, password);
     await refreshUser();
-    // Sauvegarder l'état d'authentification complet avec email et mot de passe
     if (pb.authStore.isValid && pb.authStore.record) {
-      localStorage.setItem('pb_auth', JSON.stringify({
-        token: pb.authStore.token,
-        model: pb.authStore.record,
-        email: email,
-        password: password
-      }));
+      saveAuth({ email, password });
     }
   };
 
   const logout = () => {
-    pb.authStore.clear();
-    setUser(null);
-    localStorage.removeItem('pb_auth');
+    clearAuth();
   };
 
   const updateProfile = async (data: FormData) => {

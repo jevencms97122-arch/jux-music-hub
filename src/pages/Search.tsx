@@ -1,6 +1,7 @@
-import { useState, useEffect, useCallback } from 'react';
+﻿import { useState, useEffect, useCallback } from 'react';
 import { pb } from '@/lib/pocketbase';
 import { getUserAvatarUrl } from '@/lib/pocketbase';
+import { usePlayer } from '@/contexts/PlayerContext';
 import type { Song, PBUser } from '@/types/music';
 import SongCard from '@/components/SongCard';
 import { Search as SearchIcon, X, User } from 'lucide-react';
@@ -10,6 +11,7 @@ export default function SearchPage() {
   const [songs, setSongs] = useState<Song[]>([]);
   const [users, setUsers] = useState<PBUser[]>([]);
   const [loading, setLoading] = useState(false);
+  const { playSong, currentSong, isPlaying } = usePlayer();
 
   const search = useCallback(async (q: string) => {
     if (!q.trim()) {
@@ -56,7 +58,7 @@ export default function SearchPage() {
           className="w-full h-10 pl-10 pr-10 rounded-lg bg-secondary border border-border text-foreground placeholder:text-muted-foreground text-sm focus:outline-none focus:ring-2 focus:ring-ring"
         />
         {query && (
-          <button onClick={() => setQuery('')} className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground">
+          <button onClick={() => setQuery('')} className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground" type="button">
             <X className="h-4 w-4" />
           </button>
         )}
@@ -97,7 +99,16 @@ export default function SearchPage() {
         <section>
           <h2 className="text-sm font-semibold text-muted-foreground mb-3">Musiques</h2>
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
-            {songs.map(s => <SongCard key={s.id} song={s} size="sm" />)}
+            {songs.map(s => (
+              <SongCard
+                key={s.id}
+                song={s}
+                size="sm"
+                isActive={currentSong?.id === s.id}
+                isPlaying={isPlaying}
+                onPlay={playSong}
+              />
+            ))}
           </div>
         </section>
       )}

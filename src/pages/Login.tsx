@@ -25,7 +25,7 @@ export default function Login() {
         await login(email, password);
       }
       // Rediriger vers la page d'accueil après connexion/inscription réussie
-      navigate('/');
+      navigate('/jux');
     } catch (err: any) {
       setError(err?.message || 'Une erreur est survenue');
     } finally {

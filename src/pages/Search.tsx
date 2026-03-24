@@ -8,6 +8,7 @@ import SongCard from '@/components/SongCard';
 import { Search as SearchIcon, X, User } from 'lucide-react';
 
 export default function SearchPage() {
+  const navigate = useNavigate();
   const [query, setQuery] = useState('');
   const [songs, setSongs] = useState<Song[]>([]);
   const [users, setUsers] = useState<PBUser[]>([]);

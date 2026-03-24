@@ -1,4 +1,5 @@
-﻿import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { pb } from '@/lib/pocketbase';
 import { getUserAvatarUrl } from '@/lib/pocketbase';
 import { usePlayer } from '@/contexts/PlayerContext';
@@ -7,6 +8,7 @@ import SongCard from '@/components/SongCard';
 import { Search as SearchIcon, X, User } from 'lucide-react';
 
 export default function SearchPage() {
+  const navigate = useNavigate();
   const [query, setQuery] = useState('');
   const [songs, setSongs] = useState<Song[]>([]);
   const [users, setUsers] = useState<PBUser[]>([]);
@@ -77,7 +79,7 @@ export default function SearchPage() {
           <h2 className="text-sm font-semibold text-muted-foreground mb-3">Utilisateurs</h2>
           <div className="space-y-2">
             {users.map(u => (
-              <div key={u.id} className="flex items-center gap-3 p-2 rounded-lg bg-card">
+              <div key={u.id} onClick={() => navigate(`/profile/${u.id}`)} className="flex items-center gap-3 p-2 rounded-lg bg-card cursor-pointer hover:bg-secondary transition-colors">
                 {u.avatar ? (
                   <img src={getUserAvatarUrl(u as any)} alt={u.pseudo} className="h-10 w-10 rounded-full object-cover" />
                 ) : (

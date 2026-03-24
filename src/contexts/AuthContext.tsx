@@ -18,14 +18,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<PBUser | null>(null);
   const [loading, setLoading] = useState(true);
 
-  const saveAuth = (extra: { email?: string; password?: string } = {}) => {
-    const auth = pb.authStore.exportToObject();
-    if (!auth.token || !auth.record) return;
-    localStorage.setItem('jux_auth', JSON.stringify({
-      token: auth.token,
-      record: auth.record,
-      ...extra,
-    }));
+  const saveAuth = () => {
+    const token = pb.authStore.token;
+    const record = pb.authStore.record;
+    if (!token || !record) return;
+    localStorage.setItem('jux_auth', JSON.stringify({ token, record }));
   };
 
   const clearAuth = () => {
@@ -119,9 +116,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const login = async (email: string, password: string) => {
     await pb.collection('users').authWithPassword(email, password);
     await refreshUser();
-    if (pb.authStore.isValid && pb.authStore.record) {
-      saveAuth({ email, password });
-    }
+    saveAuth();
   };
 
   const signup = async (email: string, password: string) => {
@@ -134,9 +129,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     });
     await pb.collection('users').authWithPassword(email, password);
     await refreshUser();
-    if (pb.authStore.isValid && pb.authStore.record) {
-      saveAuth({ email, password });
-    }
+    saveAuth();
   };
 
   const logout = () => {

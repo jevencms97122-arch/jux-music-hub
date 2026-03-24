@@ -1,10 +1,11 @@
-﻿import { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { usePlayer, usePlayerProgress } from '@/contexts/PlayerContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { getSongCoverUrl, pb } from '@/lib/pocketbase';
 import { ChevronDown, Play, Pause, SkipForward, SkipBack, Shuffle, Repeat, Heart, Headphones } from 'lucide-react';
 import QueueView from './QueueView';
+import FriendsLikedBadge from './FriendsLikedBadge';
 
 function formatTime(s: number) {
   if (!s || isNaN(s)) return '0:00';
@@ -105,6 +106,11 @@ export default function PlayerPage() {
                   <span>{likesCount}</span>
                 </button>
               </div>
+
+              {/* Social proof - friends who liked */}
+              {user && currentSong && (
+                <FriendsLikedBadge songId={currentSong.id} userId={user.id} />
+              )}
 
               <div className="w-full mb-6">
                 <input

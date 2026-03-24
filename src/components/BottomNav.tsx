@@ -1,8 +1,8 @@
-import { Home, Upload, Menu, Search, Heart } from 'lucide-react';
+import { Home, Menu, Search, Heart, Users } from 'lucide-react';
 
 interface BottomNavProps {
-  active: 'home' | 'upload' | 'search' | 'favorites';
-  onNavigate: (page: 'home' | 'upload' | 'search' | 'favorites') => void;
+  active: 'home' | 'social' | 'search' | 'favorites';
+  onNavigate: (page: 'home' | 'social' | 'search' | 'favorites') => void;
   onMenuOpen: () => void;
 }
 
@@ -22,9 +22,9 @@ export default function BottomNav({ active, onNavigate, onMenuOpen }: BottomNavP
           <Heart className="h-5 w-5" />
           <span className="text-[10px]">Favoris</span>
         </button>
-        <button onClick={() => onNavigate('upload')} className={`flex flex-col items-center gap-0.5 px-4 py-1 transition-colors ${active === 'upload' ? 'text-foreground' : 'text-muted-foreground'}`}>
-          <Upload className="h-5 w-5" />
-          <span className="text-[10px]">Publier</span>
+        <button onClick={() => onNavigate('social')} className={`flex flex-col items-center gap-0.5 px-4 py-1 transition-colors ${active === 'social' ? 'text-foreground' : 'text-muted-foreground'}`}>
+          <Users className="h-5 w-5" />
+          <span className="text-[10px]">Social</span>
         </button>
         <button onClick={onMenuOpen} className="flex flex-col items-center gap-0.5 px-4 py-1 text-muted-foreground">
           <Menu className="h-5 w-5" />

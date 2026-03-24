@@ -116,9 +116,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const login = async (email: string, password: string) => {
     await pb.collection('users').authWithPassword(email, password);
     await refreshUser();
-    if (pb.authStore.isValid && pb.authStore.record) {
-      saveAuth({ email, password });
-    }
+    saveAuth();
   };
 
   const signup = async (email: string, password: string) => {
@@ -131,9 +129,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     });
     await pb.collection('users').authWithPassword(email, password);
     await refreshUser();
-    if (pb.authStore.isValid && pb.authStore.record) {
-      saveAuth({ email, password });
-    }
+    saveAuth();
   };
 
   const logout = () => {

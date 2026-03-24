@@ -9,6 +9,8 @@ import Home from '@/pages/Home';
 import Upload from '@/pages/Upload';
 import SearchPage from '@/pages/Search';
 import Favorites from '@/pages/Favorites';
+import Social from '@/pages/Social';
+import UserProfile from '@/pages/UserProfile';
 import MiniPlayer from '@/components/MiniPlayer';
 import PlayerPage from '@/components/PlayerPage';
 import BottomNav from '@/components/BottomNav';
@@ -20,10 +22,8 @@ function AppContent() {
   const navigate = useNavigate();
   const location = useLocation();
 
-  // Request notification permission on app load
   useEffect(() => {
     if (!user || loading) return;
-    
     if ('Notification' in window && Notification.permission === 'default') {
       Notification.requestPermission().catch(console.error);
     }
@@ -41,12 +41,13 @@ function AppContent() {
 
   const profileCompleted = user.profileCompleted || user.profilCompleted || false;
 
-  const pathToActive: Record<string, 'home' | 'upload' | 'search' | 'favorites'> = {
+  const pathToActive: Record<string, 'home' | 'social' | 'search' | 'favorites'> = {
     '/jux': 'home',
-    '/upload': 'upload',
+    '/social': 'social',
     '/search': 'search',
     '/favorites': 'favorites',
     '/profile-edit': 'home',
+    '/upload': 'home',
   };
 
   const active = pathToActive[location.pathname] || 'home';
@@ -60,6 +61,8 @@ function AppContent() {
           <Route path="/upload" element={profileCompleted ? <Upload /> : <Navigate to="/profile-setup" replace />} />
           <Route path="/search" element={profileCompleted ? <SearchPage /> : <Navigate to="/profile-setup" replace />} />
           <Route path="/favorites" element={profileCompleted ? <Favorites /> : <Navigate to="/profile-setup" replace />} />
+          <Route path="/social" element={profileCompleted ? <Social /> : <Navigate to="/profile-setup" replace />} />
+          <Route path="/profile/:userId" element={profileCompleted ? <UserProfile /> : <Navigate to="/profile-setup" replace />} />
           <Route path="/profile-edit" element={profileCompleted ? <ProfileEdit onBack={() => navigate('/jux')} /> : <Navigate to="/profile-setup" replace />} />
           <Route path="/profile-setup" element={<ProfileSetup />} />
         </Routes>
@@ -67,13 +70,14 @@ function AppContent() {
         <PlayerPage />
         <BottomNav
           active={active}
-          onNavigate={(page) => navigate(page === 'home' ? '/jux' : page === 'favorites' ? '/favorites' : `/${page}`)}
+          onNavigate={(page) => navigate(page === 'home' ? '/jux' : `/${page}`)}
           onMenuOpen={() => setMenuOpen(true)}
         />
         <MenuDrawer
           open={menuOpen}
           onClose={() => setMenuOpen(false)}
           onEditProfile={() => navigate('/profile-edit')}
+          onUpload={() => navigate('/upload')}
         />
       </div>
     </PlayerProvider>

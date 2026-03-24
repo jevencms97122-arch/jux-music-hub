@@ -1,16 +1,22 @@
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import { useAuth } from '@/contexts/AuthContext';
 import { getUserAvatarUrl } from '@/lib/pocketbase';
-import { LogOut, User, UserCog } from 'lucide-react';
+import { LogOut, User, UserCog, Upload } from 'lucide-react';
 
 interface MenuDrawerProps {
   open: boolean;
   onClose: () => void;
   onEditProfile: () => void;
+  onUpload: () => void;
 }
 
-export default function MenuDrawer({ open, onClose, onEditProfile }: MenuDrawerProps) {
+export default function MenuDrawer({ open, onClose, onEditProfile, onUpload }: MenuDrawerProps) {
   const { user, logout } = useAuth();
+
+  const handleLogout = () => {
+    logout();
+    onClose();
+  };
 
   return (
     <Sheet open={open} onOpenChange={onClose}>
@@ -44,8 +50,16 @@ export default function MenuDrawer({ open, onClose, onEditProfile }: MenuDrawerP
             Modifier le profil
           </button>
           <button
-            onClick={() => { logout(); onClose(); }}
+            onClick={() => { onUpload(); onClose(); }}
             className="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm text-muted-foreground hover:bg-secondary hover:text-foreground transition-colors"
+          >
+            <Upload className="h-4 w-4" />
+            Publier une musique
+          </button>
+          <div className="border-t border-border my-2" />
+          <button
+            onClick={handleLogout}
+            className="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm text-destructive hover:bg-secondary transition-colors"
           >
             <LogOut className="h-4 w-4" />
             Se déconnecter

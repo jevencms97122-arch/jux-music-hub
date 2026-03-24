@@ -46,6 +46,18 @@ export interface SongLike {
   created: string;
 }
 
+export interface Follow {
+  id: string;
+  follower: string;
+  following: string;
+  status: 'pending' | 'accepted';
+  created: string;
+  expand?: {
+    follower?: PBUser;
+    following?: PBUser;
+  };
+}
+
 export const MUSIC_GENRES = [
   "Afrobeat", "Alternative", "Ambient", "Blues", "Bossa Nova",
   "Classique", "Country", "Dance", "Disco", "Drill",

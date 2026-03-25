@@ -2,6 +2,7 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sh
 import { useAuth } from '@/contexts/AuthContext';
 import { getUserAvatarUrl } from '@/lib/pocketbase';
 import { LogOut, User, UserCog, Upload } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 
 interface MenuDrawerProps {
   open: boolean;
@@ -12,10 +13,12 @@ interface MenuDrawerProps {
 
 export default function MenuDrawer({ open, onClose, onEditProfile, onUpload }: MenuDrawerProps) {
   const { user, logout } = useAuth();
+  const navigate = useNavigate();
 
   const handleLogout = () => {
     logout();
     onClose();
+    navigate('/');
   };
 
   return (

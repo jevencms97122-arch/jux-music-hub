@@ -1,4 +1,4 @@
-﻿import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { pb } from '@/lib/pocketbase';
 import { useAuth } from '@/contexts/AuthContext';
 import { usePlayer } from '@/contexts/PlayerContext';
@@ -10,28 +10,46 @@ import juxLogo from '@/assets/jux-logo.png';
 export default function Home() {
   const { user } = useAuth();
   const { playSong, currentSong, isPlaying } = usePlayer();
-  const [newSongs, setNewSongs] = useState<Song[]>([]);
+
+  // Section 1: Tag-based recommendations
+  const [tagSongs, setTagSongs] = useState<Song[]>([]);
+  const [allTagSongs, setAllTagSongs] = useState<Song[]>([]);
+  const [showAllTags, setShowAllTags] = useState(false);
+
+  // Section 2: Relisten
   const [relistenSongs, setRelistenSongs] = useState<Song[]>([]);
+  const [allRelistenSongs, setAllRelistenSongs] = useState<Song[]>([]);
+  const [showAllRelisten, setShowAllRelisten] = useState(false);
+
+  // Section 3: Nouveautés with pagination
+  const [newSongs, setNewSongs] = useState<Song[]>([]);
+  const [allNewSongs, setAllNewSongs] = useState<Song[]>([]);
+  const [showAllNew, setShowAllNew] = useState(false);
+  const [newPage, setNewPage] = useState(1);
+  const [hasMoreNew, setHasMoreNew] = useState(true);
+  const [loadingNew, setLoadingNew] = useState(false);
+  const newSentinelRef = useRef<HTMLDivElement>(null);
+
+  // Section 4: Discover
   const [discoverSongs, setDiscoverSongs] = useState<Song[]>([]);
   const [discoverPage, setDiscoverPage] = useState(1);
   const [hasMore, setHasMore] = useState(true);
   const [loadingDiscover, setLoadingDiscover] = useState(false);
-  const [showAllNew, setShowAllNew] = useState(false);
-  const [showAllRelisten, setShowAllRelisten] = useState(false);
-  const [allNewSongs, setAllNewSongs] = useState<Song[]>([]);
-  const [allRelistenSongs, setAllRelistenSongs] = useState<Song[]>([]);
   const sentinelRef = useRef<HTMLDivElement>(null);
 
-  useEffect(() => {
-    const ignoreAbort = (error: any) => {
-      if (error?.isAbort) return;
-      console.error(error);
-    };
+  const ignoreAbort = (error: any) => {
+    if (error?.isAbort) return;
+    console.error(error);
+  };
 
+  // Load initial data
+  useEffect(() => {
+    // New songs (row preview)
     pb.collection('songs').getList(1, 10, { sort: '-created', expand: 'uploadedBy' })
       .then(r => setNewSongs(r.items as unknown as Song[]))
       .catch(ignoreAbort);
 
+    // Relisten
     if (user) {
       pb.collection('listen_history').getList(1, 10, {
         filter: `user="${user.id}"`,
@@ -46,9 +64,42 @@ export default function Home() {
         }
         setRelistenSongs(songs);
       }).catch(ignoreAbort);
+
+      // Tag-based recommendations: get genres from liked songs
+      pb.collection('song_likes').getFullList({
+        filter: `user="${user.id}"`,
+        expand: 'song',
+      }).then(async (likes) => {
+        const genres = new Set<string>();
+        for (const like of likes) {
+          const song = (like as any).expand?.song;
+          if (song?.genre) genres.add(song.genre);
+        }
+        if (genres.size === 0) return;
+
+        const genreFilter = Array.from(genres).map(g => `genre="${g}"`).join('||');
+        // Exclude already liked songs
+        const likedIds = likes.map((l: any) => l.song).filter(Boolean);
+        const excludeFilter = likedIds.length > 0 
+          ? likedIds.map((id: string) => `id!="${id}"`).join('&&')
+          : '';
+        const filter = excludeFilter ? `(${genreFilter})&&${excludeFilter}` : `(${genreFilter})`;
+
+        try {
+          const r = await pb.collection('songs').getList(1, 10, {
+            filter,
+            sort: '@random',
+            expand: 'uploadedBy',
+          });
+          setTagSongs(r.items as unknown as Song[]);
+        } catch (e) {
+          ignoreAbort(e);
+        }
+      }).catch(ignoreAbort);
     }
   }, [user]);
 
+  // Discover infinite scroll
   const loadDiscover = useCallback(async () => {
     if (loadingDiscover || !hasMore) return;
     setLoadingDiscover(true);
@@ -76,13 +127,66 @@ export default function Home() {
     return () => observer.disconnect();
   }, [loadDiscover]);
 
-  const handleShowAllNew = async () => {
-    if (allNewSongs.length === 0) {
-      const r = await pb.collection('songs').getFullList({ sort: '-created', expand: 'uploadedBy' });
-      setAllNewSongs(r as unknown as Song[]);
+  // "See all" handlers
+  const handleShowAllTags = async () => {
+    if (allTagSongs.length === 0 && user) {
+      const likes = await pb.collection('song_likes').getFullList({
+        filter: `user="${user.id}"`, expand: 'song',
+      });
+      const genres = new Set<string>();
+      for (const like of likes) {
+        const song = (like as any).expand?.song;
+        if (song?.genre) genres.add(song.genre);
+      }
+      if (genres.size > 0) {
+        const genreFilter = Array.from(genres).map(g => `genre="${g}"`).join('||');
+        const r = await pb.collection('songs').getFullList({ filter: `(${genreFilter})`, sort: '@random', expand: 'uploadedBy' });
+        setAllTagSongs(r as unknown as Song[]);
+      }
     }
-    setShowAllNew(true);
+    setShowAllTags(true);
   };
+
+  const handleShowAllNew = async () => {
+    setShowAllNew(true);
+    setAllNewSongs([]);
+    setNewPage(1);
+    setHasMoreNew(true);
+  };
+
+  // Load paginated new songs in "see all" mode
+  const loadMoreNew = useCallback(async () => {
+    if (loadingNew || !hasMoreNew) return;
+    setLoadingNew(true);
+    try {
+      const r = await pb.collection('songs').getList(newPage, 20, { sort: '-created', expand: 'uploadedBy' });
+      if (r.items.length === 0) setHasMoreNew(false);
+      else {
+        setAllNewSongs(prev => [...prev, ...(r.items as unknown as Song[])]);
+        setNewPage(p => p + 1);
+      }
+    } catch (e: any) {
+      if (!e?.isAbort) console.error(e);
+    } finally {
+      setLoadingNew(false);
+    }
+  }, [newPage, loadingNew, hasMoreNew]);
+
+  useEffect(() => {
+    if (!showAllNew) return;
+    const sentinel = newSentinelRef.current;
+    if (!sentinel) return;
+    const observer = new IntersectionObserver(entries => {
+      if (entries[0]?.isIntersecting) loadMoreNew();
+    }, { rootMargin: '200px' });
+    observer.observe(sentinel);
+    return () => observer.disconnect();
+  }, [showAllNew, loadMoreNew]);
+
+  // Trigger initial load when entering "see all" mode
+  useEffect(() => {
+    if (showAllNew && allNewSongs.length === 0) loadMoreNew();
+  }, [showAllNew]);
 
   const handleShowAllRelisten = async () => {
     if (user && allRelistenSongs.length === 0) {
@@ -100,6 +204,23 @@ export default function Home() {
     setShowAllRelisten(true);
   };
 
+  // "See all" full views
+  if (showAllTags) {
+    return (
+      <div className="pb-28 pt-4">
+        <div className="flex items-center gap-3 px-4 mb-4">
+          <button onClick={() => setShowAllTags(false)} className="text-sm text-primary" type="button">← Retour</button>
+          <h1 className="text-xl font-bold text-foreground">Pour toi</h1>
+        </div>
+        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2 px-4">
+          {allTagSongs.map(s => (
+            <SongCard key={s.id} song={s} size="sm" isActive={currentSong?.id === s.id} isPlaying={isPlaying} onPlay={playSong} />
+          ))}
+        </div>
+      </div>
+    );
+  }
+
   if (showAllNew) {
     return (
       <div className="pb-28 pt-4">
@@ -109,15 +230,11 @@ export default function Home() {
         </div>
         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2 px-4">
           {allNewSongs.map(s => (
-            <SongCard
-              key={s.id}
-              song={s}
-              size="sm"
-              isActive={currentSong?.id === s.id}
-              isPlaying={isPlaying}
-              onPlay={playSong}
-            />
+            <SongCard key={s.id} song={s} size="sm" isActive={currentSong?.id === s.id} isPlaying={isPlaying} onPlay={playSong} />
           ))}
+        </div>
+        <div ref={newSentinelRef} className="py-4 text-center">
+          {loadingNew && <p className="text-sm text-muted-foreground">Chargement...</p>}
         </div>
       </div>
     );
@@ -132,14 +249,7 @@ export default function Home() {
         </div>
         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2 px-4">
           {allRelistenSongs.map(s => (
-            <SongCard
-              key={s.id}
-              song={s}
-              size="sm"
-              isActive={currentSong?.id === s.id}
-              isPlaying={isPlaying}
-              onPlay={playSong}
-            />
+            <SongCard key={s.id} song={s} size="sm" isActive={currentSong?.id === s.id} isPlaying={isPlaying} onPlay={playSong} />
           ))}
         </div>
       </div>
@@ -152,9 +262,18 @@ export default function Home() {
         <img src={juxLogo} alt="Jux" className="h-8 w-auto" />
       </div>
 
-      <SongRow title="Nouveautés" songs={newSongs} onSeeAll={handleShowAllNew} />
+      {/* Section 1: Tag-based recommendations */}
+      {tagSongs.length > 0 && (
+        <SongRow title="Pour toi" songs={tagSongs} onSeeAll={handleShowAllTags} />
+      )}
+
+      {/* Section 2: Réécouter */}
       <SongRow title="Réécouter" songs={relistenSongs} onSeeAll={relistenSongs.length > 0 ? handleShowAllRelisten : undefined} />
 
+      {/* Section 3: Nouveautés */}
+      <SongRow title="Nouveautés" songs={newSongs} onSeeAll={handleShowAllNew} />
+
+      {/* Section 4: Découvrir */}
       <section className="px-4">
         <h2 className="text-lg font-bold text-foreground mb-3">Découvrir</h2>
         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2">

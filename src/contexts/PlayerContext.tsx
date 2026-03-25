@@ -1,7 +1,9 @@
-﻿import React, { createContext, useContext, useState, useRef, useEffect, useCallback, useMemo } from 'react';
+import React, { createContext, useContext, useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import { pb, getSongAudioUrl } from '@/lib/pocketbase';
 import { showMediaNotification, closeMediaNotification, setupMediaControlListeners } from '@/lib/notifications';
 import type { Song } from '@/types/music';
+
+type RepeatMode = 'off' | 'all' | 'one';
 
 interface PlayerContextType {
   currentSong: Song | null;
@@ -9,7 +11,10 @@ interface PlayerContextType {
   isPlaying: boolean;
   playerOpen: boolean;
   likedSongs: Set<string>;
+  shuffle: boolean;
+  repeatMode: RepeatMode;
   playSong: (song: Song, autoQueue?: boolean) => void;
+  playSongFromList: (song: Song, list: Song[], index: number) => void;
   pause: () => void;
   resume: () => void;
   togglePlay: () => void;
@@ -18,6 +23,8 @@ interface PlayerContextType {
   seek: (time: number) => void;
   setPlayerOpen: (open: boolean) => void;
   toggleLike: (song: Song) => Promise<void>;
+  toggleShuffle: () => void;
+  cycleRepeat: () => void;
 }
 
 interface PlayerProgressContextType {
@@ -37,6 +44,9 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
   const [duration, setDuration] = useState(0);
   const [playerOpen, setPlayerOpen] = useState(false);
   const [likedSongs, setLikedSongs] = useState<Set<string>>(new Set());
+  const [shuffle, setShuffle] = useState(false);
+  const [repeatMode, setRepeatMode] = useState<RepeatMode>('off');
+  const [isFixedQueue, setIsFixedQueue] = useState(false);
   const audioRef = useRef<HTMLAudioElement>(new Audio());
   const loadingMore = useRef(false);
   const lastProgressRef = useRef(0);
@@ -47,9 +57,7 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
     } catch {
       try {
         await pb.collection('songs').update(song.id, { playCount: (song.playCount || 0) + 1 });
-      } catch {
-        // ignore
-      }
+      } catch { /* ignore */ }
     }
   }, []);
 
@@ -81,7 +89,19 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
     }
   }, []);
 
+  const playSongInternal = useCallback((song: Song, q: Song[], idx: number) => {
+    setCurrentSong(song);
+    setPlayerOpen(true);
+    audioRef.current.src = getSongAudioUrl(song);
+    audioRef.current.play().catch(console.error);
+    setIsPlaying(true);
+    setQueue(q);
+    setQueueIndex(idx);
+    recordListen(song);
+  }, [recordListen]);
+
   const playSong = useCallback(async (song: Song, autoQueue = true) => {
+    setIsFixedQueue(false);
     setCurrentSong(song);
     setPlayerOpen(true);
     audioRef.current.src = getSongAudioUrl(song);
@@ -105,23 +125,53 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
     }
   }, [recordListen]);
 
+  // Play from a fixed list (e.g. Favorites) — no random loading
+  const playSongFromList = useCallback((song: Song, list: Song[], index: number) => {
+    setIsFixedQueue(true);
+    playSongInternal(song, list, index);
+  }, [playSongInternal]);
+
   const next = useCallback(() => {
     if (queue.length === 0) return;
-    const nextIdx = queueIndex + 1;
-    if (nextIdx < queue.length) {
-      const nextSong = queue[nextIdx];
-      setQueueIndex(nextIdx);
-      setCurrentSong(nextSong);
-      audioRef.current.src = getSongAudioUrl(nextSong);
-      audioRef.current.play().catch(console.error);
-      setIsPlaying(true);
-      recordListen(nextSong);
 
-      if (queue.length - nextIdx - 1 <= 1) {
-        loadMoreQueue(queue.map(s => s.id));
+    // Repeat one: restart current song
+    if (repeatMode === 'one') {
+      audioRef.current.currentTime = 0;
+      audioRef.current.play().catch(console.error);
+      return;
+    }
+
+    let nextIdx: number;
+    if (shuffle) {
+      // Pick a random index that's not the current one
+      const candidates = Array.from({ length: queue.length }, (_, i) => i).filter(i => i !== queueIndex);
+      if (candidates.length === 0) return;
+      nextIdx = candidates[Math.floor(Math.random() * candidates.length)];
+    } else {
+      nextIdx = queueIndex + 1;
+    }
+
+    if (nextIdx >= queue.length) {
+      if (repeatMode === 'all') {
+        nextIdx = 0;
+      } else {
+        return; // End of queue
       }
     }
-  }, [queue, queueIndex, loadMoreQueue, recordListen]);
+
+    const nextSong = queue[nextIdx];
+    setQueueIndex(nextIdx);
+    setCurrentSong(nextSong);
+    audioRef.current.src = getSongAudioUrl(nextSong);
+    audioRef.current.play().catch(console.error);
+    setIsPlaying(true);
+    recordListen(nextSong);
+
+    // Auto-load more only for non-fixed queues
+    if (!isFixedQueue && queue.length - nextIdx - 1 <= 1) {
+      loadMoreQueue(queue.map(s => s.id));
+    }
+  }, [queue, queueIndex, loadMoreQueue, recordListen, shuffle, repeatMode, isFixedQueue]);
 
   const previous = useCallback(() => {
     if (audioRef.current.currentTime > 3) {
@@ -137,12 +187,16 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
       audioRef.current.play().catch(console.error);
       setIsPlaying(true);
     }
-  }, [queueIndex]);
+  }, [queueIndex, queue]);
 
   const pause = useCallback(() => { audioRef.current.pause(); setIsPlaying(false); }, []);
   const resume = useCallback(() => { audioRef.current.play().catch(console.error); setIsPlaying(true); }, []);
   const togglePlay = useCallback(() => { isPlaying ? pause() : resume(); }, [isPlaying, pause, resume]);
   const seek = useCallback((time: number) => { audioRef.current.currentTime = time; }, []);
+  const toggleShuffle = useCallback(() => setShuffle(p => !p), []);
+  const cycleRepeat = useCallback(() => {
+    setRepeatMode(prev => prev === 'off' ? 'all' : prev === 'all' ? 'one' : 'off');
+  }, []);
 
   const toggleLike = useCallback(async (song: Song) => {
     if (!pb.authStore.record) return;
@@ -229,27 +283,13 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
   }, [currentSong, isPlaying, likedSongs]);
 
   useEffect(() => {
-    if (!currentSong) {
-      closeMediaNotification();
-    }
+    if (!currentSong) closeMediaNotification();
   }, [currentSong]);
 
   const playerValue = useMemo(() => ({
-    currentSong,
-    queue,
-    isPlaying,
-    playerOpen,
-    likedSongs,
-    playSong,
-    pause,
-    resume,
-    togglePlay,
-    next,
-    previous,
-    seek,
-    setPlayerOpen,
-    toggleLike,
-  }), [currentSong, queue, isPlaying, playerOpen, likedSongs, playSong, pause, resume, togglePlay, next, previous, seek, setPlayerOpen, toggleLike]);
+    currentSong, queue, isPlaying, playerOpen, likedSongs, shuffle, repeatMode,
+    playSong, playSongFromList, pause, resume, togglePlay, next, previous, seek, setPlayerOpen, toggleLike, toggleShuffle, cycleRepeat,
+  }), [currentSong, queue, isPlaying, playerOpen, likedSongs, shuffle, repeatMode, playSong, playSongFromList, pause, resume, togglePlay, next, previous, seek, setPlayerOpen, toggleLike, toggleShuffle, cycleRepeat]);
 
   const progressValue = useMemo(() => ({ progress, duration }), [progress, duration]);
 

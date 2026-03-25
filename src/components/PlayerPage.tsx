@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { usePlayer, usePlayerProgress } from '@/contexts/PlayerContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { getSongCoverUrl, pb } from '@/lib/pocketbase';
-import { ChevronDown, Play, Pause, SkipForward, SkipBack, Shuffle, Repeat, Heart, Headphones } from 'lucide-react';
+import { ChevronDown, Play, Pause, SkipForward, SkipBack, Shuffle, Repeat, Repeat1, Heart, Headphones } from 'lucide-react';
 import QueueView from './QueueView';
 import FriendsLikedBadge from './FriendsLikedBadge';
 
@@ -15,7 +15,7 @@ function formatTime(s: number) {
 }
 
 export default function PlayerPage() {
-  const { currentSong, isPlaying, togglePlay, next, previous, seek, setPlayerOpen, playerOpen } = usePlayer();
+  const { currentSong, isPlaying, togglePlay, next, previous, seek, setPlayerOpen, playerOpen, shuffle, repeatMode, toggleShuffle, cycleRepeat } = usePlayer();
   const { progress, duration } = usePlayerProgress();
   const { user } = useAuth();
   const [tab, setTab] = useState<'player' | 'queue'>('player');
@@ -64,6 +64,8 @@ export default function PlayerPage() {
   if (!currentSong) return null;
   const uploaderPseudo = currentSong.expand?.uploadedBy?.pseudo;
 
+  const RepeatIcon = repeatMode === 'one' ? Repeat1 : Repeat;
+
   return (
     <AnimatePresence>
       {playerOpen && (
@@ -85,7 +87,12 @@ export default function PlayerPage() {
           {tab === 'player' ? (
             <div className="flex-1 flex flex-col items-center justify-center px-8">
               <div className={`w-64 h-64 sm:w-72 sm:h-72 rounded-xl overflow-hidden shadow-2xl mb-8 transition-transform duration-500 ${isPlaying ? 'scale-100' : 'scale-95 opacity-80'}`}>
-                <img src={getSongCoverUrl(currentSong)} alt={currentSong.title} className="h-full w-full object-cover" />
+                <img
+                  key={currentSong.id}
+                  src={getSongCoverUrl(currentSong)}
+                  alt={currentSong.title}
+                  className="h-full w-full object-cover"
+                />
               </div>
 
               <div className="w-full text-center mb-2">
@@ -107,7 +114,6 @@ export default function PlayerPage() {
                 </button>
               </div>
 
-              {/* Social proof - friends who liked */}
               {user && currentSong && (
                 <FriendsLikedBadge songId={currentSong.id} userId={user.id} />
               )}
@@ -128,7 +134,9 @@ export default function PlayerPage() {
               </div>
 
               <div className="flex items-center justify-center gap-8">
-                <button className="p-2 text-muted-foreground" type="button"><Shuffle className="h-5 w-5" /></button>
+                <button onClick={toggleShuffle} className={`p-2 transition-colors ${shuffle ? 'text-primary' : 'text-muted-foreground'}`} type="button">
+                  <Shuffle className="h-5 w-5" />
+                </button>
                 <button onClick={previous} className="p-2 text-foreground" type="button"><SkipBack className="h-7 w-7 fill-foreground" /></button>
                 <button onClick={togglePlay} className="h-16 w-16 rounded-full bg-foreground flex items-center justify-center" type="button">
                   {isPlaying
@@ -137,7 +145,9 @@ export default function PlayerPage() {
                   }
                 </button>
                 <button onClick={next} className="p-2 text-foreground" type="button"><SkipForward className="h-7 w-7 fill-foreground" /></button>
-                <button className="p-2 text-muted-foreground" type="button"><Repeat className="h-5 w-5" /></button>
+                <button onClick={cycleRepeat} className={`p-2 transition-colors ${repeatMode !== 'off' ? 'text-primary' : 'text-muted-foreground'}`} type="button">
+                  <RepeatIcon className="h-5 w-5" />
+                </button>
               </div>
             </div>
           ) : (

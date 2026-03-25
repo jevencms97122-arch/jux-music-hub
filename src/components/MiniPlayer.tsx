@@ -1,4 +1,4 @@
-﻿import { usePlayer, usePlayerProgress } from '@/contexts/PlayerContext';
+import { usePlayer, usePlayerProgress } from '@/contexts/PlayerContext';
 import { getSongCoverUrl } from '@/lib/pocketbase';
 import { Play, Pause, SkipForward, Heart } from 'lucide-react';
 
@@ -20,6 +20,7 @@ export default function MiniPlayer() {
       </div>
       <div className="flex items-center gap-3 px-4 py-2">
         <img
+          key={currentSong.id}
           src={getSongCoverUrl(currentSong)}
           alt={currentSong.title}
           className="h-10 w-10 rounded object-cover"

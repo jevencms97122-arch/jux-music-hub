@@ -12,6 +12,14 @@ self.addEventListener('activate', (event) => {
   event.waitUntil(self.clients.claim());
 });
 
+// Fetch handler — required for PWA installability
+self.addEventListener('fetch', (event) => {
+  // Network-first strategy: try network, fall back to cache
+  event.respondWith(
+    fetch(event.request).catch(() => caches.match(event.request))
+  );
+});
+
 // Media notification handlers
 self.addEventListener('message', (event) => {
   const { type, data } = event.data;
@@ -30,44 +38,33 @@ self.addEventListener('notificationclick', (event) => {
   event.notification.close();
 
   const action = event.action;
-  const clients = event.clients;
+  const clients = self.clients;
 
-  clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clientList) => {
-    if (clientList.length === 0) {
-      clients.openWindow('/');
-      return;
-    }
-
-    const client = clientList[0];
-    let messageType = '';
-
-    switch (action) {
-      case 'play':
-        messageType = 'NOTIFICATION_PLAY';
-        break;
-      case 'pause':
-        messageType = 'NOTIFICATION_PAUSE';
-        break;
-      case 'next':
-        messageType = 'NOTIFICATION_NEXT';
-        break;
-      case 'previous':
-        messageType = 'NOTIFICATION_PREVIOUS';
-        break;
-      case 'like':
-        messageType = 'NOTIFICATION_LIKE';
-        break;
-      default:
-        // Click on notification body - focus window
-        client.focus();
+  event.waitUntil(
+    clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clientList) => {
+      if (clientList.length === 0) {
+        clients.openWindow('/');
         return;
-    }
+      }
 
-    if (messageType) {
-      client.postMessage({ type: messageType });
-    }
-    client.focus();
-  });
+      const client = clientList[0];
+      let messageType = '';
+
+      switch (action) {
+        case 'play': messageType = 'NOTIFICATION_PLAY'; break;
+        case 'pause': messageType = 'NOTIFICATION_PAUSE'; break;
+        case 'next': messageType = 'NOTIFICATION_NEXT'; break;
+        case 'previous': messageType = 'NOTIFICATION_PREVIOUS'; break;
+        case 'like': messageType = 'NOTIFICATION_LIKE'; break;
+        default:
+          client.focus();
+          return;
+      }
+
+      if (messageType) client.postMessage({ type: messageType });
+      client.focus();
+    })
+  );
 });
 
 // Handle notification close

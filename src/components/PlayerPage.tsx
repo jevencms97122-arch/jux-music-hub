@@ -1,9 +1,9 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { usePlayer, usePlayerProgress } from '@/contexts/PlayerContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { getSongCoverUrl, pb } from '@/lib/pocketbase';
-import { ChevronDown, Play, Pause, SkipForward, SkipBack, Shuffle, Repeat, Repeat1, Heart, Headphones } from 'lucide-react';
+import { ChevronDown, Play, Pause, SkipForward, SkipBack, Shuffle, Repeat, Repeat1, Heart, Headphones, Loader2 } from 'lucide-react';
 import QueueView from './QueueView';
 import FriendsLikedBadge from './FriendsLikedBadge';
 
@@ -15,13 +15,17 @@ function formatTime(s: number) {
 }
 
 export default function PlayerPage() {
-  const { currentSong, isPlaying, togglePlay, next, previous, seek, setPlayerOpen, playerOpen, shuffle, repeatMode, toggleShuffle, cycleRepeat } = usePlayer();
+  const { currentSong, isPlaying, isLoading, togglePlay, next, previous, seek, setPlayerOpen, playerOpen, shuffle, repeatMode, toggleShuffle, cycleRepeat } = usePlayer();
   const { progress, duration } = usePlayerProgress();
   const { user } = useAuth();
   const [tab, setTab] = useState<'player' | 'queue'>('player');
   const [liked, setLiked] = useState(false);
   const [likesCount, setLikesCount] = useState(0);
   const [playCount, setPlayCount] = useState(0);
+  const [isDragging, setIsDragging] = useState(false);
+  const sliderRef = useRef<HTMLInputElement>(null);
+  const animationFrameRef = useRef<number>();
+  const dragTimeoutRef = useRef<NodeJS.Timeout>();
 
   useEffect(() => {
     if (!currentSong) return;
@@ -34,6 +38,28 @@ export default function PlayerPage() {
       }).then(r => setLiked(r.items.length > 0)).catch(() => setLiked(false));
     }
   }, [currentSong, user]);
+
+  // Synchronize slider thumb with progress updates using requestAnimationFrame
+  useEffect(() => {
+    const updateSlider = () => {
+      if (sliderRef.current && !isDragging && currentSong) {
+        sliderRef.current.value = progress.toString();
+      }
+      if (isPlaying && !isDragging) {
+        animationFrameRef.current = requestAnimationFrame(updateSlider);
+      }
+    };
+
+    if (isPlaying && !isDragging) {
+      animationFrameRef.current = requestAnimationFrame(updateSlider);
+    }
+
+    return () => {
+      if (animationFrameRef.current) {
+        cancelAnimationFrame(animationFrameRef.current);
+      }
+    };
+  }, [isPlaying, isDragging, progress, currentSong]);
 
   const toggleLike = async () => {
     if (!user || !currentSong) return;
@@ -86,7 +112,7 @@ export default function PlayerPage() {
 
           {tab === 'player' ? (
             <div className="flex-1 flex flex-col items-center justify-center px-8">
-              <div className={`w-64 h-64 sm:w-72 sm:h-72 rounded-xl overflow-hidden shadow-2xl mb-8 transition-transform duration-500 ${isPlaying ? 'scale-100' : 'scale-95 opacity-80'}`}>
+              <div className={`w-48 h-48 sm:w-56 sm:h-56 md:w-64 md:h-64 lg:w-72 lg:h-72 rounded-xl overflow-hidden shadow-2xl mb-8 transition-transform duration-500 ${isPlaying ? 'scale-100' : 'scale-95 opacity-80'}`}>
                 <img
                   key={currentSong.id}
                   src={getSongCoverUrl(currentSong)}
@@ -118,19 +144,68 @@ export default function PlayerPage() {
                 <FriendsLikedBadge songId={currentSong.id} userId={user.id} />
               )}
 
-              <div className="w-full mb-6">
-                <input
-                  type="range"
-                  min={0}
-                  max={duration || 0}
-                  value={progress}
-                  onChange={e => seek(Number(e.target.value))}
-                  className="w-full h-1 appearance-none bg-secondary rounded-full [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:h-3 [&::-webkit-slider-thumb]:w-3 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-foreground"
-                />
-                <div className="flex justify-between text-xs text-muted-foreground mt-1">
-                  <span>{formatTime(progress)}</span>
-                  <span>{formatTime(duration)}</span>
+              <div className="flex items-center gap-4 mb-6 w-full px-4">
+                <span className="text-xs text-muted-foreground w-12 text-right flex-shrink-0">{formatTime(progress)}</span>
+                <div className="flex-1 relative flex items-center h-3">
+                  <div className="absolute top-1/2 left-0 h-1 bg-orange-500 rounded-full transform -translate-y-1/2" style={{ width: duration > 0 ? `calc(${(progress / duration) * 100}% + 6px)` : '0%' }} />
+                  <input
+                    ref={sliderRef}
+                    type="range"
+                    min={0}
+                    max={duration || 0}
+                    value={progress}
+                    onChange={(e) => {
+                      // Only update visual position during dragging, don't seek yet
+                      if (isDragging) {
+                        // Update the slider value visually during drag without seeking
+                        if (sliderRef.current) {
+                          sliderRef.current.value = e.target.value;
+                        }
+                      } else {
+                        // Only seek when not dragging
+                        seek(Number(e.target.value));
+                      }
+                    }}
+                    onMouseDown={() => {
+                      setIsDragging(true);
+                      // Prevent animation frame from updating slider during drag
+                      if (animationFrameRef.current) {
+                        cancelAnimationFrame(animationFrameRef.current);
+                      }
+                    }}
+                    onMouseMove={(e) => {
+                      // Update slider value during mouse move if dragging
+                      if (isDragging && sliderRef.current) {
+                        sliderRef.current.value = (e.target as HTMLInputElement).value;
+                      }
+                    }}
+                    onMouseUp={(e) => {
+                      setIsDragging(false);
+                      // Seek to the final position when drag ends
+                      seek(Number((e.target as HTMLInputElement).value));
+                    }}
+                    onTouchStart={() => {
+                      setIsDragging(true);
+                      // Prevent animation frame from updating slider during drag
+                      if (animationFrameRef.current) {
+                        cancelAnimationFrame(animationFrameRef.current);
+                      }
+                    }}
+                    onTouchMove={(e) => {
+                      // Update slider value during touch move if dragging
+                      if (isDragging && sliderRef.current) {
+                        sliderRef.current.value = (e.target as HTMLInputElement).value;
+                      }
+                    }}
+                    onTouchEnd={(e) => {
+                      setIsDragging(false);
+                      // Seek to the final position when drag ends
+                      seek(Number((e.target as HTMLInputElement).value));
+                    }}
+                    className="w-full h-1 appearance-none bg-secondary rounded-full [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:h-4 [&::-webkit-slider-thumb]:w-4 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-orange-500 [&::-webkit-slider-thumb]:-ml-1"
+                  />
                 </div>
+                <span className="text-xs text-muted-foreground w-12 flex-shrink-0">{formatTime(duration)}</span>
               </div>
 
               <div className="flex items-center justify-center gap-8">
@@ -139,10 +214,13 @@ export default function PlayerPage() {
                 </button>
                 <button onClick={previous} className="p-2 text-foreground" type="button"><SkipBack className="h-7 w-7 fill-foreground" /></button>
                 <button onClick={togglePlay} className="h-16 w-16 rounded-full bg-foreground flex items-center justify-center" type="button">
-                  {isPlaying
-                    ? <Pause className="h-7 w-7 text-background fill-background" />
-                    : <Play className="h-7 w-7 text-background fill-background ml-1" />
-                  }
+                  {isLoading ? (
+                    <Loader2 className="h-7 w-7 text-background animate-spin" />
+                  ) : isPlaying ? (
+                    <Pause className="h-7 w-7 text-background fill-background" />
+                  ) : (
+                    <Play className="h-7 w-7 text-background fill-background ml-1" />
+                  )}
                 </button>
                 <button onClick={next} className="p-2 text-foreground" type="button"><SkipForward className="h-7 w-7 fill-foreground" /></button>
                 <button onClick={cycleRepeat} className={`p-2 transition-colors ${repeatMode !== 'off' ? 'text-primary' : 'text-muted-foreground'}`} type="button">

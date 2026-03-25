@@ -18,29 +18,83 @@ export default defineConfig(({ mode }) => ({
     mode === "development" && componentTagger(),
     VitePWA({
       registerType: "autoUpdate",
-      workbox: {
-        globPatterns: ["**/*.{js,css,html,ico,png,svg,woff2}"],
-        navigateFallbackDenylist: [/^\/~oauth/],
-        clientsClaim: true,
-        skipWaiting: true,
-      },
+      writePlugin: true,
       manifest: {
-        name: "Jux-Music",
+        name: "Jux-Music - Écoute et partage de la musique",
         short_name: "Jux-Music",
-        description: "Écoute et partage de la musique",
+        description: "Écoute et partage de la musique avec vos amis",
         theme_color: "#121212",
         background_color: "#121212",
         display: "standalone",
-        orientation: "portrait",
-        start_url: "/",
+        orientation: "portrait-primary",
         scope: "/",
+        start_url: "/",
         lang: "fr",
-        categories: ["music", "entertainment"],
+        dir: "ltr",
+        categories: ["music", "entertainment", "multimedia"],
+        prefer_related_applications: false,
         icons: [
-          { src: "/jux-icon-192.png", sizes: "192x192", type: "image/png", purpose: "any maskable" },
-          { src: "/jux-icon-512.png", sizes: "512x512", type: "image/png", purpose: "any maskable" },
+          {
+            src: "/jux-icon-192.png",
+            sizes: "192x192",
+            type: "image/png",
+            purpose: "any"
+          },
+          {
+            src: "/jux-icon-192.png",
+            sizes: "192x192",
+            type: "image/png",
+            purpose: "maskable"
+          },
+          {
+            src: "/jux-icon-512.png",
+            sizes: "512x512",
+            type: "image/png",
+            purpose: "any"
+          },
+          {
+            src: "/jux-icon-512.png",
+            sizes: "512x512",
+            type: "image/png",
+            purpose: "maskable"
+          }
         ],
+        screenshots: [
+          {
+            src: "/jux-icon-192.png",
+            sizes: "192x192",
+            type: "image/png",
+            form_factor: "narrow"
+          },
+          {
+            src: "/jux-icon-512.png",
+            sizes: "512x512",
+            type: "image/png",
+            form_factor: "wide"
+          }
+        ]
       },
+      workbox: {
+        globPatterns: ["**/*.{js,css,html,ico,png,svg,woff2,woff}"],
+        navigateFallbackDenylist: [/^\/~oauth/],
+        navigateFallback: "/index.html",
+        clientsClaim: true,
+        skipWaiting: true,
+        cleanupOutdatedCaches: true,
+        runtimeCaching: [
+          {
+            urlPattern: /^https:\/\/api\./,
+            handler: "NetworkFirst",
+            options: {
+              cacheName: "api-cache",
+              expiration: {
+                maxAgeSeconds: 300
+              }
+            }
+          }
+        ]
+      },
+      includeAssets: ["favicon.ico", "robots.txt", "jux-icon-192.png", "jux-icon-512.png"]
     }),
   ].filter(Boolean),
   resolve: {

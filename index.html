@@ -5,19 +5,27 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, user-scalable=no" />
     <meta name="theme-color" content="#121212" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
-    <meta name="mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="Jux-Music" />
+    <meta name="mobile-web-app-capable" content="yes" />
     <meta name="description" content="Jux-Music - Écoute et partage de la musique" />
-    <title>Jux-Music</title>
-    <link rel="icon" type="image/png" href="/jux-icon-192.png" />
-    <link rel="apple-touch-icon" href="/jux-icon-192.png" />
-    <link rel="manifest" href="/manifest.webmanifest" />
     <meta property="og:title" content="Jux-Music" />
     <meta property="og:description" content="Écoute et partage de la musique" />
     <meta property="og:type" content="website" />
+    <title>Jux-Music</title>
+    <link rel="icon" type="image/png" href="/jux-icon-192.png" />
+    <link rel="apple-touch-icon" href="/jux-icon-192.png" />
+    <link rel="manifest" href="/manifest.json" />
   </head>
   <body>
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
+    <script>
+      if ('serviceWorker' in navigator) {
+        navigator.serviceWorker.register('/sw.js').catch(err => 
+          console.log('ServiceWorker registration failed: ', err)
+        );
+      }
+    </script>
   </body>
 </html>

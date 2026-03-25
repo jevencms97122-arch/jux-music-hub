@@ -1,9 +1,9 @@
 import { usePlayer, usePlayerProgress } from '@/contexts/PlayerContext';
 import { getSongCoverUrl } from '@/lib/pocketbase';
-import { Play, Pause, SkipForward, Heart } from 'lucide-react';
+import { Play, Pause, SkipForward, Heart, Loader2 } from 'lucide-react';
 
 export default function MiniPlayer() {
-  const { currentSong, isPlaying, togglePlay, next, setPlayerOpen, likedSongs, toggleLike } = usePlayer();
+  const { currentSong, isPlaying, isLoading, togglePlay, next, setPlayerOpen, likedSongs, toggleLike } = usePlayer();
   const { progress, duration } = usePlayerProgress();
   if (!currentSong) return null;
 
@@ -37,7 +37,7 @@ export default function MiniPlayer() {
           <Heart className={`h-5 w-5 ${isLiked ? 'fill-current text-primary' : ''}`} />
         </button>
         <button onClick={e => { e.stopPropagation(); togglePlay(); }} className="p-2 text-foreground" type="button">
-          {isPlaying ? <Pause className="h-5 w-5" /> : <Play className="h-5 w-5" />}
+          {isLoading ? <Loader2 className="h-5 w-5 animate-spin" /> : isPlaying ? <Pause className="h-5 w-5" /> : <Play className="h-5 w-5" />}
         </button>
         <button onClick={e => { e.stopPropagation(); next(); }} className="p-2 text-foreground" type="button">
           <SkipForward className="h-5 w-5" />

@@ -1,6 +1,6 @@
 import PocketBase from 'pocketbase';
 
-export const pb = new PocketBase('http://188.115.125.74:8090').autoCancellation(false);
+export const pb = new PocketBase('https://assess-solved-roman-jul.trycloudflare.com/').autoCancellation(false);
 
 export function getFileUrl(record: { id: string; collectionId: string; collectionName: string }, filename: string) {
   const url = pb.files.getURL(record, filename);
@@ -18,8 +18,9 @@ export function getSongCoverUrl(song: { id: string; collectionId: string; collec
   if (!song.coverImage) return '/placeholder.svg';
   
   // Use the correct PocketBase file URL format
+  // Removed Date.now() to allow browser caching
   const baseUrl = pb.baseUrl.replace(/\/$/, ''); // Remove trailing slash if present
-  const url = `${baseUrl}/api/files/${song.collectionName}/${song.id}/${song.coverImage}?thumb=0x256&t=${Date.now()}`;
+  const url = `${baseUrl}/api/files/${song.collectionName}/${song.id}/${song.coverImage}?thumb=0x256`;
   
   return url;
 }

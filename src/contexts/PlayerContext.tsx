@@ -9,6 +9,7 @@ interface PlayerContextType {
   currentSong: Song | null;
   queue: Song[];
   isPlaying: boolean;
+  isLoading: boolean;
   playerOpen: boolean;
   likedSongs: Set<string>;
   shuffle: boolean;
@@ -47,9 +48,16 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
   const [shuffle, setShuffle] = useState(false);
   const [repeatMode, setRepeatMode] = useState<RepeatMode>('off');
   const [isFixedQueue, setIsFixedQueue] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
   const audioRef = useRef<HTMLAudioElement>(new Audio());
+  
+  // Set preload to none for progressive loading
+  useEffect(() => {
+    audioRef.current.preload = 'none';
+  }, []);
   const loadingMore = useRef(false);
   const lastProgressRef = useRef(0);
+  const isLoadingRef = useRef(false);
 
   const incrementPlayCount = useCallback(async (song: Song) => {
     try {
@@ -76,7 +84,7 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
     if (loadingMore.current) return;
     loadingMore.current = true;
     try {
-      const result = await pb.collection('songs').getList(1, 9, {
+      const result = await pb.collection('songs').getList(1, 20, {
         sort: '@random',
         filter: exclude.length ? exclude.map(id => `id!="${id}"`).join('&&') : '',
         expand: 'uploadedBy',
@@ -92,9 +100,10 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
   const playSongInternal = useCallback((song: Song, q: Song[], idx: number) => {
     setCurrentSong(song);
     setPlayerOpen(true);
+    isLoadingRef.current = true;
+    setIsLoading(true);
     audioRef.current.src = getSongAudioUrl(song);
-    audioRef.current.play().catch(console.error);
-    setIsPlaying(true);
+    audioRef.current.load(); // Start loading with preload='none'
     setQueue(q);
     setQueueIndex(idx);
     recordListen(song);
@@ -104,14 +113,15 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
     setIsFixedQueue(false);
     setCurrentSong(song);
     setPlayerOpen(true);
+    isLoadingRef.current = true;
+    setIsLoading(true);
     audioRef.current.src = getSongAudioUrl(song);
-    audioRef.current.play().catch(console.error);
-    setIsPlaying(true);
+    audioRef.current.load(); // Start loading with preload='none'
     recordListen(song);
 
     if (autoQueue) {
       try {
-        const result = await pb.collection('songs').getList(1, 10, {
+        const result = await pb.collection('songs').getList(1, 30, {
           sort: '@random',
           filter: `id!="${song.id}"`,
           expand: 'uploadedBy',
@@ -162,13 +172,14 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
     const nextSong = queue[nextIdx];
     setQueueIndex(nextIdx);
     setCurrentSong(nextSong);
+    isLoadingRef.current = true;
+    setIsLoading(true);
     audioRef.current.src = getSongAudioUrl(nextSong);
-    audioRef.current.play().catch(console.error);
-    setIsPlaying(true);
+    audioRef.current.load(); // Start loading
     recordListen(nextSong);
 
     // Auto-load more only for non-fixed queues
-    if (!isFixedQueue && queue.length - nextIdx - 1 <= 1) {
+    if (!isFixedQueue && queue.length - nextIdx - 1 <= 5) {
       loadMoreQueue(queue.map(s => s.id));
     }
   }, [queue, queueIndex, loadMoreQueue, recordListen, shuffle, repeatMode, isFixedQueue]);
@@ -183,9 +194,10 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
       const prevSong = queue[prevIdx];
       setQueueIndex(prevIdx);
       setCurrentSong(prevSong);
+      isLoadingRef.current = true;
+      setIsLoading(true);
       audioRef.current.src = getSongAudioUrl(prevSong);
-      audioRef.current.play().catch(console.error);
-      setIsPlaying(true);
+      audioRef.current.load(); // Start loading
     }
   }, [queueIndex, queue]);
 
@@ -243,26 +255,48 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     const audio = audioRef.current;
-    const onTime = () => {
+    let animationFrameId: number;
+    
+    const updateProgress = () => {
       const currentTime = audio.currentTime;
-      if (Math.abs(currentTime - lastProgressRef.current) >= 0.25 || currentTime === 0 || currentTime >= audio.duration) {
+      if (Math.abs(currentTime - lastProgressRef.current) >= 0.016 || currentTime === 0 || currentTime >= audio.duration) {
         lastProgressRef.current = currentTime;
         setProgress(currentTime);
       }
+      if (isPlaying) {
+        animationFrameId = requestAnimationFrame(updateProgress);
+      }
     };
+
     const onDur = () => setDuration(audio.duration || 0);
     const onEnd = () => next();
+    const onCanPlay = () => {
+      if (isLoadingRef.current) {
+        audio.play().catch(console.error);
+        setIsPlaying(true);
+        setIsLoading(false);
+        isLoadingRef.current = false;
+      }
+    };
 
-    audio.addEventListener('timeupdate', onTime);
     audio.addEventListener('loadedmetadata', onDur);
     audio.addEventListener('ended', onEnd);
+    audio.addEventListener('canplay', onCanPlay);
+
+    // Start animation frame loop when playing
+    if (isPlaying) {
+      animationFrameId = requestAnimationFrame(updateProgress);
+    }
 
     return () => {
-      audio.removeEventListener('timeupdate', onTime);
       audio.removeEventListener('loadedmetadata', onDur);
       audio.removeEventListener('ended', onEnd);
+      audio.removeEventListener('canplay', onCanPlay);
+      if (animationFrameId) {
+        cancelAnimationFrame(animationFrameId);
+      }
     };
-  }, [next]);
+  }, [next, isPlaying]);
 
   useEffect(() => {
     setupMediaControlListeners({
@@ -287,9 +321,9 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
   }, [currentSong]);
 
   const playerValue = useMemo(() => ({
-    currentSong, queue, isPlaying, playerOpen, likedSongs, shuffle, repeatMode,
+    currentSong, queue, isPlaying, isLoading, playerOpen, likedSongs, shuffle, repeatMode,
     playSong, playSongFromList, pause, resume, togglePlay, next, previous, seek, setPlayerOpen, toggleLike, toggleShuffle, cycleRepeat,
-  }), [currentSong, queue, isPlaying, playerOpen, likedSongs, shuffle, repeatMode, playSong, playSongFromList, pause, resume, togglePlay, next, previous, seek, setPlayerOpen, toggleLike, toggleShuffle, cycleRepeat]);
+  }), [currentSong, queue, isPlaying, isLoading, playerOpen, likedSongs, shuffle, repeatMode, playSong, playSongFromList, pause, resume, togglePlay, next, previous, seek, setPlayerOpen, toggleLike, toggleShuffle, cycleRepeat]);
 
   const progressValue = useMemo(() => ({ progress, duration }), [progress, duration]);
 

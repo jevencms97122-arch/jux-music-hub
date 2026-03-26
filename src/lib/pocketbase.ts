@@ -1,6 +1,6 @@
 import PocketBase from 'pocketbase';
 
-export const pb = new PocketBase('https://assess-solved-roman-jul.trycloudflare.com/').autoCancellation(false);
+export const pb = new PocketBase('https://per-healing-tobacco-sender.trycloudflare.com/').autoCancellation(false);
 
 export function getFileUrl(record: { id: string; collectionId: string; collectionName: string }, filename: string) {
   const url = pb.files.getURL(record, filename);

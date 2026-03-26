@@ -107,6 +107,7 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
   const playSongInternal = useCallback(async (song: Song, q: Song[], idx: number) => {
     // Fetch fresh song data from backend
     const freshSong = await pb.collection('songs').getOne(song.id, { expand: 'uploadedBy' }) as unknown as Song;
+    setQueue(q);
     setCurrentSong(freshSong);
     setPlayerOpen(true);
     isLoadingRef.current = true;
@@ -253,6 +254,11 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
         await pb.collection('song_likes').create({ user: userId, song: song.id });
         setLikedSongs(prev => new Set(prev).add(song.id));
       }
+      // Force update count on the server side
+      const currentLikesCount = song.likesCount || 0;
+      await pb.collection('songs').update(song.id, {
+        likesCount: isCurrentlyLiked ? Math.max(0, currentLikesCount - 1) : currentLikesCount + 1,
+      });
     } catch (error) {
       console.error('Error toggling like:', error);
     }
@@ -276,35 +282,20 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     const audio = audioRef.current;
-    let animationFrameId: number;
-    
-    const updateProgress = () => {
-      const now = performance.now();
-      const currentTime = audio.currentTime;
-      
-      // Calculate velocity
-      if (lastProgressTime > 0) {
-        const deltaTime = now - lastProgressTime;
-        const deltaProgress = currentTime - lastProgressRef.current;
-        progressVelocity = deltaProgress / (deltaTime / 1000);
-      }
-      lastProgressTime = now;
-      
-      if (Math.abs(currentTime - lastProgressRef.current) >= 0.016 || currentTime === 0 || currentTime >= audio.duration) {
-        lastProgressRef.current = currentTime;
-        setProgress(currentTime);
-      }
-      
-      // Auto-next if near end and stalled (backup for mobile suspend)
-      if (audio.duration > 0 && currentTime / audio.duration > 0.95 && progressVelocity < 0.1 && isPlaying) {
-        next().catch(console.error);
-        return;
-      }
-      
-      if (isPlaying) {
-        animationFrameId = requestAnimationFrame(updateProgress);
-      }
-    };
+
+    if ('mediaSession' in navigator && currentSong) {
+      navigator.mediaSession.metadata = new MediaMetadata({
+        title: currentSong.title,
+        artist: currentSong.expand?.uploadedBy?.pseudo || currentSong.author || 'Unknown Artist',
+        album: 'Jux Music Hub',
+        artwork: [{ src: currentSong.coverImage || '/placeholder.svg', sizes: '512x512', type: 'image/png' }],
+      });
+
+      navigator.mediaSession.setActionHandler('play', () => resume());
+      navigator.mediaSession.setActionHandler('pause', () => pause());
+      navigator.mediaSession.setActionHandler('nexttrack', () => next());
+      navigator.mediaSession.setActionHandler('previoustrack', () => previous());
+    }
 
     const onDur = () => setDuration(audio.duration || 0);
     const onEnd = () => next().catch(console.error);
@@ -316,12 +307,9 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
         isLoadingRef.current = false;
       }
     };
-    
-    // Timeupdate for near-end check
+
     const onTimeUpdate = () => {
-      if (audio.duration > 0 && audio.currentTime / audio.duration > 0.98 && progressVelocity < 0.05) {
-        next().catch(console.error);
-      }
+      setProgress(audio.currentTime);
     };
 
     audio.addEventListener('loadedmetadata', onDur);
@@ -329,21 +317,13 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
     audio.addEventListener('canplay', onCanPlay);
     audio.addEventListener('timeupdate', onTimeUpdate);
 
-    // Start animation frame loop when playing
-    if (isPlaying) {
-      animationFrameId = requestAnimationFrame(updateProgress);
-    }
-
     return () => {
       audio.removeEventListener('loadedmetadata', onDur);
       audio.removeEventListener('ended', onEnd);
       audio.removeEventListener('canplay', onCanPlay);
       audio.removeEventListener('timeupdate', onTimeUpdate);
-      if (animationFrameId) {
-        cancelAnimationFrame(animationFrameId);
-      }
     };
-  }, [next, isPlaying]);
+  }, [currentSong, next, previous, pause, resume]);
 
 
 

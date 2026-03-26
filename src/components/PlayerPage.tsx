@@ -96,10 +96,19 @@ export default function PlayerPage() {
           initial={{ y: '100%' }}
           animate={{ y: 0 }}
           exit={{ y: '100%' }}
-          transition={{ type: 'spring', damping: 30, stiffness: 300 }}
-          className="fixed inset-0 z-50 bg-background flex flex-col"
+          transition={{ type: 'spring', damping: 30, stiffness: 300, mass: 1 }}
+          className="fixed inset-0 z-50 bg-background flex flex-col will-change-transform"
         >
-          <div className="flex items-center justify-between px-4 py-3">
+          <div className="absolute inset-0 z-0">
+            <img
+              src={getSongCoverUrl(currentSong)}
+              alt=""
+              className="w-full h-full object-cover blur-3xl opacity-30"
+            />
+            <div className="absolute inset-0 bg-background/80 backdrop-blur-md" />
+          </div>
+
+          <div className="relative z-10 flex items-center justify-between px-4 py-3">
             <button onClick={() => { setPlayerOpen(false); setTab('player'); }} className="p-2 text-foreground" type="button">
               <ChevronDown className="h-6 w-6" />
             </button>
@@ -107,129 +116,120 @@ export default function PlayerPage() {
             <div className="w-10" />
           </div>
 
-          {tab === 'player' ? (
-            <div className="flex-1 flex flex-col items-center justify-center px-8">
-              <div className={`w-48 h-48 sm:w-56 sm:h-56 md:w-64 md:h-64 lg:w-72 lg:h-72 rounded-xl overflow-hidden shadow-2xl mb-8 transition-transform duration-500 ${isPlaying ? 'scale-100' : 'scale-95 opacity-80'}`}>
-                <img
-                  key={currentSong.id}
-                  src={getSongCoverUrl(currentSong)}
-                  alt={currentSong.title}
-                  className="h-full w-full object-cover"
-                />
-              </div>
+          <div className="relative z-10 flex-1 overflow-hidden">
+            <AnimatePresence mode="wait">
+              <motion.div
+                key={tab}
+                initial={{ opacity: 0, x: tab === 'player' ? -20 : 20 }}
+                animate={{ opacity: 1, x: 0 }}
+                exit={{ opacity: 0, x: tab === 'player' ? 20 : -20 }}
+                transition={{ duration: 0.2 }}
+                className="h-full"
+              >
+                {tab === 'player' ? (
+                  <div className="flex flex-col items-center justify-center px-8 h-full">
+                    <div className={`w-48 h-48 sm:w-56 sm:h-56 md:w-64 md:h-64 lg:w-72 lg:h-72 rounded-xl overflow-hidden shadow-2xl mb-8 transition-transform duration-500 ${isPlaying ? 'scale-100' : 'scale-95 opacity-80'}`}>
+                      <motion.img
+                        key={currentSong.id}
+                        initial={{ opacity: 0, scale: 0.95 }}
+                        animate={{ opacity: 1, scale: 1 }}
+                        transition={{ duration: 0.3 }}
+                        src={getSongCoverUrl(currentSong)}
+                        alt={currentSong.title}
+                        className="h-full w-full object-cover"
+                      />
+                    </div>
 
-              <div className="w-full text-center mb-2">
-                <h2 className="text-xl font-bold text-foreground truncate">{currentSong.title}</h2>
-                <p className="text-sm text-muted-foreground truncate">
-                  {currentSong.author}
-                  {uploaderPseudo && <span> · publié par {uploaderPseudo}</span>}
-                </p>
-              </div>
+                    <div className="w-full text-center mb-2">
+                      <h2 className="text-xl font-bold text-foreground truncate">{currentSong.title}</h2>
+                      <p className="text-sm text-muted-foreground truncate">
+                        {currentSong.author}
+                        {uploaderPseudo && <span> · publié par {uploaderPseudo}</span>}
+                      </p>
+                    </div>
 
-              <div className="flex items-center gap-4 mb-4">
-                <div className="flex items-center gap-1 text-xs text-muted-foreground">
-                  <Headphones className="h-3.5 w-3.5" />
-                  <span>{currentSong.playCount || 0}</span>
-                </div>
-                <button onClick={toggleLike} className="flex items-center gap-1 text-xs text-muted-foreground" type="button">
-                  <Heart className={`h-3.5 w-3.5 transition-colors ${liked ? 'fill-primary text-primary' : ''}`} />
-                  <span>{likesCount}</span>
-                </button>
-              </div>
+                    <div className="flex items-center gap-4 mb-4">
+                      <div className="flex items-center gap-1 text-xs text-muted-foreground">
+                        <Headphones className="h-3.5 w-3.5" />
+                        <span>{currentSong.playCount || 0}</span>
+                      </div>
+                      <button onClick={toggleLike} className="flex items-center gap-1 text-xs text-muted-foreground" type="button">
+                        <Heart className={`h-3.5 w-3.5 transition-colors ${liked ? 'fill-primary text-primary' : ''}`} />
+                        <span>{likesCount}</span>
+                      </button>
+                    </div>
 
-              {user && currentSong && (
-                <FriendsLikedBadge songId={currentSong.id} userId={user.id} />
-              )}
+                    {user && currentSong && (
+                      <FriendsLikedBadge songId={currentSong.id} userId={user.id} />
+                    )}
 
-              <div className="flex items-center gap-4 mb-6 w-full px-4">
-                <span className="text-xs text-muted-foreground w-12 text-right flex-shrink-0">{formatTime(progress)}</span>
-                <div className="flex-1 relative flex items-center h-3">
-                  <div className="absolute top-1/2 left-0 h-1 bg-orange-500 rounded-full transform -translate-y-1/2" style={{ width: duration > 0 ? `calc(${(progress / duration) * 100}% + 6px)` : '0%' }} />
-                  <input
-                    ref={sliderRef}
-                    type="range"
-                    min={0}
-                    max={duration || 0}
-                    value={progress}
-                    onChange={(e) => {
-                      // Only update visual position during dragging, don't seek yet
-                      if (isDragging) {
-                        // Update the slider value visually during drag without seeking
-                        if (sliderRef.current) {
-                          sliderRef.current.value = e.target.value;
-                        }
-                      } else {
-                        // Only seek when not dragging
-                        seek(Number(e.target.value));
-                      }
-                    }}
-                    onMouseDown={() => {
-                      setIsDragging(true);
-                      // Prevent animation frame from updating slider during drag
-                      if (animationFrameRef.current) {
-                        cancelAnimationFrame(animationFrameRef.current);
-                      }
-                    }}
-                    onMouseMove={(e) => {
-                      // Update slider value during mouse move if dragging
-                      if (isDragging && sliderRef.current) {
-                        sliderRef.current.value = (e.target as HTMLInputElement).value;
-                      }
-                    }}
-                    onMouseUp={(e) => {
-                      setIsDragging(false);
-                      // Seek to the final position when drag ends
-                      seek(Number((e.target as HTMLInputElement).value));
-                    }}
-                    onTouchStart={() => {
-                      setIsDragging(true);
-                      // Prevent animation frame from updating slider during drag
-                      if (animationFrameRef.current) {
-                        cancelAnimationFrame(animationFrameRef.current);
-                      }
-                    }}
-                    onTouchMove={(e) => {
-                      // Update slider value during touch move if dragging
-                      if (isDragging && sliderRef.current) {
-                        sliderRef.current.value = (e.target as HTMLInputElement).value;
-                      }
-                    }}
-                    onTouchEnd={(e) => {
-                      setIsDragging(false);
-                      // Seek to the final position when drag ends
-                      seek(Number((e.target as HTMLInputElement).value));
-                    }}
-                    className="w-full h-1 appearance-none bg-secondary rounded-full [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:h-4 [&::-webkit-slider-thumb]:w-4 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-orange-500 [&::-webkit-slider-thumb]:-ml-1"
-                  />
-                </div>
-                <span className="text-xs text-muted-foreground w-12 flex-shrink-0">{formatTime(duration)}</span>
-              </div>
+                    <div className="flex items-center gap-4 mb-6 w-full px-4">
+                      <span className="text-xs text-muted-foreground w-12 text-right flex-shrink-0">{formatTime(progress)}</span>
+                      <div className="flex-1 relative flex items-center h-3">
+                        <div className="absolute top-1/2 left-0 h-1 bg-secondary rounded-full w-full transform -translate-y-1/2" />
+                        <div className="absolute top-1/2 left-0 h-1 bg-orange-500 rounded-full transform -translate-y-1/2" style={{ width: duration > 0 ? `${(Math.min(progress, duration) / duration) * 100}%` : '0%' }} />
+                        <input
+                          ref={sliderRef}
+                          type="range"
+                          min={0}
+                          max={duration || 0}
+                          value={progress}
+                          onChange={(e) => {
+                            const val = Number(e.target.value);
+                            if (sliderRef.current) {
+                              sliderRef.current.value = e.target.value;
+                            }
+                            seek(val);
+                          }}
+                          onMouseDown={() => setIsDragging(true)}
+                          onMouseUp={(e) => {
+                            setIsDragging(false);
+                            seek(Number((e.target as HTMLInputElement).value));
+                          }}
+                          onTouchStart={() => setIsDragging(true)}
+                          onTouchEnd={(e) => {
+                            setIsDragging(false);
+                            seek(Number((e.target as HTMLInputElement).value));
+                          }}
+                          className="absolute w-full h-4 opacity-0 cursor-pointer"
+                        />
+                        {/* Thumb */}
+                        <div
+                          className="absolute h-4 w-4 rounded-full bg-orange-500 pointer-events-none transform -translate-x-1/2 -translate-y-1/2 top-1/2"
+                          style={{ left: duration > 0 ? `${(Math.min(progress, duration) / duration) * 100}%` : '0%' }}
+                        />
+                      </div>
+                      <span className="text-xs text-muted-foreground w-12 flex-shrink-0">{formatTime(duration)}</span>
+                    </div>
 
-              <div className="flex items-center justify-center gap-8">
-                <button onClick={toggleShuffle} className={`p-2 transition-colors ${shuffle ? 'text-primary' : 'text-muted-foreground'}`} type="button">
-                  <Shuffle className="h-5 w-5" />
-                </button>
-                <button onClick={previous} className="p-2 text-foreground" type="button"><SkipBack className="h-7 w-7 fill-foreground" /></button>
-                <button onClick={togglePlay} className="h-16 w-16 rounded-full bg-foreground flex items-center justify-center" type="button">
-                  {isLoading ? (
-                    <Loader2 className="h-7 w-7 text-background animate-spin" />
-                  ) : isPlaying ? (
-                    <Pause className="h-7 w-7 text-background fill-background" />
-                  ) : (
-                    <Play className="h-7 w-7 text-background fill-background ml-1" />
-                  )}
-                </button>
-                <button onClick={next} className="p-2 text-foreground" type="button"><SkipForward className="h-7 w-7 fill-foreground" /></button>
-                <button onClick={cycleRepeat} className={`p-2 transition-colors ${repeatMode !== 'off' ? 'text-primary' : 'text-muted-foreground'}`} type="button">
-                  <RepeatIcon className="h-5 w-5" />
-                </button>
-              </div>
-            </div>
-          ) : (
-            <div className="flex-1 overflow-y-auto">
-              <QueueView />
-            </div>
-          )}
+                    <div className="flex items-center justify-center gap-8">
+                      <button onClick={toggleShuffle} className={`p-2 transition-colors ${shuffle ? 'text-primary' : 'text-muted-foreground'}`} type="button">
+                        <Shuffle className="h-5 w-5" />
+                      </button>
+                      <button onClick={previous} className="p-2 text-foreground" type="button"><SkipBack className="h-7 w-7 fill-foreground" /></button>
+                      <button onClick={togglePlay} className="h-16 w-16 rounded-full bg-foreground flex items-center justify-center" type="button">
+                        {isLoading ? (
+                          <Loader2 className="h-7 w-7 text-background animate-spin" />
+                        ) : isPlaying ? (
+                          <Pause className="h-7 w-7 text-background fill-background" />
+                        ) : (
+                          <Play className="h-7 w-7 text-background fill-background ml-1" />
+                        )}
+                      </button>
+                      <button onClick={next} className="p-2 text-foreground" type="button"><SkipForward className="h-7 w-7 fill-foreground" /></button>
+                      <button onClick={cycleRepeat} className={`p-2 transition-colors ${repeatMode !== 'off' ? 'text-primary' : 'text-muted-foreground'}`} type="button">
+                        <RepeatIcon className="h-5 w-5" />
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="h-full overflow-y-auto">
+                    <QueueView />
+                  </div>
+                )}
+              </motion.div>
+            </AnimatePresence>
+          </div>
 
           <div className="flex border-t border-border safe-bottom">
             {(['player', 'queue'] as const).map(t => (

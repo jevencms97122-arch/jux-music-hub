@@ -18,105 +18,31 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<PBUser | null>(null);
   const [loading, setLoading] = useState(true);
 
-  const saveAuth = () => {
-    const token = pb.authStore.token;
-    const record = pb.authStore.record;
-    if (!token || !record) return;
-    localStorage.setItem('jux_auth', JSON.stringify({ token, record }));
-  };
-
-  const clearAuth = () => {
-    pb.authStore.clear();
-    setUser(null);
-    localStorage.removeItem('jux_auth');
-  };
-
   const refreshUser = useCallback(async () => {
-    if (!pb.authStore.isValid) {
-      console.debug('[Auth] pb.authStore non valide');
-      return;
-    }
-
-    const userId = pb.authStore.record?.id;
-    if (!userId) {
-      console.warn('[Auth] userId introuvable lors du refreshUser');
-      return;
-    }
-
+    if (!pb.authStore.isValid) return;
     try {
-      const u = await pb.collection('users').getOne(userId);
+      const u = await pb.collection('users').getOne(pb.authStore.record?.id as string);
       setUser(u as unknown as PBUser);
-      console.debug('[Auth] user rafraîchi', u.id);
     } catch (error) {
       console.error('Erreur lors du rafraîchissement de l\'utilisateur:', error);
-      clearAuth();
+      pb.authStore.clear();
+      setUser(null);
     }
   }, []);
 
   useEffect(() => {
-    const initAuth = async () => {
-      try {
-        // Use the build-in pb.authStore persistence source first.
-        if (pb.authStore.isValid && pb.authStore.record) {
-          setUser(pb.authStore.record as PBUser);
-          try {
-            await refreshUser();
-          } catch (error) {
-            console.error('[Auth] refreshUser failed, clearing auth', error);
-            clearAuth();
-          }
-          setLoading(false);
-          return;
-        }
-
-        // Fallback for jux_auth legacy format (token + record)
-        const savedAuth = localStorage.getItem('jux_auth');
-        if (savedAuth) {
-          const authData = JSON.parse(savedAuth);
-          if (authData.token && authData.record) {
-            pb.authStore.save(authData.token, authData.record);
-            if (pb.authStore.isValid && pb.authStore.record) {
-              setUser(pb.authStore.record as PBUser);
-              try {
-                await refreshUser();
-              } catch (error) {
-                console.error('[Auth] refreshUser failed, clearing auth', error);
-                clearAuth();
-              }
-              setLoading(false);
-              return;
-            }
-          }
-        }
-
-        // Nothing valid
-        clearAuth();
-      } catch (error) {
-        console.error('Erreur lors de la restauration de l\'authentification:', error);
-        clearAuth();
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    initAuth();
-
-    const unsub = pb.authStore.onChange(() => {
-      if (pb.authStore.isValid && pb.authStore.record) {
-        refreshUser();
-        saveAuth();
-      } else {
-        clearAuth();
-      }
-    });
-
-    return () => unsub();
+    // Restaurer l'utilisateur si une session est valide
+    if (pb.authStore.isValid && pb.authStore.record) {
+      refreshUser();
+    } else {
+      setUser(null);
+    }
+    setLoading(false);
   }, [refreshUser]);
 
   const login = async (email: string, password: string) => {
     await pb.collection('users').authWithPassword(email, password);
     await refreshUser();
-    saveAuth();
   };
 
   const signup = async (email: string, password: string) => {
@@ -129,19 +55,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     });
     await pb.collection('users').authWithPassword(email, password);
     await refreshUser();
-    saveAuth();
   };
 
   const logout = () => {
-    clearAuth();
+    // Efface le token et le record, empêchant la reconnexion automatique par PocketBase
+    pb.authStore.clear();
+    setUser(null);
+    window.location.href = '/';
   };
 
   const updateProfile = async (data: FormData) => {
-    if (!user) return;
-    data.append('profileCompleted', 'true');
-    data.append('profilCompleted', 'true');
+    const userId = pb.authStore.record?.id;
+    if (!userId) throw new Error('Utilisateur non trouvé');
     try {
-      await pb.collection('users').update(user.id, data);
+      await pb.collection('users').update(userId, data);
       await refreshUser();
     } catch (error) {
       console.error('Erreur lors de la mise à jour du profil:', error);

@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { AuthProvider, useAuth } from '@/contexts/AuthContext';
 import { PlayerProvider } from '@/contexts/PlayerContext';
 import { BrowserRouter, Routes, Route, Navigate, useNavigate, useLocation } from 'react-router-dom';
+import { AnimatePresence, motion } from 'framer-motion';
 import Login from '@/pages/Login';
 import ProfileSetup from '@/pages/ProfileSetup';
 import ProfileEdit from '@/pages/ProfileEdit';
@@ -11,14 +12,13 @@ import SearchPage from '@/pages/Search';
 import Favorites from '@/pages/Favorites';
 import Social from '@/pages/Social';
 import UserProfile from '@/pages/UserProfile';
+import ProfilePage from '@/pages/ProfilePage';
 import MiniPlayer from '@/components/MiniPlayer';
 import PlayerPage from '@/components/PlayerPage';
 import BottomNav from '@/components/BottomNav';
-import MenuDrawer from '@/components/MenuDrawer';
 
 function AppContent() {
   const { user, loading } = useAuth();
-  const [menuOpen, setMenuOpen] = useState(false);
   const navigate = useNavigate();
   const location = useLocation();
 
@@ -41,13 +41,14 @@ function AppContent() {
 
   const profileCompleted = user.profileCompleted || user.profilCompleted || false;
 
-  const pathToActive: Record<string, 'home' | 'social' | 'search' | 'favorites'> = {
+  const pathToActive: Record<string, 'home' | 'social' | 'search' | 'favorites' | 'profile'> = {
     '/jux': 'home',
     '/social': 'social',
     '/search': 'search',
     '/favorites': 'favorites',
-    '/profile-edit': 'home',
-    '/upload': 'home',
+    '/profile': 'profile',
+    '/profile-edit': 'profile',
+    '/upload': 'profile',
   };
 
   const active = pathToActive[location.pathname] || 'home';
@@ -55,29 +56,61 @@ function AppContent() {
   return (
     <PlayerProvider>
       <div className="min-h-screen">
-        <Routes>
-          <Route path="/" element={<Navigate to="/jux" replace />} />
-          <Route path="/jux" element={profileCompleted ? <Home /> : <Navigate to="/profile-setup" replace />} />
-          <Route path="/upload" element={profileCompleted ? <Upload /> : <Navigate to="/profile-setup" replace />} />
-          <Route path="/search" element={profileCompleted ? <SearchPage /> : <Navigate to="/profile-setup" replace />} />
-          <Route path="/favorites" element={profileCompleted ? <Favorites /> : <Navigate to="/profile-setup" replace />} />
-          <Route path="/social" element={profileCompleted ? <Social /> : <Navigate to="/profile-setup" replace />} />
-          <Route path="/profile/:userId" element={profileCompleted ? <UserProfile /> : <Navigate to="/profile-setup" replace />} />
-          <Route path="/profile-edit" element={profileCompleted ? <ProfileEdit onBack={() => navigate('/jux')} /> : <Navigate to="/profile-setup" replace />} />
-          <Route path="/profile-setup" element={<ProfileSetup />} />
-        </Routes>
+        <AnimatePresence mode="wait">
+          <Routes location={location} key={location.pathname}>
+            <Route path="/" element={<Navigate to="/jux" replace />} />
+            <Route path="/jux" element={
+              <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }} transition={{ duration: 0.2 }}>
+                {profileCompleted ? <Home /> : <Navigate to="/profile-setup" replace />}
+              </motion.div>
+            } />
+            <Route path="/upload" element={
+              <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }} transition={{ duration: 0.2 }}>
+                {profileCompleted ? <Upload /> : <Navigate to="/profile-setup" replace />}
+              </motion.div>
+            } />
+            <Route path="/search" element={
+              <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }} transition={{ duration: 0.2 }}>
+                {profileCompleted ? <SearchPage /> : <Navigate to="/profile-setup" replace />}
+              </motion.div>
+            } />
+            <Route path="/favorites" element={
+              <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }} transition={{ duration: 0.2 }}>
+                {profileCompleted ? <Favorites /> : <Navigate to="/profile-setup" replace />}
+              </motion.div>
+            } />
+            <Route path="/social" element={
+              <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }} transition={{ duration: 0.2 }}>
+                {profileCompleted ? <Social /> : <Navigate to="/social" replace />}
+              </motion.div>
+            } />
+            <Route path="/profile" element={
+              <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }} transition={{ duration: 0.2 }}>
+                {profileCompleted ? <ProfilePage /> : <Navigate to="/profile-setup" replace />}
+              </motion.div>
+            } />
+            <Route path="/profile/:userId" element={
+              <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }} transition={{ duration: 0.2 }}>
+                {profileCompleted ? <UserProfile /> : <Navigate to="/profile-setup" replace />}
+              </motion.div>
+            } />
+            <Route path="/profile-edit" element={
+              <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }} transition={{ duration: 0.2 }}>
+                {profileCompleted ? <ProfileEdit onBack={() => navigate('/profile')} /> : <Navigate to="/profile-setup" replace />}
+              </motion.div>
+            } />
+            <Route path="/profile-setup" element={
+              <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }} transition={{ duration: 0.2 }}>
+                <ProfileSetup />
+              </motion.div>
+            } />
+          </Routes>
+        </AnimatePresence>
         <MiniPlayer />
         <PlayerPage />
         <BottomNav
           active={active}
           onNavigate={(page) => navigate(page === 'home' ? '/jux' : `/${page}`)}
-          onMenuOpen={() => setMenuOpen(true)}
-        />
-        <MenuDrawer
-          open={menuOpen}
-          onClose={() => setMenuOpen(false)}
-          onEditProfile={() => navigate('/profile-edit')}
-          onUpload={() => navigate('/upload')}
         />
       </div>
     </PlayerProvider>

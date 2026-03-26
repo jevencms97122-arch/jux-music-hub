@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
+import { motion } from 'framer-motion';
 import { pb } from '@/lib/pocketbase';
 import { useAuth } from '@/contexts/AuthContext';
 import { usePlayer } from '@/contexts/PlayerContext';
@@ -274,22 +275,35 @@ export default function Home() {
       <SongRow title="Nouveautés" songs={newSongs} onSeeAll={handleShowAllNew} />
 
       {/* Section 4: Découvrir */}
-      <section className="px-4">
-        <h2 className="text-lg font-bold text-foreground mb-3">Découvrir</h2>
-        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2">
+      <section className="px-4 mb-8">
+        <h2 className="text-2xl font-bold text-foreground mb-4">Découvrir</h2>
+        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
           {discoverSongs.map((song, i) => (
-            <SongCard
+            <motion.div
               key={`${song.id}-${i}`}
-              song={song}
-              size="sm"
-              isActive={currentSong?.id === song.id}
-              isPlaying={isPlaying}
-              onPlay={playSong}
-            />
+              initial={{ opacity: 0, y: 20 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.4, delay: i * 0.05 }}
+              viewport={{ once: true }}
+              className="group transition-transform duration-300 hover:scale-105"
+            >
+              <SongCard
+                song={song}
+                size="md"
+                isActive={currentSong?.id === song.id}
+                isPlaying={isPlaying}
+                onPlay={playSong}
+              />
+            </motion.div>
           ))}
         </div>
-        <div ref={sentinelRef} className="py-4 text-center">
-          {loadingDiscover && <p className="text-sm text-muted-foreground">Chargement...</p>}
+        <div ref={sentinelRef} className="py-8 text-center">
+          {loadingDiscover && (
+            <div className="flex justify-center items-center gap-2 text-muted-foreground">
+              <div className="h-4 w-4 rounded-full border-2 border-primary border-t-transparent animate-spin" />
+              <span>Chargement...</span>
+            </div>
+          )}
         </div>
       </section>
     </div>

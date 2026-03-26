@@ -1,34 +1,48 @@
-import { Home, Menu, Search, Heart, Users } from 'lucide-react';
+import { Home, User, Search, Heart, Users } from 'lucide-react';
 
 interface BottomNavProps {
-  active: 'home' | 'social' | 'search' | 'favorites';
-  onNavigate: (page: 'home' | 'social' | 'search' | 'favorites') => void;
-  onMenuOpen: () => void;
+  active: 'home' | 'social' | 'search' | 'favorites' | 'profile';
+  onNavigate: (page: 'home' | 'social' | 'search' | 'favorites' | 'profile') => void;
 }
 
-export default function BottomNav({ active, onNavigate, onMenuOpen }: BottomNavProps) {
+export default function BottomNav({ active, onNavigate }: BottomNavProps) {
   return (
-    <nav className="fixed bottom-0 left-0 right-0 z-30 bg-card border-t border-border safe-bottom">
-      <div className="flex items-center justify-around py-2">
-        <button onClick={() => onNavigate('home')} className={`flex flex-col items-center gap-0.5 px-4 py-1 transition-colors ${active === 'home' ? 'text-foreground' : 'text-muted-foreground'}`}>
-          <Home className="h-5 w-5" />
-          <span className="text-[10px]">Accueil</span>
+    <nav className="fixed bottom-0 left-0 right-0 z-30 bg-card/90 backdrop-blur-lg border-t border-border/50 safe-bottom">
+      <div className="flex items-center justify-around py-2 pb-safe">
+        <button
+          onClick={() => onNavigate('home')}
+          className={`flex flex-col items-center gap-1 px-3 py-1.5 transition-all ${active === 'home' ? 'text-primary' : 'text-muted-foreground hover:text-foreground'}`}
+        >
+          <Home className={`h-6 w-6 ${active === 'home' ? 'fill-primary/20' : ''}`} />
+          <span className="text-[10px] font-medium">Accueil</span>
         </button>
-        <button onClick={() => onNavigate('search')} className={`flex flex-col items-center gap-0.5 px-4 py-1 transition-colors ${active === 'search' ? 'text-foreground' : 'text-muted-foreground'}`}>
-          <Search className="h-5 w-5" />
-          <span className="text-[10px]">Rechercher</span>
+        <button
+          onClick={() => onNavigate('search')}
+          className={`flex flex-col items-center gap-1 px-3 py-1.5 transition-all ${active === 'search' ? 'text-primary' : 'text-muted-foreground hover:text-foreground'}`}
+        >
+          <Search className="h-6 w-6" />
+          <span className="text-[10px] font-medium">Explorer</span>
         </button>
-        <button onClick={() => onNavigate('favorites')} className={`flex flex-col items-center gap-0.5 px-4 py-1 transition-colors ${active === 'favorites' ? 'text-foreground' : 'text-muted-foreground'}`}>
-          <Heart className="h-5 w-5" />
-          <span className="text-[10px]">Favoris</span>
+        <button
+          onClick={() => onNavigate('favorites')}
+          className={`flex flex-col items-center gap-1 px-3 py-1.5 transition-all ${active === 'favorites' ? 'text-primary' : 'text-muted-foreground hover:text-foreground'}`}
+        >
+          <Heart className={`h-6 w-6 ${active === 'favorites' ? 'fill-primary/20' : ''}`} />
+          <span className="text-[10px] font-medium">Favoris</span>
         </button>
-        <button onClick={() => onNavigate('social')} className={`flex flex-col items-center gap-0.5 px-4 py-1 transition-colors ${active === 'social' ? 'text-foreground' : 'text-muted-foreground'}`}>
-          <Users className="h-5 w-5" />
-          <span className="text-[10px]">Social</span>
+        <button
+          onClick={() => onNavigate('social')}
+          className={`flex flex-col items-center gap-1 px-3 py-1.5 transition-all ${active === 'social' ? 'text-primary' : 'text-muted-foreground hover:text-foreground'}`}
+        >
+          <Users className={`h-6 w-6 ${active === 'social' ? 'fill-primary/20' : ''}`} />
+          <span className="text-[10px] font-medium">Social</span>
         </button>
-        <button onClick={onMenuOpen} className="flex flex-col items-center gap-0.5 px-4 py-1 text-muted-foreground">
-          <Menu className="h-5 w-5" />
-          <span className="text-[10px]">Menu</span>
+        <button
+          onClick={() => onNavigate('profile')}
+          className={`flex flex-col items-center gap-1 px-3 py-1.5 transition-all ${active === 'profile' ? 'text-primary' : 'text-muted-foreground hover:text-foreground'}`}
+        >
+          <User className={`h-6 w-6 ${active === 'profile' ? 'fill-primary/20' : ''}`} />
+          <span className="text-[10px] font-medium">Profil</span>
         </button>
       </div>
     </nav>

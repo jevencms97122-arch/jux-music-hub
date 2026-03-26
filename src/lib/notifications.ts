@@ -65,7 +65,7 @@ export async function showMediaNotification(
         actions: [
           { action: 'previous', title: '⏮' },
           { action: 'play', title: isPlaying ? '⏸' : '▶' },
-          { action: 'like', title: isLiked ? '❤️' : '🤍' },
+          { action: 'next', title: '⏭' },
         ],
       };
 

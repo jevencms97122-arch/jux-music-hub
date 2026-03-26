@@ -36,8 +36,13 @@ interface PlayerProgressContextType {
 const PlayerContext = createContext<PlayerContextType | null>(null);
 const PlayerProgressContext = createContext<PlayerProgressContextType | null>(null);
 
+let lastProgressTime = 0;
+let progressVelocity = 0;
+
 export function PlayerProvider({ children }: { children: React.ReactNode }) {
   const [currentSong, setCurrentSong] = useState<Song | null>(null);
+  
+
   const [queue, setQueue] = useState<Song[]>([]);
   const [queueIndex, setQueueIndex] = useState(-1);
   const [isPlaying, setIsPlaying] = useState(false);
@@ -70,6 +75,8 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const recordListen = useCallback((song: Song) => {
+    // Backend only - no local optimistic update
+    // Background DB sync
     if (pb.authStore.record) {
       pb.collection('listen_history').create({
         user: pb.authStore.record.id,
@@ -77,7 +84,7 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
         listenedAt: new Date().toISOString(),
       }).catch(console.error);
     }
-    incrementPlayCount(song);
+    incrementPlayCount(song).catch(console.error);
   }, [incrementPlayCount]);
 
   const loadMoreQueue = useCallback(async (exclude: string[]) => {
@@ -97,39 +104,42 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
     }
   }, []);
 
-  const playSongInternal = useCallback((song: Song, q: Song[], idx: number) => {
-    setCurrentSong(song);
+  const playSongInternal = useCallback(async (song: Song, q: Song[], idx: number) => {
+    // Fetch fresh song data from backend
+    const freshSong = await pb.collection('songs').getOne(song.id, { expand: 'uploadedBy' }) as unknown as Song;
+    setCurrentSong(freshSong);
     setPlayerOpen(true);
     isLoadingRef.current = true;
     setIsLoading(true);
-    audioRef.current.src = getSongAudioUrl(song);
-    audioRef.current.load(); // Start loading with preload='none'
-    setQueue(q);
+    audioRef.current.src = getSongAudioUrl(freshSong);
+    audioRef.current.load();
     setQueueIndex(idx);
-    recordListen(song);
+    await recordListen(freshSong);
   }, [recordListen]);
 
   const playSong = useCallback(async (song: Song, autoQueue = true) => {
+    // Fetch fresh song data from backend
+    const freshSong = await pb.collection('songs').getOne(song.id, { expand: 'uploadedBy' }) as unknown as Song;
     setIsFixedQueue(false);
-    setCurrentSong(song);
+    setCurrentSong(freshSong);
     setPlayerOpen(true);
     isLoadingRef.current = true;
     setIsLoading(true);
-    audioRef.current.src = getSongAudioUrl(song);
-    audioRef.current.load(); // Start loading with preload='none'
-    recordListen(song);
+    audioRef.current.src = getSongAudioUrl(freshSong);
+    audioRef.current.load();
+    await recordListen(freshSong);
 
     if (autoQueue) {
       try {
         const result = await pb.collection('songs').getList(1, 30, {
           sort: '@random',
-          filter: `id!="${song.id}"`,
+          filter: `id!="${freshSong.id}"`,
           expand: 'uploadedBy',
         });
-        setQueue([song, ...(result.items as unknown as Song[])]);
+        setQueue([freshSong, ...(result.items as unknown as Song[])]);
         setQueueIndex(0);
       } catch {
-        setQueue([song]);
+        setQueue([freshSong]);
         setQueueIndex(0);
       }
     }
@@ -141,7 +151,7 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
     playSongInternal(song, list, index);
   }, [playSongInternal]);
 
-  const next = useCallback(() => {
+  const next = useCallback(async () => {
     if (queue.length === 0) return;
 
     // Repeat one: restart current song
@@ -169,37 +179,48 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
       }
     }
 
-    const nextSong = queue[nextIdx];
-    setQueueIndex(nextIdx);
-    setCurrentSong(nextSong);
-    isLoadingRef.current = true;
-    setIsLoading(true);
-    audioRef.current.src = getSongAudioUrl(nextSong);
-    audioRef.current.load(); // Start loading
-    recordListen(nextSong);
+    try {
+      // Fetch fresh nextSong
+      const freshNextSong = await pb.collection('songs').getOne(queue[nextIdx].id, { expand: 'uploadedBy' }) as unknown as Song;
+      setQueueIndex(nextIdx);
+      setCurrentSong(freshNextSong);
+      isLoadingRef.current = true;
+      setIsLoading(true);
+      audioRef.current.src = getSongAudioUrl(freshNextSong);
+      audioRef.current.load();
+      await recordListen(freshNextSong);
 
-    // Auto-load more only for non-fixed queues
-    if (!isFixedQueue && queue.length - nextIdx - 1 <= 5) {
-      loadMoreQueue(queue.map(s => s.id));
+      // Auto-load more only for non-fixed queues
+      if (!isFixedQueue && queue.length - nextIdx - 1 <= 5) {
+        loadMoreQueue(queue.map(s => s.id));
+      }
+    } catch (error) {
+      console.error('Error playing next song:', error);
     }
   }, [queue, queueIndex, loadMoreQueue, recordListen, shuffle, repeatMode, isFixedQueue]);
 
-  const previous = useCallback(() => {
+  const previous = useCallback(async () => {
     if (audioRef.current.currentTime > 3) {
       audioRef.current.currentTime = 0;
       return;
     }
     if (queueIndex > 0) {
-      const prevIdx = queueIndex - 1;
-      const prevSong = queue[prevIdx];
-      setQueueIndex(prevIdx);
-      setCurrentSong(prevSong);
-      isLoadingRef.current = true;
-      setIsLoading(true);
-      audioRef.current.src = getSongAudioUrl(prevSong);
-      audioRef.current.load(); // Start loading
+      try {
+        const prevIdx = queueIndex - 1;
+        // Fetch fresh prevSong
+        const freshPrevSong = await pb.collection('songs').getOne(queue[prevIdx].id, { expand: 'uploadedBy' }) as unknown as Song;
+        setQueueIndex(prevIdx);
+        setCurrentSong(freshPrevSong);
+        isLoadingRef.current = true;
+        setIsLoading(true);
+        audioRef.current.src = getSongAudioUrl(freshPrevSong);
+        audioRef.current.load();
+        await recordListen(freshPrevSong);
+      } catch (error) {
+        console.error('Error playing previous song:', error);
+      }
     }
-  }, [queueIndex, queue]);
+  }, [queueIndex, queue, recordListen]);
 
   const pause = useCallback(() => { audioRef.current.pause(); setIsPlaying(false); }, []);
   const resume = useCallback(() => { audioRef.current.play().catch(console.error); setIsPlaying(true); }, []);
@@ -258,18 +279,35 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
     let animationFrameId: number;
     
     const updateProgress = () => {
+      const now = performance.now();
       const currentTime = audio.currentTime;
+      
+      // Calculate velocity
+      if (lastProgressTime > 0) {
+        const deltaTime = now - lastProgressTime;
+        const deltaProgress = currentTime - lastProgressRef.current;
+        progressVelocity = deltaProgress / (deltaTime / 1000);
+      }
+      lastProgressTime = now;
+      
       if (Math.abs(currentTime - lastProgressRef.current) >= 0.016 || currentTime === 0 || currentTime >= audio.duration) {
         lastProgressRef.current = currentTime;
         setProgress(currentTime);
       }
+      
+      // Auto-next if near end and stalled (backup for mobile suspend)
+      if (audio.duration > 0 && currentTime / audio.duration > 0.95 && progressVelocity < 0.1 && isPlaying) {
+        next().catch(console.error);
+        return;
+      }
+      
       if (isPlaying) {
         animationFrameId = requestAnimationFrame(updateProgress);
       }
     };
 
     const onDur = () => setDuration(audio.duration || 0);
-    const onEnd = () => next();
+    const onEnd = () => next().catch(console.error);
     const onCanPlay = () => {
       if (isLoadingRef.current) {
         audio.play().catch(console.error);
@@ -278,10 +316,18 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
         isLoadingRef.current = false;
       }
     };
+    
+    // Timeupdate for near-end check
+    const onTimeUpdate = () => {
+      if (audio.duration > 0 && audio.currentTime / audio.duration > 0.98 && progressVelocity < 0.05) {
+        next().catch(console.error);
+      }
+    };
 
     audio.addEventListener('loadedmetadata', onDur);
     audio.addEventListener('ended', onEnd);
     audio.addEventListener('canplay', onCanPlay);
+    audio.addEventListener('timeupdate', onTimeUpdate);
 
     // Start animation frame loop when playing
     if (isPlaying) {
@@ -292,33 +338,17 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
       audio.removeEventListener('loadedmetadata', onDur);
       audio.removeEventListener('ended', onEnd);
       audio.removeEventListener('canplay', onCanPlay);
+      audio.removeEventListener('timeupdate', onTimeUpdate);
       if (animationFrameId) {
         cancelAnimationFrame(animationFrameId);
       }
     };
   }, [next, isPlaying]);
 
-  useEffect(() => {
-    setupMediaControlListeners({
-      onPlay: () => { audioRef.current.play().catch(console.error); setIsPlaying(true); },
-      onPause: () => { audioRef.current.pause(); setIsPlaying(false); },
-      onNext: () => next(),
-      onPrevious: () => previous(),
-      onLike: () => { if (currentSong) toggleLike(currentSong); },
-    });
-  }, [currentSong, next, previous, toggleLike]);
 
-  useEffect(() => {
-    if (currentSong && isPlaying) {
-      showMediaNotification(currentSong, true, likedSongs.has(currentSong.id));
-    } else if (!isPlaying && currentSong) {
-      showMediaNotification(currentSong, false, likedSongs.has(currentSong.id));
-    }
-  }, [currentSong, isPlaying, likedSongs]);
 
-  useEffect(() => {
-    if (!currentSong) closeMediaNotification();
-  }, [currentSong]);
+
+
 
   const playerValue = useMemo(() => ({
     currentSong, queue, isPlaying, isLoading, playerOpen, likedSongs, shuffle, repeatMode,

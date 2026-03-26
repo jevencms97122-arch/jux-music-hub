@@ -6,6 +6,7 @@ import { getSongCoverUrl, pb } from '@/lib/pocketbase';
 import { ChevronDown, Play, Pause, SkipForward, SkipBack, Shuffle, Repeat, Repeat1, Heart, Headphones, Loader2 } from 'lucide-react';
 import QueueView from './QueueView';
 import FriendsLikedBadge from './FriendsLikedBadge';
+import { useToast } from '@/components/ui/use-toast';
 
 function formatTime(s: number) {
   if (!s || isNaN(s)) return '0:00';
@@ -21,22 +22,18 @@ export default function PlayerPage() {
   const [tab, setTab] = useState<'player' | 'queue'>('player');
   const [liked, setLiked] = useState(false);
   const [likesCount, setLikesCount] = useState(0);
-  const [playCount, setPlayCount] = useState(0);
   const [isDragging, setIsDragging] = useState(false);
   const sliderRef = useRef<HTMLInputElement>(null);
   const animationFrameRef = useRef<number>();
   const dragTimeoutRef = useRef<NodeJS.Timeout>();
 
   useEffect(() => {
-    if (!currentSong) return;
-    setPlayCount(currentSong.playCount || 0);
-    setLikesCount(currentSong.likesCount || 0);
+    if (!currentSong || !user) return;
 
-    if (user) {
-      pb.collection('song_likes').getList(1, 1, {
-        filter: `user="${user.id}" && song="${currentSong.id}"`,
-      }).then(r => setLiked(r.items.length > 0)).catch(() => setLiked(false));
-    }
+    pb.collection('song_likes').getList(1, 1, {
+      filter: `user="${user.id}" && song="${currentSong.id}"`,
+    }).then(r => setLiked(r.items.length > 0)).catch(() => setLiked(false));
+    setLikesCount(currentSong.likesCount || 0);
   }, [currentSong, user]);
 
   // Synchronize slider thumb with progress updates using requestAnimationFrame
@@ -132,7 +129,7 @@ export default function PlayerPage() {
               <div className="flex items-center gap-4 mb-4">
                 <div className="flex items-center gap-1 text-xs text-muted-foreground">
                   <Headphones className="h-3.5 w-3.5" />
-                  <span>{playCount}</span>
+                  <span>{currentSong.playCount || 0}</span>
                 </div>
                 <button onClick={toggleLike} className="flex items-center gap-1 text-xs text-muted-foreground" type="button">
                   <Heart className={`h-3.5 w-3.5 transition-colors ${liked ? 'fill-primary text-primary' : ''}`} />

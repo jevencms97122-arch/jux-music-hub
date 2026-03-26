@@ -126,7 +126,6 @@ self.addEventListener('notificationclick', (event) => {
         case 'pause': messageType = 'NOTIFICATION_PAUSE'; break;
         case 'next': messageType = 'NOTIFICATION_NEXT'; break;
         case 'previous': messageType = 'NOTIFICATION_PREVIOUS'; break;
-        case 'like': messageType = 'NOTIFICATION_LIKE'; break;
         default:
           client.focus();
           return;

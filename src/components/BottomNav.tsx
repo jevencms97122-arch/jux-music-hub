@@ -34,3 +34,4 @@ export default function BottomNav({ active, onNavigate, onMenuOpen }: BottomNavP
     </nav>
   );
 }
+

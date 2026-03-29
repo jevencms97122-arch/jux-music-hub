@@ -1,8 +1,8 @@
-import { Home, User, Search, Heart, Users } from 'lucide-react';
+import { Home, User, Heart, Users } from 'lucide-react';
 
 interface BottomNavProps {
-  active: 'home' | 'social' | 'search' | 'favorites' | 'profile';
-  onNavigate: (page: 'home' | 'social' | 'search' | 'favorites' | 'profile') => void;
+  active: 'home' | 'social' | 'favorites' | 'profile';
+  onNavigate: (page: 'home' | 'social' | 'favorites' | 'profile') => void;
 }
 
 export default function BottomNav({ active, onNavigate }: BottomNavProps) {
@@ -15,13 +15,6 @@ export default function BottomNav({ active, onNavigate }: BottomNavProps) {
         >
           <Home className={`h-6 w-6 ${active === 'home' ? 'fill-primary/20' : ''}`} />
           <span className="text-[10px] font-medium">Accueil</span>
-        </button>
-        <button
-          onClick={() => onNavigate('search')}
-          className={`flex flex-col items-center gap-1 px-3 py-1.5 transition-all ${active === 'search' ? 'text-primary' : 'text-muted-foreground hover:text-foreground'}`}
-        >
-          <Search className="h-6 w-6" />
-          <span className="text-[10px] font-medium">Explorer</span>
         </button>
         <button
           onClick={() => onNavigate('favorites')}

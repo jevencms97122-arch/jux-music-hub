@@ -1,16 +1,26 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { pb } from '@/lib/pocketbase';
+import { getUserAvatarUrl } from '@/lib/pocketbase';
 import { useAuth } from '@/contexts/AuthContext';
 import { usePlayer } from '@/contexts/PlayerContext';
-import type { Song } from '@/types/music';
+import type { Song, PBUser } from '@/types/music';
 import SongRow from '@/components/SongRow';
 import SongCard from '@/components/SongCard';
 import juxLogo from '@/assets/jux-logo.png';
+import { Search as SearchIcon, X, User } from 'lucide-react';
 
 export default function Home() {
+  const navigate = useNavigate();
   const { user } = useAuth();
   const { playSong, currentSong, isPlaying } = usePlayer();
+
+  // Search state
+  const [query, setQuery] = useState('');
+  const [searchSongs, setSearchSongs] = useState<Song[]>([]);
+  const [searchUsers, setSearchUsers] = useState<PBUser[]>([]);
+  const [searchLoading, setSearchLoading] = useState(false);
 
   // Section 1: Tag-based recommendations
   const [tagSongs, setTagSongs] = useState<Song[]>([]);
@@ -42,6 +52,39 @@ export default function Home() {
     if (error?.isAbort) return;
     console.error(error);
   };
+
+  // Search function
+  const search = useCallback(async (q: string) => {
+    if (!q.trim()) {
+      setSearchSongs([]);
+      setSearchUsers([]);
+      return;
+    }
+    setSearchLoading(true);
+    try {
+      const [songsRes, usersRes] = await Promise.all([
+        pb.collection('songs').getList(1, 20, {
+          filter: `title~"${q}" || author~"${q}"`,
+          expand: 'uploadedBy',
+        }),
+        pb.collection('users').getList(1, 10, {
+          filter: `pseudo~"${q}" || firstName~"${q}" || lastName~"${q}"`,
+        }),
+      ]);
+      setSearchSongs(songsRes.items as unknown as Song[]);
+      setSearchUsers(usersRes.items as unknown as PBUser[]);
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setSearchLoading(false);
+    }
+  }, []);
+
+  // Debounced search effect
+  useEffect(() => {
+    const timer = setTimeout(() => search(query), 300);
+    return () => clearTimeout(timer);
+  }, [query, search]);
 
   // Load initial data
   useEffect(() => {
@@ -263,49 +306,125 @@ export default function Home() {
         <img src={juxLogo} alt="Jux" className="h-8 w-auto" />
       </div>
 
-      {/* Section 1: Tag-based recommendations */}
-      {tagSongs.length > 0 && (
-        <SongRow title="Pour toi" songs={tagSongs} onSeeAll={handleShowAllTags} />
-      )}
-
-      {/* Section 2: Réécouter */}
-      <SongRow title="Réécouter" songs={relistenSongs} onSeeAll={relistenSongs.length > 0 ? handleShowAllRelisten : undefined} />
-
-      {/* Section 3: Nouveautés */}
-      <SongRow title="Nouveautés" songs={newSongs} onSeeAll={handleShowAllNew} />
-
-      {/* Section 4: Découvrir */}
-      <section className="px-4 mb-8">
-        <h2 className="text-2xl font-bold text-foreground mb-4">Découvrir</h2>
-        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
-          {discoverSongs.map((song, i) => (
-            <motion.div
-              key={`${song.id}-${i}`}
-              initial={{ opacity: 0, y: 20 }}
-              whileInView={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.4, delay: i * 0.05 }}
-              viewport={{ once: true }}
-              className="group transition-transform duration-300 hover:scale-105"
-            >
-              <SongCard
-                song={song}
-                size="md"
-                isActive={currentSong?.id === song.id}
-                isPlaying={isPlaying}
-                onPlay={playSong}
-              />
-            </motion.div>
-          ))}
-        </div>
-        <div ref={sentinelRef} className="py-8 text-center">
-          {loadingDiscover && (
-            <div className="flex justify-center items-center gap-2 text-muted-foreground">
-              <div className="h-4 w-4 rounded-full border-2 border-primary border-t-transparent animate-spin" />
-              <span>Chargement...</span>
-            </div>
+      {/* Search bar */}
+      <div className="px-4 mb-6">
+        <div className="relative">
+          <SearchIcon className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+          <input
+            type="text"
+            value={query}
+            onChange={e => setQuery(e.target.value)}
+            placeholder="Musique, artiste, utilisateur..."
+            className="w-full h-10 pl-10 pr-10 rounded-lg bg-secondary border border-border text-foreground placeholder:text-muted-foreground text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+          />
+          {query && (
+            <button onClick={() => setQuery('')} className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground" type="button">
+              <X className="h-4 w-4" />
+            </button>
           )}
         </div>
-      </section>
+      </div>
+
+      {/* Search results */}
+      {query && (
+        <div className="px-4 mb-6">
+          {searchLoading && <p className="text-sm text-muted-foreground text-center">Recherche...</p>}
+          
+          {!searchLoading && searchSongs.length === 0 && searchUsers.length === 0 && (
+            <p className="text-sm text-muted-foreground text-center mt-8">Aucun résultat pour "{query}"</p>
+          )}
+
+          {searchUsers.length > 0 && (
+            <section className="mb-6">
+              <h2 className="text-sm font-semibold text-muted-foreground mb-3">Utilisateurs</h2>
+              <div className="space-y-2">
+                {searchUsers.map(u => (
+                  <div key={u.id} onClick={() => navigate(`/profile/${u.id}`)} className="flex items-center gap-3 p-2 rounded-lg bg-card cursor-pointer hover:bg-secondary transition-colors">
+                    {u.avatar ? (
+                      <img src={getUserAvatarUrl(u as any)} alt={u.pseudo} className="h-10 w-10 rounded-full object-cover" />
+                    ) : (
+                      <div className="h-10 w-10 rounded-full bg-secondary flex items-center justify-center">
+                        <User className="h-5 w-5 text-muted-foreground" />
+                      </div>
+                    )}
+                    <div>
+                      <p className="text-sm font-medium text-foreground">{u.pseudo}</p>
+                      <p className="text-xs text-muted-foreground">{u.firstName} {u.lastName}</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </section>
+          )}
+
+          {searchSongs.length > 0 && (
+            <section>
+              <h2 className="text-sm font-semibold text-muted-foreground mb-3">Musiques</h2>
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
+                {searchSongs.map(s => (
+                  <SongCard
+                    key={s.id}
+                    song={s}
+                    size="sm"
+                    isActive={currentSong?.id === s.id}
+                    isPlaying={isPlaying}
+                    onPlay={playSong}
+                  />
+                ))}
+              </div>
+            </section>
+          )}
+        </div>
+      )}
+
+      {/* Normal content when not searching */}
+      {!query && (
+        <>
+          {/* Section 1: Tag-based recommendations */}
+          {tagSongs.length > 0 && (
+            <SongRow title="Pour toi" songs={tagSongs} onSeeAll={handleShowAllTags} />
+          )}
+
+          {/* Section 2: Réécouter */}
+          <SongRow title="Réécouter" songs={relistenSongs} onSeeAll={relistenSongs.length > 0 ? handleShowAllRelisten : undefined} />
+
+          {/* Section 3: Nouveautés */}
+          <SongRow title="Nouveautés" songs={newSongs} onSeeAll={handleShowAllNew} />
+
+          {/* Section 4: Découvrir */}
+          <section className="px-4 mb-8">
+            <h2 className="text-2xl font-bold text-foreground mb-4">Découvrir</h2>
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
+              {discoverSongs.map((song, i) => (
+                <motion.div
+                  key={`${song.id}-${i}`}
+                  initial={{ opacity: 0, y: 20 }}
+                  whileInView={{ opacity: 1, y: 0 }}
+                  transition={{ duration: 0.4, delay: i * 0.05 }}
+                  viewport={{ once: true }}
+                  className="group transition-transform duration-300 hover:scale-105"
+                >
+                  <SongCard
+                    song={song}
+                    size="md"
+                    isActive={currentSong?.id === song.id}
+                    isPlaying={isPlaying}
+                    onPlay={playSong}
+                  />
+                </motion.div>
+              ))}
+            </div>
+            <div ref={sentinelRef} className="py-8 text-center">
+              {loadingDiscover && (
+                <div className="flex justify-center items-center gap-2 text-muted-foreground">
+                  <div className="h-4 w-4 rounded-full border-2 border-primary border-t-transparent animate-spin" />
+                  <span>Chargement...</span>
+                </div>
+              )}
+            </div>
+          </section>
+        </>
+      )}
     </div>
   );
 }

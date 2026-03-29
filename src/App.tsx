@@ -8,7 +8,6 @@ import ProfileSetup from '@/pages/ProfileSetup';
 import ProfileEdit from '@/pages/ProfileEdit';
 import Home from '@/pages/Home';
 import Upload from '@/pages/Upload';
-import SearchPage from '@/pages/Search';
 import Favorites from '@/pages/Favorites';
 import Social from '@/pages/Social';
 import UserProfile from '@/pages/UserProfile';
@@ -16,6 +15,7 @@ import ProfilePage from '@/pages/ProfilePage';
 import MiniPlayer from '@/components/MiniPlayer';
 import PlayerPage from '@/components/PlayerPage';
 import BottomNav from '@/components/BottomNav';
+import { UpdateNotification } from '@/components/UpdateNotification';
 
 function AppContent() {
   const { user, loading } = useAuth();
@@ -41,10 +41,9 @@ function AppContent() {
 
   const profileCompleted = user.profileCompleted || user.profilCompleted || false;
 
-  const pathToActive: Record<string, 'home' | 'social' | 'search' | 'favorites' | 'profile'> = {
+  const pathToActive: Record<string, 'home' | 'social' | 'favorites' | 'profile'> = {
     '/jux': 'home',
     '/social': 'social',
-    '/search': 'search',
     '/favorites': 'favorites',
     '/profile': 'profile',
     '/profile-edit': 'profile',
@@ -67,11 +66,6 @@ function AppContent() {
             <Route path="/upload" element={
               <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }} transition={{ duration: 0.2 }}>
                 {profileCompleted ? <Upload /> : <Navigate to="/profile-setup" replace />}
-              </motion.div>
-            } />
-            <Route path="/search" element={
-              <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }} transition={{ duration: 0.2 }}>
-                {profileCompleted ? <SearchPage /> : <Navigate to="/profile-setup" replace />}
               </motion.div>
             } />
             <Route path="/favorites" element={
@@ -108,6 +102,7 @@ function AppContent() {
         </AnimatePresence>
         <MiniPlayer />
         <PlayerPage />
+        <UpdateNotification />
         <BottomNav
           active={active}
           onNavigate={(page) => navigate(page === 'home' ? '/jux' : `/${page}`)}

@@ -1,11 +1,10 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { pb } from '@/lib/pocketbase';
-import { getUserAvatarUrl } from '@/lib/pocketbase';
+import { pb, getUserAvatarUrl, getSongCoverUrl } from '@/lib/pocketbase';
 import { useAuth } from '@/contexts/AuthContext';
 import { usePlayer } from '@/contexts/PlayerContext';
-import type { Song, PBUser } from '@/types/music';
+import type { Song, PBUser, Playlist } from '@/types/music';
 import SongRow from '@/components/SongRow';
 import SongCard from '@/components/SongCard';
 import juxLogo from '@/assets/jux-logo.png';
@@ -41,7 +40,10 @@ export default function Home() {
   const [loadingNew, setLoadingNew] = useState(false);
   const newSentinelRef = useRef<HTMLDivElement>(null);
 
-  // Section 4: Discover
+  // Section 4: Community playlists
+  const [communityPlaylists, setCommunityPlaylists] = useState<Playlist[]>([]);
+
+  // Section 5: Discover
   const [discoverSongs, setDiscoverSongs] = useState<Song[]>([]);
   const [discoverPage, setDiscoverPage] = useState(1);
   const [hasMore, setHasMore] = useState(true);
@@ -139,6 +141,15 @@ export default function Home() {
         } catch (e) {
           ignoreAbort(e);
         }
+      }).catch(ignoreAbort);
+
+      // Load community playlists
+      pb.collection('playlists').getList(1, 10, {
+        filter: 'public = true && title != "Titres likés"',
+        sort: '-likesCount',
+        expand: 'owner,songs',
+      }).then(r => {
+        setCommunityPlaylists(r.items as unknown as Playlist[]);
       }).catch(ignoreAbort);
     }
   }, [user]);
@@ -391,7 +402,68 @@ export default function Home() {
           {/* Section 3: Nouveautés */}
           <SongRow title="Nouveautés" songs={newSongs} onSeeAll={handleShowAllNew} />
 
-          {/* Section 4: Découvrir */}
+          {/* Section 4: Community playlists */}
+          {communityPlaylists.length > 0 && (
+            <section className="px-4 mb-8">
+              <h2 className="text-2xl font-bold text-foreground mb-4">Playlists de la communauté</h2>
+              <div className="flex gap-4 overflow-x-auto pb-2 -mx-4 px-4 scrollbar-hide">
+                {communityPlaylists.map((playlist, i) => (
+                  <motion.div
+                    key={playlist.id}
+                    initial={{ opacity: 0, x: 20 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    transition={{ duration: 0.4, delay: i * 0.1 }}
+                    onClick={() => navigate(`/playlist/${playlist.id}`)}
+                    className="flex-shrink-0 w-40 cursor-pointer group"
+                  >
+                    <div className="relative aspect-square rounded-xl overflow-hidden mb-2 bg-gradient-to-br from-purple-500/20 to-pink-500/20">
+                      {playlist.expand?.songs && playlist.expand.songs.length > 0 ? (
+                        playlist.thumbnailMode === 'grid' && playlist.expand.songs.length >= 4 ? (
+                          <div className="grid grid-cols-2 gap-0.5 w-full h-full">
+                            {[0, 1, 2, 3].map(idx => (
+                              <img
+                                key={idx}
+                                src={getSongCoverUrl(playlist.expand!.songs![idx])}
+                                alt=""
+                                className="w-full h-full object-cover"
+                              />
+                            ))}
+                          </div>
+                        ) : (
+                          <img
+                            src={getSongCoverUrl(playlist.expand.songs[0])}
+                            alt={playlist.title}
+                            className="w-full h-full object-cover"
+                          />
+                        )
+                      ) : (
+                        <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-purple-500/30 to-pink-500/30">
+                          <svg className="w-12 h-12 text-white/60" fill="currentColor" viewBox="0 0 24 24">
+                            <path d="M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z"/>
+                          </svg>
+                        </div>
+                      )}
+                      <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-colors flex items-center justify-center">
+                        <div className="opacity-0 group-hover:opacity-100 transition-opacity">
+                          <div className="h-10 w-10 rounded-full bg-primary flex items-center justify-center">
+                            <svg className="h-5 w-5 text-primary-foreground ml-0.5" fill="currentColor" viewBox="0 0 20 20">
+                              <path d="M6.3 2.841A1.5 1.5 0 004 4.11V15.89a1.5 1.5 0 002.3 1.269l9.344-5.89a1.5 1.5 0 000-2.538L6.3 2.84z" />
+                            </svg>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                    <h3 className="font-semibold text-foreground text-sm truncate">{playlist.title}</h3>
+                    <p className="text-xs text-muted-foreground truncate">
+                      {playlist.expand?.owner?.pseudo || 'Utilisateur'}
+                    </p>
+                  </motion.div>
+                ))}
+              </div>
+            </section>
+          )}
+
+          {/* Section 5: Découvrir */}
           <section className="px-4 mb-8">
             <h2 className="text-2xl font-bold text-foreground mb-4">Découvrir</h2>
             <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">

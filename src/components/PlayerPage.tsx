@@ -3,9 +3,10 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { usePlayer, usePlayerProgress } from '@/contexts/PlayerContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { getSongCoverUrl, pb } from '@/lib/pocketbase';
-import { ChevronDown, Play, Pause, SkipForward, SkipBack, Shuffle, Repeat, Repeat1, Heart, Headphones, Loader2 } from 'lucide-react';
+import { ChevronDown, Play, Pause, SkipForward, SkipBack, Shuffle, Repeat, Repeat1, Heart, Headphones, Loader2, Plus } from 'lucide-react';
 import QueueView from './QueueView';
 import FriendsLikedBadge from './FriendsLikedBadge';
+import AddToPlaylistModal from './AddToPlaylistModal';
 import { useToast } from '@/components/ui/use-toast';
 
 function formatTime(s: number) {
@@ -16,25 +17,21 @@ function formatTime(s: number) {
 }
 
 export default function PlayerPage() {
-  const { currentSong, isPlaying, isLoading, togglePlay, next, previous, seek, setPlayerOpen, playerOpen, shuffle, repeatMode, toggleShuffle, cycleRepeat } = usePlayer();
+  const { currentSong, isPlaying, isLoading, togglePlay, next, previous, seek, setPlayerOpen, playerOpen, shuffle, repeatMode, toggleShuffle, cycleRepeat, toggleLike: toggleLikeContext, likedSongs } = usePlayer();
   const { progress, duration } = usePlayerProgress();
   const { user } = useAuth();
   const [tab, setTab] = useState<'player' | 'queue'>('player');
-  const [liked, setLiked] = useState(false);
   const [likesCount, setLikesCount] = useState(0);
   const [isDragging, setIsDragging] = useState(false);
+  const [showAddToPlaylist, setShowAddToPlaylist] = useState(false);
   const sliderRef = useRef<HTMLInputElement>(null);
   const animationFrameRef = useRef<number>();
   const dragTimeoutRef = useRef<NodeJS.Timeout>();
 
   useEffect(() => {
-    if (!currentSong || !user) return;
-
-    pb.collection('song_likes').getList(1, 1, {
-      filter: `user="${user.id}" && song="${currentSong.id}"`,
-    }).then(r => setLiked(r.items.length > 0)).catch(() => setLiked(false));
+    if (!currentSong) return;
     setLikesCount(currentSong.likesCount || 0);
-  }, [currentSong, user]);
+  }, [currentSong]);
 
   // Synchronize slider thumb with progress updates using requestAnimationFrame
   useEffect(() => {
@@ -58,30 +55,11 @@ export default function PlayerPage() {
     };
   }, [isPlaying, isDragging, progress, currentSong]);
 
-  const toggleLike = async () => {
-    if (!user || !currentSong) return;
-    try {
-      if (liked) {
-        const existing = await pb.collection('song_likes').getList(1, 1, {
-          filter: `user="${user.id}" && song="${currentSong.id}"`,
-        });
-        if (existing.items[0]) {
-          await pb.collection('song_likes').delete(existing.items[0].id);
-          setLiked(false);
-          const newCount = Math.max(0, likesCount - 1);
-          setLikesCount(newCount);
-          await pb.collection('songs').update(currentSong.id, { likesCount: newCount });
-        }
-      } else {
-        await pb.collection('song_likes').create({ user: user.id, song: currentSong.id });
-        setLiked(true);
-        const newCount = likesCount + 1;
-        setLikesCount(newCount);
-        await pb.collection('songs').update(currentSong.id, { likesCount: newCount });
-      }
-    } catch (e) {
-      console.error('Like error', e);
-    }
+  const handleToggleLike = async () => {
+    if (!currentSong) return;
+    const wasLiked = likedSongs.has(currentSong.id);
+    await toggleLikeContext(currentSong);
+    setLikesCount(prev => wasLiked ? Math.max(0, prev - 1) : prev + 1);
   };
 
   if (!currentSong) return null;
@@ -104,6 +82,9 @@ export default function PlayerPage() {
               src={getSongCoverUrl(currentSong)}
               alt=""
               className="w-full h-full object-cover blur-3xl opacity-30"
+              onError={(e) => {
+                (e.target as HTMLImageElement).src = '/placeholder.svg';
+              }}
             />
             <div className="absolute inset-0 bg-background/80 backdrop-blur-md" />
           </div>
@@ -113,7 +94,13 @@ export default function PlayerPage() {
               <ChevronDown className="h-6 w-6" />
             </button>
             <p className="text-xs text-muted-foreground">En cours de lecture</p>
-            <div className="w-10" />
+            <button 
+              onClick={() => setShowAddToPlaylist(true)} 
+              className="p-2 text-foreground/70 hover:text-primary transition-colors" 
+              type="button"
+            >
+              <Plus className="h-6 w-6" />
+            </button>
           </div>
 
           <div className="relative z-10 flex-1 overflow-hidden">
@@ -129,7 +116,7 @@ export default function PlayerPage() {
                 {tab === 'player' ? (
                   <div className="flex flex-col items-center justify-center px-8 h-full">
                     <div className={`w-48 h-48 sm:w-56 sm:h-56 md:w-64 md:h-64 lg:w-72 lg:h-72 rounded-xl overflow-hidden shadow-2xl mb-8 transition-transform duration-500 ${isPlaying ? 'scale-100' : 'scale-95 opacity-80'}`}>
-                      <motion.img
+                    <motion.img
                         key={currentSong.id}
                         initial={{ opacity: 0, scale: 0.95 }}
                         animate={{ opacity: 1, scale: 1 }}
@@ -137,6 +124,9 @@ export default function PlayerPage() {
                         src={getSongCoverUrl(currentSong)}
                         alt={currentSong.title}
                         className="h-full w-full object-cover"
+                        onError={(e) => {
+                          (e.target as HTMLImageElement).src = '/placeholder.svg';
+                        }}
                       />
                     </div>
 
@@ -153,8 +143,8 @@ export default function PlayerPage() {
                         <Headphones className="h-3.5 w-3.5" />
                         <span>{currentSong.playCount || 0}</span>
                       </div>
-                      <button onClick={toggleLike} className="flex items-center gap-1 text-xs text-muted-foreground" type="button">
-                        <Heart className={`h-3.5 w-3.5 transition-colors ${liked ? 'fill-primary text-primary' : ''}`} />
+                      <button onClick={handleToggleLike} className="flex items-center gap-1 text-xs text-muted-foreground" type="button">
+                        <Heart className={`h-3.5 w-3.5 transition-colors ${likedSongs.has(currentSong.id) ? 'fill-primary text-primary' : ''}`} />
                         <span>{likesCount}</span>
                       </button>
                     </div>
@@ -245,6 +235,12 @@ export default function PlayerPage() {
           </div>
         </motion.div>
       )}
+      
+      <AddToPlaylistModal
+        isOpen={showAddToPlaylist}
+        onClose={() => setShowAddToPlaylist(false)}
+        song={currentSong}
+      />
     </AnimatePresence>
   );
 }

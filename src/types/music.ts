@@ -58,6 +58,37 @@ export interface Follow {
   };
 }
 
+export interface Playlist {
+  id: string;
+  title: string;
+  description: string;
+  public: boolean;
+  owner: string;
+  songs: string[];
+  viewCount: number;
+  playCount: number;
+  likesCount: number;
+  thumbnailMode: 'grid' | 'single';
+  created: string;
+  updated: string;
+  collectionId: string;
+  collectionName: string;
+  expand?: {
+    owner?: PBUser;
+    songs?: Song[];
+  };
+}
+
+export interface PlaylistLike {
+  id: string;
+  user: string;
+  playlist: string;
+  created: string;
+  expand?: {
+    playlist?: Playlist;
+  };
+}
+
 export const MUSIC_GENRES = [
   "Afrobeat", "Alternative", "Ambient", "Blues", "Bossa Nova",
   "Classique", "Country", "Dance", "Disco", "Drill",

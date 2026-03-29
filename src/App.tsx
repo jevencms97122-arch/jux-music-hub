@@ -8,7 +8,8 @@ import ProfileSetup from '@/pages/ProfileSetup';
 import ProfileEdit from '@/pages/ProfileEdit';
 import Home from '@/pages/Home';
 import Upload from '@/pages/Upload';
-import Favorites from '@/pages/Favorites';
+import Playlists from '@/pages/Playlists';
+import PlaylistDetail from '@/pages/PlaylistDetail';
 import Social from '@/pages/Social';
 import UserProfile from '@/pages/UserProfile';
 import ProfilePage from '@/pages/ProfilePage';
@@ -41,10 +42,10 @@ function AppContent() {
 
   const profileCompleted = user.profileCompleted || user.profilCompleted || false;
 
-  const pathToActive: Record<string, 'home' | 'social' | 'favorites' | 'profile'> = {
+  const pathToActive: Record<string, 'home' | 'social' | 'playlists' | 'profile'> = {
     '/jux': 'home',
     '/social': 'social',
-    '/favorites': 'favorites',
+    '/playlists': 'playlists',
     '/profile': 'profile',
     '/profile-edit': 'profile',
     '/upload': 'profile',
@@ -68,9 +69,14 @@ function AppContent() {
                 {profileCompleted ? <Upload /> : <Navigate to="/profile-setup" replace />}
               </motion.div>
             } />
-            <Route path="/favorites" element={
+            <Route path="/playlists" element={
               <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }} transition={{ duration: 0.2 }}>
-                {profileCompleted ? <Favorites /> : <Navigate to="/profile-setup" replace />}
+                {profileCompleted ? <Playlists /> : <Navigate to="/profile-setup" replace />}
+              </motion.div>
+            } />
+            <Route path="/playlist/:playlistId" element={
+              <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }} transition={{ duration: 0.2 }}>
+                {profileCompleted ? <PlaylistDetail /> : <Navigate to="/profile-setup" replace />}
               </motion.div>
             } />
             <Route path="/social" element={

@@ -1,8 +1,8 @@
-import { Home, User, Heart, Users } from 'lucide-react';
+import { Home, User, ListMusic, Users } from 'lucide-react';
 
 interface BottomNavProps {
-  active: 'home' | 'social' | 'favorites' | 'profile';
-  onNavigate: (page: 'home' | 'social' | 'favorites' | 'profile') => void;
+  active: 'home' | 'social' | 'playlists' | 'profile';
+  onNavigate: (page: 'home' | 'social' | 'playlists' | 'profile') => void;
 }
 
 export default function BottomNav({ active, onNavigate }: BottomNavProps) {
@@ -17,11 +17,11 @@ export default function BottomNav({ active, onNavigate }: BottomNavProps) {
           <span className="text-[10px] font-medium">Accueil</span>
         </button>
         <button
-          onClick={() => onNavigate('favorites')}
-          className={`flex flex-col items-center gap-1 px-3 py-1.5 transition-all ${active === 'favorites' ? 'text-primary' : 'text-muted-foreground hover:text-foreground'}`}
+          onClick={() => onNavigate('playlists')}
+          className={`flex flex-col items-center gap-1 px-3 py-1.5 transition-all ${active === 'playlists' ? 'text-primary' : 'text-muted-foreground hover:text-foreground'}`}
         >
-          <Heart className={`h-6 w-6 ${active === 'favorites' ? 'fill-primary/20' : ''}`} />
-          <span className="text-[10px] font-medium">Favoris</span>
+          <ListMusic className={`h-6 w-6 ${active === 'playlists' ? 'fill-primary/20' : ''}`} />
+          <span className="text-[10px] font-medium">Playlists</span>
         </button>
         <button
           onClick={() => onNavigate('social')}

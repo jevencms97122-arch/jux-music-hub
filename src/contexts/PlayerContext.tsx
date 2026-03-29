@@ -16,6 +16,7 @@ interface PlayerContextType {
   repeatMode: RepeatMode;
   playSong: (song: Song, autoQueue?: boolean) => void;
   playSongFromList: (song: Song, list: Song[], index: number) => void;
+  playCurrentSongOnly: (song: Song) => void;
   pause: () => void;
   resume: () => void;
   togglePlay: () => void;
@@ -132,7 +133,7 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
 
     if (autoQueue) {
       try {
-        const result = await pb.collection('songs').getList(1, 30, {
+        const result = await pb.collection('songs').getList(1, 15, {
           sort: '@random',
           filter: `id!="${freshSong.id}"`,
           expand: 'uploadedBy',
@@ -151,6 +152,11 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
     setIsFixedQueue(true);
     playSongInternal(song, list, index);
   }, [playSongInternal]);
+
+  // Play single song without auto-queue (fixes playlist add issue)
+  const playCurrentSongOnly = useCallback((song: Song) => {
+    playSongFromList(song, [song], 0);
+  }, [playSongFromList]);
 
   const next = useCallback(async () => {
     if (queue.length === 0) return;
@@ -253,6 +259,38 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
       } else {
         await pb.collection('song_likes').create({ user: userId, song: song.id });
         setLikedSongs(prev => new Set(prev).add(song.id));
+
+        // Add to "Titres likés" auto-playlist
+        try {
+          let likedPlaylist = await pb.collection('playlists').getList(1, 1, {
+            filter: `owner="${userId}" && title="Titres likés"`,
+          });
+
+          if (likedPlaylist.items.length === 0) {
+            // Create the auto-playlist if it doesn't exist
+            likedPlaylist = await pb.collection('playlists').create({
+              title: 'Titres likés',
+              description: 'Vos morceaux favoris automatiquement ajoutés',
+              public: false,
+              owner: userId,
+              songs: [song.id],
+              viewCount: 0,
+              playCount: 0,
+              likesCount: 0,
+              thumbnailMode: 'grid',
+            });
+          } else {
+            // Add song to existing playlist if not already there
+            const playlist = likedPlaylist.items[0];
+            if (!playlist.songs.includes(song.id)) {
+              await pb.collection('playlists').update(playlist.id, {
+                'songs+': song.id,
+              });
+            }
+          }
+        } catch (playlistError) {
+          console.error('Error updating liked playlist:', playlistError);
+        }
       }
       // Force update count on the server side
       const currentLikesCount = song.likesCount || 0;
@@ -332,8 +370,8 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
 
   const playerValue = useMemo(() => ({
     currentSong, queue, isPlaying, isLoading, playerOpen, likedSongs, shuffle, repeatMode,
-    playSong, playSongFromList, pause, resume, togglePlay, next, previous, seek, setPlayerOpen, toggleLike, toggleShuffle, cycleRepeat,
-  }), [currentSong, queue, isPlaying, isLoading, playerOpen, likedSongs, shuffle, repeatMode, playSong, playSongFromList, pause, resume, togglePlay, next, previous, seek, setPlayerOpen, toggleLike, toggleShuffle, cycleRepeat]);
+    playSong, playSongFromList, playCurrentSongOnly, pause, resume, togglePlay, next, previous, seek, setPlayerOpen, toggleLike, toggleShuffle, cycleRepeat,
+  }), [currentSong, queue, isPlaying, isLoading, playerOpen, likedSongs, shuffle, repeatMode, playSong, playSongFromList, playCurrentSongOnly, pause, resume, togglePlay, next, previous, seek, setPlayerOpen, toggleLike, toggleShuffle, cycleRepeat]);
 
   const progressValue = useMemo(() => ({ progress, duration }), [progress, duration]);
 

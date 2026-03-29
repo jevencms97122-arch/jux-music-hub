@@ -28,6 +28,9 @@ function SongCard({ song, size = 'md', isActive = false, isPlaying = false, onPl
             className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-105"
             loading="lazy"
             decoding="async"
+            onError={(e) => {
+              (e.target as HTMLImageElement).src = '/placeholder.svg';
+            }}
           />
           <div className="absolute inset-0 bg-black/20 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
             <div className="bg-primary/90 rounded-full p-3 shadow-xl transform translate-y-2 group-hover:translate-y-0 transition-transform">

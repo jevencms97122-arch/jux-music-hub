@@ -5,7 +5,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { usePlayer } from '@/contexts/PlayerContext';
 import type { Playlist, Song } from '@/types/music';
 import SongCard from '@/components/SongCard';
-import { ArrowLeft, Play, Shuffle, Globe, Lock, Music, Heart, Headphones, MoreVertical, Trash2 } from 'lucide-react';
+import { ArrowLeft, Play, Shuffle, Globe, Lock, Music, Heart, Headphones, MoreVertical, Trash2, Eye } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { useToast } from '@/components/ui/use-toast';
 
@@ -75,14 +75,14 @@ export default function PlaylistDetail() {
 
   const handlePlayAll = () => {
     if (songs.length > 0) {
-      playSongFromList(songs[0], songs, 0);
+      playSongFromList(songs[0], songs, 0, playlistId);
     }
   };
 
   const handleShuffle = () => {
     if (songs.length > 0) {
       const shuffled = [...songs].sort(() => Math.random() - 0.5);
-      playSongFromList(shuffled[0], shuffled, 0);
+      playSongFromList(shuffled[0], shuffled, 0, playlistId);
     }
   };
 
@@ -253,6 +253,10 @@ export default function PlaylistDetail() {
 
               <div className="flex items-center gap-3 text-xs text-muted-foreground">
                 <div className="flex items-center gap-1">
+                  <Eye className="h-3.5 w-3.5" />
+                  <span>{playlist.viewCount}</span>
+                </div>
+                <div className="flex items-center gap-1">
                   <Headphones className="h-3.5 w-3.5" />
                   <span>{playlist.playCount}</span>
                 </div>
@@ -317,7 +321,7 @@ export default function PlaylistDetail() {
                     size="sm"
                     isActive={currentSong?.id === song.id}
                     isPlaying={isPlaying}
-                    onPlay={(s) => playSongFromList(s, songs, index)}
+                    onPlay={(s) => playSongFromList(s, songs, index, playlistId)}
                   />
                 </div>
                 {isOwner && (

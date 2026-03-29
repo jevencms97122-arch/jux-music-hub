@@ -69,6 +69,7 @@ export interface Playlist {
   playCount: number;
   likesCount: number;
   thumbnailMode: 'grid' | 'single';
+  thumbnailOrder?: string[]; // Array of image URLs
   created: string;
   updated: string;
   collectionId: string;

@@ -15,7 +15,7 @@ interface PlayerContextType {
   shuffle: boolean;
   repeatMode: RepeatMode;
   playSong: (song: Song, autoQueue?: boolean) => void;
-  playSongFromList: (song: Song, list: Song[], index: number) => void;
+  playSongFromList: (song: Song, list: Song[], index: number, playlistId?: string) => void;
   playCurrentSongOnly: (song: Song) => void;
   pause: () => void;
   resume: () => void;
@@ -148,9 +148,13 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
   }, [recordListen]);
 
   // Play from a fixed list (e.g. Favorites) — no random loading
-  const playSongFromList = useCallback((song: Song, list: Song[], index: number) => {
+  const playSongFromList = useCallback((song: Song, list: Song[], index: number, playlistId?: string) => {
     setIsFixedQueue(true);
     playSongInternal(song, list, index);
+    // Increment playlist playCount if playing from a playlist
+    if (playlistId) {
+      pb.collection('playlists').update(playlistId, { 'playCount+': 1 }).catch(console.error);
+    }
   }, [playSongInternal]);
 
   // Play single song without auto-queue (fixes playlist add issue)

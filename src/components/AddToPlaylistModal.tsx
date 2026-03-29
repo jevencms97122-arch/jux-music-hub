@@ -103,7 +103,7 @@ export default function AddToPlaylistModal({ isOpen, onClose, song, onPlaylistCr
         viewCount: 0,
         playCount: 0,
         likesCount: 0,
-        thumbnailMode: 'grid',
+        thumbnailMode: 'single',
       });
 
       setPlaylists(prev => [newPlaylist as unknown as Playlist, ...prev]);

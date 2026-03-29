@@ -5,7 +5,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { usePlayer } from '@/contexts/PlayerContext';
 import type { Playlist, Song } from '@/types/music';
 import SongCard from '@/components/SongCard';
-import { Heart, Music, Plus, ListMusic, Lock, Globe, Play, Trash2, Edit2 } from 'lucide-react';
+import { Heart, Music, Plus, ListMusic, Lock, Globe, Play, Trash2, Edit2, Check } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useToast } from '@/components/ui/use-toast';
 
@@ -23,14 +23,45 @@ export default function Playlists() {
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [selectedPlaylist, setSelectedPlaylist] = useState<Playlist | null>(null);
   const [editMode, setEditMode] = useState(false);
+  const [editingSongs, setEditingSongs] = useState<Song[]>([]);
   
   // Form state
   const [formData, setFormData] = useState({
     title: '',
     description: '',
     public: true,
-    thumbnailMode: 'grid' as 'grid' | 'single'
+    thumbnailOrder: [] as string[] // Now stores image URLs instead of indices
   });
+
+  // Helper function to parse thumbnailOrder (now contains image URLs)
+  const parseThumbnailOrder = (data: any): string[] => {
+    if (!data) return [];
+    if (Array.isArray(data)) return data;
+    if (typeof data === 'string') {
+      try {
+        const parsed = JSON.parse(data);
+        return Array.isArray(parsed) ? parsed : [];
+      } catch {
+        return [];
+      }
+    }
+    return [];
+  };
+
+  // Helper function to get ordered thumbnail URL for display (single mode only)
+  const getThumbnailUrl = (songs: Song[], playlist: Playlist): string | null => {
+    if (!songs || songs.length === 0) return null;
+    
+    const urls = parseThumbnailOrder(playlist.thumbnailOrder);
+    
+    // If we have stored URL, use it
+    if (urls && urls.length > 0) {
+      return urls[0];
+    }
+    
+    // Fallback: generate URL from first song
+    return getSongCoverUrl(songs[0]);
+  };
 
   useEffect(() => {
     const loadData = async () => {
@@ -59,16 +90,20 @@ export default function Playlists() {
         for (const playlist of playlists) {
           if (playlist.songs && playlist.songs.length > 0) {
             try {
+              // Always load all songs to respect thumbnailOrder
               const songsData = await pb.collection('songs').getFullList({
-                filter: playlist.songs.slice(0, 4).map((id: string) => `id="${id}"`).join('||'),
+                filter: playlist.songs.map((id: string) => `id="${id}"`).join('||'),
               });
-              songsMap[playlist.id] = songsData as unknown as Song[];
+              // Sort songs to match the order of IDs in playlist.songs
+              const sortedSongs = playlist.songs.map((id: string) => 
+                songsData.find((s: any) => s.id === id)
+              ).filter(Boolean);
+              songsMap[playlist.id] = sortedSongs as unknown as Song[];
             } catch (e) {
               console.error('Error loading playlist songs:', e);
             }
           }
         }
-        setPlaylistSongs(songsMap);
 
         // Ensure "Titres likés" playlist exists
         const likedPlaylist = await pb.collection('playlists').getList(1, 1, {
@@ -93,12 +128,33 @@ export default function Playlists() {
         // Load saved playlists (playlists liked by user)
         const savedLikes = await pb.collection('playlist_likes').getFullList({
           filter: `user="${user.id}"`,
-          expand: 'playlist,playlist.owner,playlist.songs',
+          expand: 'playlist,playlist.owner',
         });
         const saved = savedLikes
           .map((like: any) => like.expand?.playlist)
           .filter((p: Playlist | undefined) => p !== undefined);
         setSavedPlaylists(saved as Playlist[]);
+        
+        // Load songs for saved playlists to display thumbnails correctly
+        for (const playlist of saved) {
+          if (playlist.songs && playlist.songs.length > 0 && !songsMap[playlist.id]) {
+            try {
+              const songsData = await pb.collection('songs').getFullList({
+                filter: playlist.songs.map((id: string) => `id="${id}"`).join('||'),
+              });
+              // Sort songs to match the order of IDs in playlist.songs
+              const sortedSongs = playlist.songs.map((id: string) => 
+                songsData.find((s: any) => s.id === id)
+              ).filter(Boolean);
+              songsMap[playlist.id] = sortedSongs as unknown as Song[];
+            } catch (e) {
+              console.error('Error loading saved playlist songs:', e);
+            }
+          }
+        }
+        
+        // Update state with all loaded songs
+        setPlaylistSongs(songsMap);
       } catch (error) {
         console.error('Error loading playlists:', error);
       } finally {
@@ -148,12 +204,13 @@ export default function Playlists() {
         viewCount: 0,
         playCount: 0,
         likesCount: 0,
-        thumbnailMode: formData.thumbnailMode,
+        thumbnailMode: 'single',
+        thumbnailOrder: JSON.stringify(formData.thumbnailOrder),
       });
 
       setUserPlaylists(prev => [newPlaylist as unknown as Playlist, ...prev]);
       setShowCreateModal(false);
-      setFormData({ title: '', description: '', public: true, thumbnailMode: 'grid' });
+      setFormData({ title: '', description: '', public: true, thumbnailOrder: [] });
       
       toast({
         title: "Playlist créée",
@@ -177,7 +234,8 @@ export default function Playlists() {
         title: formData.title.trim(),
         description: formData.description.trim(),
         public: formData.public,
-        thumbnailMode: formData.thumbnailMode,
+        thumbnailMode: 'single',
+        thumbnailOrder: JSON.stringify(formData.thumbnailOrder),
       });
 
       setUserPlaylists(prev => prev.map(p => 
@@ -188,7 +246,7 @@ export default function Playlists() {
       
       setEditMode(false);
       setSelectedPlaylist(null);
-      setFormData({ title: '', description: '', public: true, thumbnailMode: 'grid' });
+      setFormData({ title: '', description: '', public: true, thumbnailOrder: [] });
       
       toast({
         title: "Playlist mise à jour",
@@ -231,8 +289,14 @@ export default function Playlists() {
       title: playlist.title,
       description: playlist.description,
       public: playlist.public,
-      thumbnailMode: playlist.thumbnailMode,
+      thumbnailOrder: parseThumbnailOrder(playlist.thumbnailOrder),
     });
+    
+    // Load songs for this playlist to show them in edit modal
+    if (playlistSongs[playlist.id]) {
+      setEditingSongs(playlistSongs[playlist.id]);
+    }
+    
     setEditMode(true);
   };
 
@@ -310,29 +374,18 @@ export default function Playlists() {
                 className="relative h-14 w-14 rounded-lg overflow-hidden bg-secondary flex items-center justify-center cursor-pointer flex-shrink-0"
               >
                 {playlistSongs[playlist.id] && playlistSongs[playlist.id].length > 0 ? (
-                  playlistSongs[playlist.id].length >= 4 ? (
-                    <div className="grid grid-cols-2 gap-0.5 w-full h-full p-1">
-                      {[0, 1, 2, 3].map(i => (
-                        <div key={i} className="overflow-hidden rounded-sm">
-                          {playlistSongs[playlist.id][i] ? (
-                            <img
-                              src={getSongCoverUrl(playlistSongs[playlist.id][i])}
-                              alt=""
-                              className="w-full h-full object-cover"
-                            />
-                          ) : (
-                            <div className="w-full h-full bg-muted" />
-                          )}
-                        </div>
-                      ))}
-                    </div>
-                  ) : (
-                    <img
-                      src={getSongCoverUrl(playlistSongs[playlist.id][0])}
-                      alt=""
-                      className="w-full h-full object-cover"
-                    />
-                  )
+                  (() => {
+                    const thumbUrl = getThumbnailUrl(playlistSongs[playlist.id], playlist);
+                    return thumbUrl ? (
+                      <img
+                        src={thumbUrl}
+                        alt=""
+                        className="w-full h-full object-cover"
+                      />
+                    ) : (
+                      <Music className="h-6 w-6 text-muted-foreground" />
+                    );
+                  })()
                 ) : (
                   <Music className="h-6 w-6 text-muted-foreground" />
                 )}
@@ -400,12 +453,19 @@ export default function Playlists() {
                   onClick={() => navigate(`/playlist/${playlist.id}`)}
                   className="relative h-14 w-14 rounded-lg overflow-hidden bg-secondary flex items-center justify-center cursor-pointer flex-shrink-0"
                 >
-                  {playlist.songs && playlist.songs.length > 0 ? (
-                    <div className="grid grid-cols-2 gap-0.5 w-full h-full p-1">
-                      {[0, 1, 2, 3].map(i => (
-                        <div key={i} className="bg-muted rounded-sm" />
-                      ))}
-                    </div>
+                  {playlistSongs[playlist.id] && playlistSongs[playlist.id].length > 0 ? (
+                    (() => {
+                      const thumbUrl = getThumbnailUrl(playlistSongs[playlist.id], playlist);
+                      return thumbUrl ? (
+                        <img
+                          src={thumbUrl}
+                          alt=""
+                          className="w-full h-full object-cover"
+                        />
+                      ) : (
+                        <Music className="h-6 w-6 text-muted-foreground" />
+                      );
+                    })()
                   ) : (
                     <Music className="h-6 w-6 text-muted-foreground" />
                   )}
@@ -438,7 +498,8 @@ export default function Playlists() {
               setShowCreateModal(false);
               setEditMode(false);
               setSelectedPlaylist(null);
-              setFormData({ title: '', description: '', public: true, thumbnailMode: 'grid' });
+              setEditingSongs([]);
+              setFormData({ title: '', description: '', public: true, thumbnailOrder: [] });
             }}
           >
             <motion.div
@@ -446,7 +507,7 @@ export default function Playlists() {
               animate={{ scale: 1, opacity: 1 }}
               exit={{ scale: 0.95, opacity: 0 }}
               onClick={(e) => e.stopPropagation()}
-              className="w-full max-w-md bg-card rounded-2xl p-6 shadow-xl"
+              className="w-full max-w-md bg-card rounded-2xl p-6 shadow-xl max-h-[90vh] overflow-y-auto"
             >
               <h2 className="text-xl font-bold text-foreground mb-4">
                 {editMode ? 'Modifier la playlist' : 'Nouvelle playlist'}
@@ -506,35 +567,42 @@ export default function Playlists() {
                   {formData.public ? 'Visible par tous' : 'Privée (visible uniquement par vous)'}
                 </p>
 
-                <div>
-                  <label className="text-sm font-medium text-foreground mb-2 block">
-                    Mode de pochette
-                  </label>
-                  <div className="flex gap-2">
-                    <button
-                      type="button"
-                      onClick={() => setFormData(prev => ({ ...prev, thumbnailMode: 'grid' }))}
-                      className={`flex-1 py-2 px-3 rounded-lg text-sm font-medium transition-colors ${
-                        formData.thumbnailMode === 'grid'
-                          ? 'bg-primary text-primary-foreground'
-                          : 'bg-secondary text-foreground'
-                      }`}
-                    >
-                      Grille (4)
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setFormData(prev => ({ ...prev, thumbnailMode: 'single' }))}
-                      className={`flex-1 py-2 px-3 rounded-lg text-sm font-medium transition-colors ${
-                        formData.thumbnailMode === 'single'
-                          ? 'bg-primary text-primary-foreground'
-                          : 'bg-secondary text-foreground'
-                      }`}
-                    >
-                      Unique (1)
-                    </button>
+
+
+                {/* Thumbnail selection */}
+                {editingSongs.length > 0 && (
+                  <div>
+                    <label className="text-sm font-medium text-foreground mb-2 block">
+                      Choisir la pochette
+                    </label>
+                    <div className="grid grid-cols-4 gap-2 max-h-48 overflow-y-auto">
+                      {editingSongs.slice(0, 12).map((song, idx) => {
+                        const songUrl = getSongCoverUrl(song);
+                        const isSelected = formData.thumbnailOrder[0] === songUrl;
+                        return (
+                          <button
+                            key={idx}
+                            onClick={() => setFormData(prev => ({
+                              ...prev,
+                              thumbnailOrder: [songUrl]
+                            }))}
+                            className={`relative h-16 rounded-lg overflow-hidden transition-all border-2 ${
+                              isSelected
+                                ? 'border-primary ring-2 ring-primary'
+                                : 'border-transparent'
+                            }`}
+                          >
+                            <img
+                              src={songUrl}
+                              alt={song.title}
+                              className="w-full h-full object-cover"
+                            />
+                          </button>
+                        );
+                      })}
+                    </div>
                   </div>
-                </div>
+                )}
               </div>
 
               <div className="flex gap-3 mt-6">
@@ -543,7 +611,8 @@ export default function Playlists() {
                     setShowCreateModal(false);
                     setEditMode(false);
                     setSelectedPlaylist(null);
-                    setFormData({ title: '', description: '', public: true, thumbnailMode: 'grid' });
+                    setEditingSongs([]);
+                    setFormData({ title: '', description: '', public: true, thumbnailOrder: [] });
                   }}
                   className="flex-1 py-2 px-4 rounded-lg bg-secondary text-foreground font-medium hover:bg-secondary/80 transition-colors"
                 >

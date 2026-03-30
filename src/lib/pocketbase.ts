@@ -1,7 +1,7 @@
 import PocketBase from 'pocketbase';
 import type { Song } from '@/types/music';
 
-export const pb = new PocketBase('http://127.0.0.1:8090/').autoCancellation(false);
+export const pb = new PocketBase('https://ave-regression-subdivision-president.trycloudflare.com/').autoCancellation(false);
 
 export function getFileUrl(record: { id: string; collectionId: string; collectionName: string }, filename: string) {
   const url = pb.files.getURL(record, filename);

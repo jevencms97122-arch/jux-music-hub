@@ -18,7 +18,7 @@ export default defineConfig(({ mode }) => ({
     mode === "development" && componentTagger(),
     VitePWA({
       registerType: "autoUpdate",
-      writePlugin: true,
+      
       manifest: {
         name: "Jux-Music - Écoute et partage de la musique",
         short_name: "Jux-Music",

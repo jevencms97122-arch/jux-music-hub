@@ -1,10 +1,38 @@
 import { usePlayer, usePlayerProgress } from '@/contexts/PlayerContext';
 import { getSongCoverUrl } from '@/lib/pocketbase';
 import { Play, Pause, Heart, Loader2 } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { useToast } from '@/hooks/use-toast';
 
 export default function MiniPlayer() {
   const { currentSong, isPlaying, isLoading, togglePlay, next, previous, setPlayerOpen, likedSongs, toggleLike } = usePlayer();
   const { progress, duration } = usePlayerProgress();
+  const [showMenu, setShowMenu] = useState(false);
+  const [showShareModal, setShowShareModal] = useState(false);
+  const [shareUrl, setShareUrl] = useState('');
+  const { toast } = useToast();
+
+  const handleShare = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    setShowMenu(false);
+    const url = `${window.location.origin}/listen/${currentSong?.id}`;
+    setShareUrl(url);
+    setShowShareModal(true);
+  };
+
+  const copyToClipboard = () => {
+    navigator.clipboard.writeText(shareUrl).then(() => {
+      toast({ title: 'Lien copié !' });
+      setShowShareModal(false);
+    }).catch(console.error);
+  };
+
+  useEffect(() => {
+    if (!showMenu) return;
+    const close = () => setShowMenu(false);
+    setTimeout(() => document.addEventListener('click', close), 0);
+    return () => document.removeEventListener('click', close);
+  }, [showMenu]);
 
   if (!currentSong) return null;
 

@@ -39,12 +39,13 @@ self.addEventListener('fetch', (event) => {
   const { request } = event;
   const url = new URL(request.url);
 
-  // Handle API calls with network-first strategy
-  if (url.pathname.startsWith('/api')) {
+  // Handle API calls and dynamic images with network-first strategy
+  if (url.pathname.startsWith('/api') || url.pathname.includes('/files/')) {
     event.respondWith(
       fetch(request)
         .then((response) => {
-          if (response.ok) {
+          // Cache successful responses for images
+          if (response.ok && url.pathname.includes('/files/')) {
             const cache = caches.open(CACHE_NAME);
             cache.then((c) => c.put(request, response.clone()));
           }

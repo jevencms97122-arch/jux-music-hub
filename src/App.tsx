@@ -13,6 +13,7 @@ import PlaylistDetail from '@/pages/PlaylistDetail';
 import Social from '@/pages/Social';
 import UserProfile from '@/pages/UserProfile';
 import ProfilePage from '@/pages/ProfilePage';
+import SharedListen from '@/pages/SharedListen';
 import MiniPlayer from '@/components/MiniPlayer';
 import PlayerPage from '@/components/PlayerPage';
 import BottomNav from '@/components/BottomNav';
@@ -35,6 +36,15 @@ function AppContent() {
       <div className="flex min-h-screen items-center justify-center">
         <div className="h-8 w-8 rounded-full border-2 border-primary border-t-transparent animate-spin" />
       </div>
+    );
+  }
+
+  // Allow shared listen page without authentication
+  if (location.pathname.startsWith('/listen/')) {
+    return (
+      <PlayerProvider>
+        <SharedListen />
+      </PlayerProvider>
     );
   }
 

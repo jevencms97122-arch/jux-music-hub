@@ -3,11 +3,12 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { usePlayer, usePlayerProgress } from '@/contexts/PlayerContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { getSongCoverUrl, pb } from '@/lib/pocketbase';
-import { ChevronDown, Play, Pause, SkipForward, SkipBack, Shuffle, Repeat, Repeat1, Heart, Headphones, Loader2, Plus } from 'lucide-react';
+import { ChevronDown, Play, Pause, SkipForward, SkipBack, Shuffle, Repeat, Repeat1, Heart, Headphones, Loader2, Plus, MoreVertical, Share2, LogIn, X } from 'lucide-react';
 import QueueView from './QueueView';
 import FriendsLikedBadge from './FriendsLikedBadge';
 import AddToPlaylistModal from './AddToPlaylistModal';
 import { useToast } from '@/components/ui/use-toast';
+import { useNavigate } from 'react-router-dom';
 
 function formatTime(s: number) {
   if (!s || isNaN(s)) return '0:00';
@@ -17,13 +18,20 @@ function formatTime(s: number) {
 }
 
 export default function PlayerPage() {
-  const { currentSong, isPlaying, isLoading, togglePlay, next, previous, seek, setPlayerOpen, playerOpen, shuffle, repeatMode, toggleShuffle, cycleRepeat, toggleLike: toggleLikeContext, likedSongs } = usePlayer();
+  const { currentSong, isPlaying, isLoading, togglePlay, next, previous, seek, setPlayerOpen, playerOpen, shuffle, repeatMode, toggleShuffle, cycleRepeat, toggleLike: toggleLikeContext, likedSongs, getImageLoadControl, registerImageLoad } = usePlayer();
   const { progress, duration } = usePlayerProgress();
+
+  const { imageKey } = currentSong ? getImageLoadControl(currentSong.id) : { imageKey: '' };
   const { user } = useAuth();
+  const { toast } = useToast();
   const [tab, setTab] = useState<'player' | 'queue'>('player');
   const [likesCount, setLikesCount] = useState(0);
   const [isDragging, setIsDragging] = useState(false);
   const [showAddToPlaylist, setShowAddToPlaylist] = useState(false);
+  const [showMenu, setShowMenu] = useState(false);
+  const [showShareModal, setShowShareModal] = useState(false);
+  const [shareUrl, setShareUrl] = useState('');
+  const navigate = useNavigate();
   const sliderRef = useRef<HTMLInputElement>(null);
   const animationFrameRef = useRef<number>();
   const dragTimeoutRef = useRef<NodeJS.Timeout>();
@@ -55,11 +63,50 @@ export default function PlayerPage() {
     };
   }, [isPlaying, isDragging, progress, currentSong]);
 
+  useEffect(() => {
+    if (!showMenu) return;
+    const close = () => setShowMenu(false);
+    setTimeout(() => document.addEventListener('click', close), 0);
+    return () => document.removeEventListener('click', close);
+  }, [showMenu]);
+
   const handleToggleLike = async () => {
     if (!currentSong) return;
     const wasLiked = likedSongs.has(currentSong.id);
     await toggleLikeContext(currentSong);
     setLikesCount(prev => wasLiked ? Math.max(0, prev - 1) : prev + 1);
+  };
+
+  const handleShare = () => {
+    if (!currentSong) return;
+    const url = `${window.location.origin}/listen/${currentSong.id}`;
+    setShareUrl(url);
+    setShowShareModal(true);
+    setShowMenu(false);
+  };
+
+  const copyToClipboard = async () => {
+    try {
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        await navigator.clipboard.writeText(shareUrl);
+      } else {
+        // Fallback for older browsers
+        const textArea = document.createElement('textarea');
+        textArea.value = shareUrl;
+        textArea.style.position = 'fixed';
+        textArea.style.left = '-999999px';
+        textArea.style.top = '-999999px';
+        document.body.appendChild(textArea);
+        textArea.focus();
+        textArea.select();
+        document.execCommand('copy');
+        document.body.removeChild(textArea);
+      }
+      toast({ title: 'Lien copié !', description: 'Le lien a été copié dans le presse-papiers.' });
+    } catch (err) {
+      console.error('Erreur lors de la copie:', err);
+      toast({ title: 'Erreur', description: 'Impossible de copier le lien.' });
+    }
   };
 
   if (!currentSong) return null;
@@ -68,9 +115,11 @@ export default function PlayerPage() {
   const RepeatIcon = repeatMode === 'one' ? Repeat1 : Repeat;
 
   return (
-    <AnimatePresence>
-      {playerOpen && (
-        <motion.div
+    <>
+      <AnimatePresence>
+        {playerOpen && (
+          <motion.div
+          key="player-panel"
           initial={{ y: '100%' }}
           animate={{ y: 0 }}
           exit={{ y: '100%' }}
@@ -94,16 +143,47 @@ export default function PlayerPage() {
               <ChevronDown className="h-6 w-6" />
             </button>
             <p className="text-xs text-muted-foreground">En cours de lecture</p>
-            <button 
-              onClick={() => setShowAddToPlaylist(true)} 
-              className="p-2 text-foreground/70 hover:text-primary transition-colors" 
-              type="button"
-            >
-              <Plus className="h-6 w-6" />
-            </button>
+            <div className="relative">
+              <button 
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setShowMenu(!showMenu);
+                }} 
+                className="p-2 text-foreground/70 hover:text-primary transition-colors" 
+                type="button"
+              >
+                <MoreVertical className="h-6 w-6" />
+              </button>
+              
+              {showMenu && (
+                <div className="absolute right-0 top-10 bg-card border border-border rounded-lg shadow-xl w-48 z-[9999] pointer-events-auto" onClick={(e) => e.stopPropagation()}>
+                  <button
+                    onClick={() => {
+                      setShowAddToPlaylist(true);
+                      setShowMenu(false);
+                    }}
+                    className="w-full px-4 py-3 text-left text-sm hover:bg-accent/50 flex items-center gap-2 transition-colors"
+                    type="button"
+                  >
+                    <Plus className="h-4 w-4" />
+                    Ajouter à une playlist
+                  </button>
+                  <button
+                    onClick={() => {
+                      handleShare();
+                    }}
+                    className="w-full px-4 py-3 text-left text-sm hover:bg-accent/50 flex items-center gap-2 transition-colors"
+                    type="button"
+                  >
+                    <Share2 className="h-4 w-4" />
+                    Partager le titre
+                  </button>
+                </div>
+              )}
+            </div>
           </div>
 
-          <div className="relative z-10 flex-1 overflow-hidden">
+          <div className={`relative z-10 flex-1 overflow-hidden ${showMenu ? 'pointer-events-none' : ''}`}>
             <AnimatePresence mode="wait">
               <motion.div
                 key={tab}
@@ -116,18 +196,22 @@ export default function PlayerPage() {
                 {tab === 'player' ? (
                   <div className="flex flex-col items-center justify-center px-8 h-full">
                     <div className={`w-48 h-48 sm:w-56 sm:h-56 md:w-64 md:h-64 lg:w-72 lg:h-72 rounded-xl overflow-hidden shadow-2xl mb-8 transition-transform duration-500 ${isPlaying ? 'scale-100' : 'scale-95 opacity-80'}`}>
-                    <motion.img
-                        key={currentSong.id}
+                      <motion.img
+                        key={imageKey}
                         initial={{ opacity: 0, scale: 0.95 }}
                         animate={{ opacity: 1, scale: 1 }}
                         transition={{ duration: 0.3 }}
                         src={getSongCoverUrl(currentSong)}
                         alt={currentSong.title}
                         className="h-full w-full object-cover"
+                        onLoad={() => {
+                          if (currentSong) registerImageLoad(currentSong.id);
+                        }}
                         onError={(e) => {
                           (e.target as HTMLImageElement).src = '/placeholder.svg';
                         }}
                       />
+
                     </div>
 
                     <div className="w-full text-center mb-2">
@@ -211,6 +295,21 @@ export default function PlayerPage() {
                         <RepeatIcon className="h-5 w-5" />
                       </button>
                     </div>
+
+                    {!user && (
+                      <div className="mt-8 p-4 bg-card/80 backdrop-blur-sm rounded-xl border border-border w-full max-w-sm text-center">
+                        <p className="text-sm text-muted-foreground mb-3">
+                          Pour accéder à toutes les fonctionnalités communautaires et écouter vos musiques et celles de vos amis sans interruption, connectez-vous !
+                        </p>
+                        <button
+                          onClick={() => navigate('/')}
+                          className="w-full px-4 py-2 bg-primary text-primary-foreground rounded-lg text-sm font-medium hover:bg-primary/90 transition-colors flex items-center justify-center gap-2"
+                        >
+                          <LogIn className="h-4 w-4" />
+                          Se connecter
+                        </button>
+                      </div>
+                    )}
                   </div>
                 ) : (
                   <div className="h-full overflow-y-auto">
@@ -235,12 +334,62 @@ export default function PlayerPage() {
           </div>
         </motion.div>
       )}
-      
+      </AnimatePresence>
+
       <AddToPlaylistModal
         isOpen={showAddToPlaylist}
         onClose={() => setShowAddToPlaylist(false)}
         song={currentSong}
       />
-    </AnimatePresence>
+
+      {/* Share Modal */}
+      <AnimatePresence>
+        {showShareModal && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[60] bg-black/50 flex items-center justify-center p-4"
+            onClick={() => setShowShareModal(false)}
+          >
+            <motion.div
+              initial={{ scale: 0.95, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.95, opacity: 0 }}
+              className="bg-card rounded-xl p-6 w-full max-w-md shadow-xl"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-lg font-semibold text-foreground">Partager le titre</h3>
+                <button
+                  onClick={() => setShowShareModal(false)}
+                  className="p-1 text-muted-foreground hover:text-foreground transition-colors"
+                >
+                  <X className="h-5 w-5" />
+                </button>
+              </div>
+              <p className="text-sm text-muted-foreground mb-4">
+                Partagez ce titre avec vos amis. Ils pourront écouter la musique même sans compte.
+              </p>
+              <div className="flex items-center gap-2 bg-secondary/50 rounded-lg p-3">
+                <input
+                  type="text"
+                  readOnly
+                  value={shareUrl}
+                  className="flex-1 bg-transparent text-sm text-foreground outline-none truncate"
+                />
+                <button
+                  onClick={copyToClipboard}
+                  className="px-4 py-2 bg-primary text-primary-foreground rounded-lg text-sm font-medium hover:bg-primary/90 transition-colors"
+                  type="button"
+                >
+                  Copier
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </>
   );
 }

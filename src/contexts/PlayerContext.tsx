@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useRef, useEffect, useCallback, useMemo } from 'react';
-import { pb, getSongAudioUrl } from '@/lib/pocketbase';
+import { pb, getSongAudioUrl, getSongCoverUrl } from '@/lib/pocketbase';
 import { showMediaNotification, closeMediaNotification, setupMediaControlListeners } from '@/lib/notifications';
 import type { Song } from '@/types/music';
 
@@ -27,6 +27,8 @@ interface PlayerContextType {
   toggleLike: (song: Song) => Promise<void>;
   toggleShuffle: () => void;
   cycleRepeat: () => void;
+  getImageLoadControl: (songId: string) => { imageKey: string; loadCount: number };
+  registerImageLoad: (songId: string) => void;
 }
 
 interface PlayerProgressContextType {
@@ -37,8 +39,8 @@ interface PlayerProgressContextType {
 const PlayerContext = createContext<PlayerContextType | null>(null);
 const PlayerProgressContext = createContext<PlayerProgressContextType | null>(null);
 
-let lastProgressTime = 0;
-let progressVelocity = 0;
+const lastProgressTime = 0;
+const progressVelocity = 0;
 
 export function PlayerProvider({ children }: { children: React.ReactNode }) {
   const [currentSong, setCurrentSong] = useState<Song | null>(null);
@@ -55,6 +57,7 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
   const [repeatMode, setRepeatMode] = useState<RepeatMode>('off');
   const [isFixedQueue, setIsFixedQueue] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  const [imageLoadCounts, setImageLoadCounts] = useState<Record<string, number>>({});
   const audioRef = useRef<HTMLAudioElement>(new Audio());
   
   // Set preload to none for progressive loading
@@ -108,6 +111,8 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
   const playSongInternal = useCallback(async (song: Song, q: Song[], idx: number) => {
     // Fetch fresh song data from backend
     const freshSong = await pb.collection('songs').getOne(song.id, { expand: 'uploadedBy' }) as unknown as Song;
+    // Reset load count for new song
+    setImageLoadCounts(prev => ({ ...prev, [freshSong.id]: 0 }));
     setQueue(q);
     setCurrentSong(freshSong);
     setPlayerOpen(true);
@@ -122,6 +127,8 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
   const playSong = useCallback(async (song: Song, autoQueue = true) => {
     // Fetch fresh song data from backend
     const freshSong = await pb.collection('songs').getOne(song.id, { expand: 'uploadedBy' }) as unknown as Song;
+    // Reset load count for new song
+    setImageLoadCounts(prev => ({ ...prev, [freshSong.id]: 0 }));
     setIsFixedQueue(false);
     setCurrentSong(freshSong);
     setPlayerOpen(true);
@@ -193,6 +200,8 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
     try {
       // Fetch fresh nextSong
       const freshNextSong = await pb.collection('songs').getOne(queue[nextIdx].id, { expand: 'uploadedBy' }) as unknown as Song;
+      // Reset load count for new song
+      setImageLoadCounts(prev => ({ ...prev, [freshNextSong.id]: 0 }));
       setQueueIndex(nextIdx);
       setCurrentSong(freshNextSong);
       isLoadingRef.current = true;
@@ -220,6 +229,8 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
         const prevIdx = queueIndex - 1;
         // Fetch fresh prevSong
         const freshPrevSong = await pb.collection('songs').getOne(queue[prevIdx].id, { expand: 'uploadedBy' }) as unknown as Song;
+        // Reset load count for new song
+        setImageLoadCounts(prev => ({ ...prev, [freshPrevSong.id]: 0 }));
         setQueueIndex(prevIdx);
         setCurrentSong(freshPrevSong);
         isLoadingRef.current = true;
@@ -233,9 +244,28 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
     }
   }, [queueIndex, queue, recordListen]);
 
-  const pause = useCallback(() => { audioRef.current.pause(); setIsPlaying(false); }, []);
-  const resume = useCallback(() => { audioRef.current.play().catch(console.error); setIsPlaying(true); }, []);
-  const togglePlay = useCallback(() => { isPlaying ? pause() : resume(); }, [isPlaying, pause, resume]);
+  const pause = useCallback(() => { 
+    audioRef.current.pause(); 
+    setIsPlaying(false);
+    if (currentSong) {
+      showMediaNotification(currentSong, false, likedSongs.has(currentSong.id));
+    }
+  }, [currentSong, likedSongs]);
+
+  const resume = useCallback(() => { 
+    audioRef.current.play().catch(console.error); 
+    setIsPlaying(true);
+    if (currentSong) {
+      showMediaNotification(currentSong, true, likedSongs.has(currentSong.id));
+    }
+  }, [currentSong, likedSongs]);
+  const togglePlay = useCallback(() => {
+    if (isPlaying) {
+      pause();
+    } else {
+      resume();
+    }
+  }, [isPlaying, pause, resume]);
   const seek = useCallback((time: number) => { audioRef.current.currentTime = time; }, []);
   const toggleShuffle = useCallback(() => setShuffle(p => !p), []);
   const cycleRepeat = useCallback(() => {
@@ -313,7 +343,7 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
         const likes = await pb.collection('song_likes').getFullList({
           filter: `user="${pb.authStore.record.id}"`,
         });
-        const likedIds = new Set(likes.map((like: any) => like.song));
+        const likedIds = new Set<string>(likes.map((like: { song: string }) => like.song));
         setLikedSongs(likedIds);
       } catch (error) {
         console.error('Error loading liked songs:', error);
@@ -322,21 +352,49 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
     loadLikedSongs();
   }, []);
 
+  // Load image load counts from localStorage
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem('jux_imageLoadCounts');
+      if (saved) {
+        setImageLoadCounts(JSON.parse(saved));
+      }
+    } catch {
+      // Ignore parse errors
+    }
+  }, []);
+
+  // Save to localStorage when counts change
+  useEffect(() => {
+    try {
+      localStorage.setItem('jux_imageLoadCounts', JSON.stringify(imageLoadCounts));
+    } catch {
+      // Ignore storage errors
+    }
+  }, [imageLoadCounts]);
+
   useEffect(() => {
     const audio = audioRef.current;
 
     if ('mediaSession' in navigator && currentSong) {
+      const coverUrl = getSongCoverUrl(currentSong);
       navigator.mediaSession.metadata = new MediaMetadata({
         title: currentSong.title,
         artist: currentSong.expand?.uploadedBy?.pseudo || currentSong.author || 'Unknown Artist',
         album: 'Jux Music Hub',
-        artwork: [{ src: currentSong.coverImage || '/placeholder.svg', sizes: '512x512', type: 'image/png' }],
+        artwork: [
+          { src: coverUrl, sizes: '256x256', type: 'image/jpeg' },
+          { src: coverUrl, sizes: '512x512', type: 'image/jpeg' },
+        ],
       });
 
       navigator.mediaSession.setActionHandler('play', () => resume());
       navigator.mediaSession.setActionHandler('pause', () => pause());
       navigator.mediaSession.setActionHandler('nexttrack', () => next());
       navigator.mediaSession.setActionHandler('previoustrack', () => previous());
+
+      // Show media notification with cover image
+      showMediaNotification(currentSong, isPlaying, likedSongs.has(currentSong.id));
     }
 
     const onDur = () => setDuration(audio.duration || 0);
@@ -354,16 +412,34 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
       setProgress(audio.currentTime);
     };
 
+    // Fix Chrome mobile: handle visibility change
+    const handleVisibilityChange = () => {
+      if (!document.hidden && audio.duration && audio.currentTime >= audio.duration - 0.5) {
+        // Page became visible and song is near the end
+        onEnd();
+      }
+    };
+
+    // Fallback: check periodically if song ended (for mobile background)
+    const checkInterval = setInterval(() => {
+      if (audio.duration && audio.currentTime >= audio.duration - 0.1) {
+        onEnd();
+      }
+    }, 1000);
+
     audio.addEventListener('loadedmetadata', onDur);
     audio.addEventListener('ended', onEnd);
     audio.addEventListener('canplay', onCanPlay);
     audio.addEventListener('timeupdate', onTimeUpdate);
+    document.addEventListener('visibilitychange', handleVisibilityChange);
 
     return () => {
       audio.removeEventListener('loadedmetadata', onDur);
       audio.removeEventListener('ended', onEnd);
       audio.removeEventListener('canplay', onCanPlay);
       audio.removeEventListener('timeupdate', onTimeUpdate);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      clearInterval(checkInterval);
     };
   }, [currentSong, next, previous, pause, resume]);
 
@@ -372,10 +448,25 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
 
 
 
+  const registerImageLoad = useCallback((songId: string) => {
+    setImageLoadCounts(prev => {
+      const currentCount = prev[songId] || 0;
+      const newCount = Math.min(currentCount + 1, 5);
+      return { ...prev, [songId]: newCount };
+    });
+  }, []);
+
+  const getImageLoadControl = useCallback((songId: string) => {
+    const loadCount = imageLoadCounts[songId] || 0;
+    const imageKey = loadCount < 5 ? songId : `stable-${songId}`;
+    return { imageKey, loadCount };
+  }, [imageLoadCounts]);
+
   const playerValue = useMemo(() => ({
     currentSong, queue, isPlaying, isLoading, playerOpen, likedSongs, shuffle, repeatMode,
     playSong, playSongFromList, playCurrentSongOnly, pause, resume, togglePlay, next, previous, seek, setPlayerOpen, toggleLike, toggleShuffle, cycleRepeat,
-  }), [currentSong, queue, isPlaying, isLoading, playerOpen, likedSongs, shuffle, repeatMode, playSong, playSongFromList, playCurrentSongOnly, pause, resume, togglePlay, next, previous, seek, setPlayerOpen, toggleLike, toggleShuffle, cycleRepeat]);
+    getImageLoadControl, registerImageLoad,
+  }), [currentSong, queue, isPlaying, isLoading, playerOpen, likedSongs, shuffle, repeatMode, playSong, playSongFromList, playCurrentSongOnly, pause, resume, togglePlay, next, previous, seek, setPlayerOpen, toggleLike, toggleShuffle, cycleRepeat, getImageLoadControl, registerImageLoad]);
 
   const progressValue = useMemo(() => ({ progress, duration }), [progress, duration]);
 

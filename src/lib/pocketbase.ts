@@ -1,7 +1,7 @@
 import PocketBase from 'pocketbase';
 import type { Song } from '@/types/music';
 
-export const pb = new PocketBase('https://indicators-childrens-download-bent.trycloudflare.com/').autoCancellation(false);
+export const pb = new PocketBase('http://188.115.125.74:8090/').autoCancellation(false);
 
 export function getFileUrl(record: { id: string; collectionId: string; collectionName: string }, filename: string) {
   const url = pb.files.getURL(record, filename);
@@ -18,8 +18,8 @@ export function getFileUrl(record: { id: string; collectionId: string; collectio
 export function getSongCoverUrl(song: { id: string; collectionId: string; collectionName: string; coverImage: string }) {
   if (!song.coverImage) return '/placeholder.svg';
   
-  // Use the correct PocketBase file URL format
-  // Removed Date.now() to allow browser caching
+  // Use the correct PocketBase file URL format.
+  // Remove per-second cache busting to avoid repeated reloads on each render.
   const baseUrl = pb.baseUrl.replace(/\/$/, ''); // Remove trailing slash if present
   const url = `${baseUrl}/api/files/${song.collectionName}/${song.id}/${song.coverImage}?thumb=0x256`;
   

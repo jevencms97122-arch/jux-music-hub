@@ -25,9 +25,9 @@ export default function ProfilePage() {
         expand: 'uploadedBy'
       }).then(s => setUserSongs(s as unknown as Song[]));
 
-      // Load user playlists
+      // Load user playlists (excluding auto-playlist)
       pb.collection('playlists').getFullList({
-        filter: `owner="${user.id}"`,
+        filter: `owner="${user.id}" && title!="Titres likés"`,
         sort: '-created',
         expand: 'songs'
       }).then(p => setUserPlaylists(p as unknown as Playlist[]));

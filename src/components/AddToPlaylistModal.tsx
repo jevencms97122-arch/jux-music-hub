@@ -35,7 +35,7 @@ export default function AddToPlaylistModal({ isOpen, onClose, song, onPlaylistCr
     setLoading(true);
     try {
       const result = await pb.collection('playlists').getFullList({
-        filter: `owner="${user.id}"`,
+        filter: `owner="${user.id}" && title!="Titres likés"`,
         sort: '-created',
       });
       setPlaylists(result as unknown as Playlist[]);

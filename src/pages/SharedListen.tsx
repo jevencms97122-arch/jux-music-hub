@@ -20,68 +20,112 @@ export default function SharedListen() {
   const [song, setSong] = useState<Song | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
+  const [audioReady, setAudioReady] = useState(false);
   const [progress, setProgress] = useState(0);
   const [duration, setDuration] = useState(0);
   const [error, setError] = useState(false);
-  const audioRef = useRef<HTMLAudioElement>(new Audio());
+  const audioRef = useRef<HTMLAudioElement | null>(null);
   const { user } = useAuth();
-  const { playCurrentSongOnly } = usePlayer();
+  const { playSongFromList } = usePlayer();
 
   useEffect(() => {
+    let cancelled = false;
+
     const loadSong = async () => {
-      if (!songId) return;
+      if (!songId) {
+        setError(true);
+        setIsLoading(false);
+        return;
+      }
+
       try {
-        const timeout = new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout')), 5000));
-        const songData = await Promise.race([pb.collection('songs').getOne(songId, { expand: 'uploadedBy' }), timeout]);
-        setSong(songData as unknown as Song);
+        const songData = await pb.collection('songs').getOne(songId, { expand: 'uploadedBy' });
+        if (cancelled) return;
+
+        const s = songData as unknown as Song;
+        setSong(s);
+
         if (user) {
-          // If logged in, play the song in the app and redirect to home
-          playCurrentSongOnly(songData as unknown as Song);
+          playSongFromList(s, [s], 0);
           navigate('/');
           return;
         }
-        audioRef.current.src = getSongAudioUrl(songData as unknown as Song);
-        audioRef.current.load();
-        audioRef.current.addEventListener('loadeddata', () => setIsLoading(false));
-        audioRef.current.addEventListener('error', () => {
-          setError(true);
-          setIsLoading(false);
+
+        // Create audio for non-logged-in users
+        const audio = new Audio();
+        audioRef.current = audio;
+
+        audio.addEventListener('loadedmetadata', () => {
+          if (!cancelled) {
+            setDuration(audio.duration || 0);
+            setAudioReady(true);
+            setIsLoading(false);
+          }
         });
-        // Timeout if loading takes too long
-        setTimeout(() => {
-          if (isLoading) {
+
+        audio.addEventListener('canplay', () => {
+          if (!cancelled) {
+            setAudioReady(true);
+            setIsLoading(false);
+          }
+        });
+
+        audio.addEventListener('timeupdate', () => {
+          if (!cancelled) setProgress(audio.currentTime);
+        });
+
+        audio.addEventListener('ended', () => {
+          if (!cancelled) setIsPlaying(false);
+        });
+
+        audio.addEventListener('error', () => {
+          if (!cancelled) {
             setError(true);
             setIsLoading(false);
           }
-        }, 10000);
-      } catch (error) {
-        console.error('Erreur lors du chargement de la musique:', error);
-        setError(true);
-        setIsLoading(false);
+        });
+
+        audio.src = getSongAudioUrl(s);
+        audio.load();
+
+        // Fallback timeout
+        setTimeout(() => {
+          if (!cancelled && isLoading) {
+            setIsLoading(false);
+          }
+        }, 8000);
+      } catch (err) {
+        console.error('Erreur chargement musique:', err);
+        if (!cancelled) {
+          setError(true);
+          setIsLoading(false);
+        }
       }
     };
+
     loadSong();
-  }, [songId, user, playCurrentSongOnly, navigate]);
-
-  useEffect(() => {
-    const audio = audioRef.current;
-
-    const onDur = () => setDuration(audio.duration || 0);
-    const onTimeUpdate = () => setProgress(audio.currentTime);
-    const onEnded = () => setIsPlaying(false);
-
-    audio.addEventListener('loadedmetadata', onDur);
-    audio.addEventListener('timeupdate', onTimeUpdate);
-    audio.addEventListener('ended', onEnded);
 
     return () => {
-      audio.removeEventListener('loadedmetadata', onDur);
-      audio.removeEventListener('timeupdate', onTimeUpdate);
-      audio.removeEventListener('ended', onEnded);
+      cancelled = true;
+      if (audioRef.current) {
+        audioRef.current.pause();
+        audioRef.current.src = '';
+      }
     };
-  }, []);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [songId]);
+
+  // If user logs in while on this page, redirect
+  useEffect(() => {
+    if (user && song) {
+      playSongFromList(song, [song], 0);
+      navigate('/');
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user]);
 
   const togglePlay = () => {
+    if (!audioRef.current) return;
     if (isPlaying) {
       audioRef.current.pause();
       setIsPlaying(false);
@@ -92,34 +136,15 @@ export default function SharedListen() {
   };
 
   const seek = (time: number) => {
-    audioRef.current.currentTime = time;
+    if (audioRef.current) audioRef.current.currentTime = time;
   };
-
-  if (!song && !isLoading) {
-    return (
-      <div className="min-h-screen bg-background flex items-center justify-center p-4">
-        <div className="text-center">
-          <p className="text-muted-foreground mb-4">Musique introuvable</p>
-          <button
-            onClick={() => navigate('/')}
-            className="px-4 py-2 bg-primary text-primary-foreground rounded-lg"
-          >
-            Retour à l'accueil
-          </button>
-        </div>
-      </div>
-    );
-  }
 
   if (error) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center p-4">
         <div className="text-center">
-          <p className="text-muted-foreground mb-4">Erreur lors du chargement de la musique</p>
-          <button
-            onClick={() => navigate('/')}
-            className="px-4 py-2 bg-primary text-primary-foreground rounded-lg"
-          >
+          <p className="text-muted-foreground mb-4">Musique introuvable ou erreur de chargement</p>
+          <button onClick={() => navigate('/')} className="px-4 py-2 bg-primary text-primary-foreground rounded-lg">
             Retour à l'accueil
           </button>
         </div>
@@ -135,7 +160,7 @@ export default function SharedListen() {
     );
   }
 
-  const uploaderPseudo = song.expand?.uploadedBy?.pseudo;
+  const uploaderPseudo = (song as any).expand?.uploadedBy?.pseudo;
 
   return (
     <div className="min-h-screen bg-background flex flex-col">
@@ -144,9 +169,7 @@ export default function SharedListen() {
           src={getSongCoverUrl(song)}
           alt=""
           className="w-full h-full object-cover blur-3xl opacity-30"
-          onError={(e) => {
-            (e.target as HTMLImageElement).src = '/placeholder.svg';
-          }}
+          onError={(e) => { (e.target as HTMLImageElement).src = '/placeholder.svg'; }}
         />
         <div className="absolute inset-0 bg-background/80 backdrop-blur-md" />
       </div>
@@ -161,9 +184,7 @@ export default function SharedListen() {
             src={getSongCoverUrl(song)}
             alt={song.title}
             className="h-full w-full object-cover"
-            onError={(e) => {
-              (e.target as HTMLImageElement).src = '/placeholder.svg';
-            }}
+            onError={(e) => { (e.target as HTMLImageElement).src = '/placeholder.svg'; }}
           />
         </motion.div>
 
@@ -180,7 +201,7 @@ export default function SharedListen() {
           <div className="flex-1 relative flex items-center h-3">
             <div className="absolute top-1/2 left-0 h-1 bg-secondary rounded-full w-full transform -translate-y-1/2" />
             <div
-              className="absolute top-1/2 left-0 h-1 bg-orange-500 rounded-full transform -translate-y-1/2"
+              className="absolute top-1/2 left-0 h-1 bg-primary rounded-full transform -translate-y-1/2"
               style={{ width: duration > 0 ? `${(Math.min(progress, duration) / duration) * 100}%` : '0%' }}
             />
             <input
@@ -192,7 +213,7 @@ export default function SharedListen() {
               className="absolute w-full h-4 opacity-0 cursor-pointer"
             />
             <div
-              className="absolute h-4 w-4 rounded-full bg-orange-500 pointer-events-none transform -translate-x-1/2 -translate-y-1/2 top-1/2"
+              className="absolute h-4 w-4 rounded-full bg-primary pointer-events-none transform -translate-x-1/2 -translate-y-1/2 top-1/2"
               style={{ left: duration > 0 ? `${(Math.min(progress, duration) / duration) * 100}%` : '0%' }}
             />
           </div>
@@ -213,7 +234,7 @@ export default function SharedListen() {
 
         <div className="mt-8 p-6 bg-card/80 backdrop-blur-sm rounded-xl border border-border max-w-md w-full text-center">
           <p className="text-sm text-muted-foreground mb-4">
-            Pour accéder à toutes les fonctionnalités communautaires et écouter vos musiques et celles de vos amis sans interruption, connectez-vous !
+            Pour accéder à toutes les fonctionnalités, connectez-vous !
           </p>
           <button
             onClick={() => navigate('/')}

@@ -12,6 +12,21 @@ export default function MiniPlayer() {
   const [shareUrl, setShareUrl] = useState('');
   const { toast } = useToast();
 
+  const handleShare = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    setShowMenu(false);
+    const url = `${window.location.origin}/listen/${currentSong?.id}`;
+    setShareUrl(url);
+    setShowShareModal(true);
+  };
+
+  const copyToClipboard = () => {
+    navigator.clipboard.writeText(shareUrl).then(() => {
+      toast({ title: 'Lien copié !' });
+      setShowShareModal(false);
+    }).catch(console.error);
+  };
+
   useEffect(() => {
     if (!showMenu) return;
     const close = () => setShowMenu(false);

@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { usePlayer, usePlayerProgress } from '@/contexts/PlayerContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { getSongCoverUrl, pb } from '@/lib/pocketbase';
-import { ChevronDown, Play, Pause, SkipForward, SkipBack, Shuffle, Repeat, Repeat1, Heart, Headphones, Loader2, Plus, MoreVertical, Share2, LogIn, X } from 'lucide-react';
+import { ChevronDown, Play, Pause, SkipForward, SkipBack, Shuffle, Repeat, Repeat1, Heart, Headphones, Loader2, Plus, MoreVertical, LogIn } from 'lucide-react';
 import QueueView from './QueueView';
 import FriendsLikedBadge from './FriendsLikedBadge';
 import AddToPlaylistModal from './AddToPlaylistModal';
@@ -29,8 +29,6 @@ export default function PlayerPage() {
   const [isDragging, setIsDragging] = useState(false);
   const [showAddToPlaylist, setShowAddToPlaylist] = useState(false);
   const [showMenu, setShowMenu] = useState(false);
-  const [showShareModal, setShowShareModal] = useState(false);
-  const [shareUrl, setShareUrl] = useState('');
   const navigate = useNavigate();
   const sliderRef = useRef<HTMLInputElement>(null);
   const animationFrameRef = useRef<number>();
@@ -77,37 +75,6 @@ export default function PlayerPage() {
     setLikesCount(prev => wasLiked ? Math.max(0, prev - 1) : prev + 1);
   };
 
-  const handleShare = () => {
-    if (!currentSong) return;
-    const url = `${window.location.origin}/listen/${currentSong.id}`;
-    setShareUrl(url);
-    setShowShareModal(true);
-    setShowMenu(false);
-  };
-
-  const copyToClipboard = async () => {
-    try {
-      if (navigator.clipboard && navigator.clipboard.writeText) {
-        await navigator.clipboard.writeText(shareUrl);
-      } else {
-        // Fallback for older browsers
-        const textArea = document.createElement('textarea');
-        textArea.value = shareUrl;
-        textArea.style.position = 'fixed';
-        textArea.style.left = '-999999px';
-        textArea.style.top = '-999999px';
-        document.body.appendChild(textArea);
-        textArea.focus();
-        textArea.select();
-        document.execCommand('copy');
-        document.body.removeChild(textArea);
-      }
-      toast({ title: 'Lien copié !', description: 'Le lien a été copié dans le presse-papiers.' });
-    } catch (err) {
-      console.error('Erreur lors de la copie:', err);
-      toast({ title: 'Erreur', description: 'Impossible de copier le lien.' });
-    }
-  };
 
   if (!currentSong) return null;
   const uploaderPseudo = currentSong.expand?.uploadedBy?.pseudo;
@@ -167,16 +134,6 @@ export default function PlayerPage() {
                   >
                     <Plus className="h-4 w-4" />
                     Ajouter à une playlist
-                  </button>
-                  <button
-                    onClick={() => {
-                      handleShare();
-                    }}
-                    className="w-full px-4 py-3 text-left text-sm hover:bg-accent/50 flex items-center gap-2 transition-colors"
-                    type="button"
-                  >
-                    <Share2 className="h-4 w-4" />
-                    Partager le titre
                   </button>
                 </div>
               )}
@@ -342,54 +299,6 @@ export default function PlayerPage() {
         song={currentSong}
       />
 
-      {/* Share Modal */}
-      <AnimatePresence>
-        {showShareModal && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="fixed inset-0 z-[60] bg-black/50 flex items-center justify-center p-4"
-            onClick={() => setShowShareModal(false)}
-          >
-            <motion.div
-              initial={{ scale: 0.95, opacity: 0 }}
-              animate={{ scale: 1, opacity: 1 }}
-              exit={{ scale: 0.95, opacity: 0 }}
-              className="bg-card rounded-xl p-6 w-full max-w-md shadow-xl"
-              onClick={(e) => e.stopPropagation()}
-            >
-              <div className="flex items-center justify-between mb-4">
-                <h3 className="text-lg font-semibold text-foreground">Partager le titre</h3>
-                <button
-                  onClick={() => setShowShareModal(false)}
-                  className="p-1 text-muted-foreground hover:text-foreground transition-colors"
-                >
-                  <X className="h-5 w-5" />
-                </button>
-              </div>
-              <p className="text-sm text-muted-foreground mb-4">
-                Partagez ce titre avec vos amis. Ils pourront écouter la musique même sans compte.
-              </p>
-              <div className="flex items-center gap-2 bg-secondary/50 rounded-lg p-3">
-                <input
-                  type="text"
-                  readOnly
-                  value={shareUrl}
-                  className="flex-1 bg-transparent text-sm text-foreground outline-none truncate"
-                />
-                <button
-                  onClick={copyToClipboard}
-                  className="px-4 py-2 bg-primary text-primary-foreground rounded-lg text-sm font-medium hover:bg-primary/90 transition-colors"
-                  type="button"
-                >
-                  Copier
-                </button>
-              </div>
-            </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
     </>
   );
 }

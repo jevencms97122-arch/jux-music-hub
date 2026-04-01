@@ -343,7 +343,7 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
         const likes = await pb.collection('song_likes').getFullList({
           filter: `user="${pb.authStore.record.id}"`,
         });
-        const likedIds = new Set<string>(likes.map((like: { song: string }) => like.song));
+        const likedIds = new Set<string>(likes.map((like: any) => like.song));
         setLikedSongs(likedIds);
       } catch (error) {
         console.error('Error loading liked songs:', error);

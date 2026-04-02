@@ -30,6 +30,8 @@ export default function PlayerPage() {
   const [likesCount, setLikesCount] = useState(0);
   const [isDragging, setIsDragging] = useState(false);
   const [showAddToPlaylist, setShowAddToPlaylist] = useState(false);
+  const [showCreateStory, setShowCreateStory] = useState(false);
+  const [showListenSession, setShowListenSession] = useState(false);
   const [showMenu, setShowMenu] = useState(false);
   const navigate = useNavigate();
   const sliderRef = useRef<HTMLInputElement>(null);

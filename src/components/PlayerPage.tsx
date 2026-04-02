@@ -25,7 +25,7 @@ export default function PlayerPage() {
 
   const { imageKey } = currentSong ? getImageLoadControl(currentSong.id) : { imageKey: '' };
   const { user } = useAuth();
-  const { toast } = useToast();
+  
   const [tab, setTab] = useState<'player' | 'queue'>('player');
   const [likesCount, setLikesCount] = useState(0);
   const [isDragging, setIsDragging] = useState(false);

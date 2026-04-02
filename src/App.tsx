@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { AuthProvider, useAuth } from '@/contexts/AuthContext';
 import { PlayerProvider } from '@/contexts/PlayerContext';
+import { pb } from '@/lib/pocketbase';
 import { BrowserRouter, Routes, Route, Navigate, useNavigate, useLocation } from 'react-router-dom';
 import { AnimatePresence, motion } from 'framer-motion';
 import Login from '@/pages/Login';
@@ -14,7 +15,6 @@ import Social from '@/pages/Social';
 import UserProfile from '@/pages/UserProfile';
 import ProfilePage from '@/pages/ProfilePage';
 import SharedListen from '@/pages/SharedListen';
-import Notifications from '@/pages/Notifications';
 import MiniPlayer from '@/components/MiniPlayer';
 import PlayerPage from '@/components/PlayerPage';
 import BottomNav from '@/components/BottomNav';
@@ -31,6 +31,31 @@ function AppContent() {
       Notification.requestPermission().catch(console.error);
     }
   }, [user, loading]);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    const timer = window.setTimeout(() => {
+      controller.abort();
+      window.location.reload();
+    }, 3000);
+
+    fetch(pb.baseUrl, { method: 'GET', signal: controller.signal, cache: 'no-cache' })
+      .then((res) => {
+        window.clearTimeout(timer);
+        if (!res.ok) {
+          window.location.reload();
+        }
+      })
+      .catch(() => {
+        window.clearTimeout(timer);
+        window.location.reload();
+      });
+
+    return () => {
+      window.clearTimeout(timer);
+      controller.abort();
+    };
+  }, []);
 
   if (loading) {
     return (
@@ -60,7 +85,6 @@ function AppContent() {
     '/profile': 'profile',
     '/profile-edit': 'profile',
     '/upload': 'profile',
-    '/notifications': 'home',
   };
 
   const active = pathToActive[location.pathname] || 'home';
@@ -116,11 +140,6 @@ function AppContent() {
                 <ProfileSetup />
               </motion.div>
             } />
-            <Route path="/notifications" element={
-              <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }} transition={{ duration: 0.2 }}>
-                {profileCompleted ? <Notifications /> : <Navigate to="/profile-setup" replace />}
-              </motion.div>
-            } />
           </Routes>
         </AnimatePresence>
         <MiniPlayer />
@@ -129,7 +148,6 @@ function AppContent() {
         <BottomNav
           active={active}
           onNavigate={(page) => navigate(page === 'home' ? '/jux' : `/${page}`)}
-          onNotifications={() => navigate('/notifications')}
         />
       </div>
     </PlayerProvider>

@@ -38,6 +38,8 @@ export default function ProfileSetup() {
       fd.append('pseudo', pseudo);
       fd.append('firstName', firstName);
       fd.append('lastName', lastName);
+      fd.append('profileCompleted', 'true');
+      fd.append('profilCompleted', 'true');
       if (avatarFile) fd.append('avatar', avatarFile);
       await updateProfile(fd);
       // Rediriger vers la page d'accueil après succès

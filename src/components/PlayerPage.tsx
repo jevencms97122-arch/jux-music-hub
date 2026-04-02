@@ -330,6 +330,16 @@ export default function PlayerPage() {
         song={currentSong}
       />
 
+      <CreateStoryModal
+        isOpen={showCreateStory}
+        onClose={() => setShowCreateStory(false)}
+        song={currentSong}
+      />
+
+      <ListenSessionModal
+        isOpen={showListenSession}
+        onClose={() => setShowListenSession(false)}
+      />
     </>
   );
 }

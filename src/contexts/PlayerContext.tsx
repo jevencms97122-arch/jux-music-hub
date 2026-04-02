@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import { pb, getSongAudioUrl, getSongCoverUrl } from '@/lib/pocketbase';
 import { showMediaNotification, closeMediaNotification, setupMediaControlListeners } from '@/lib/notifications';
+import { updateStreak } from '@/lib/streaks';
 import type { Song } from '@/types/music';
 
 type RepeatMode = 'off' | 'all' | 'one';

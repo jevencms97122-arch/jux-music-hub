@@ -129,6 +129,7 @@ function AppContent() {
         <BottomNav
           active={active}
           onNavigate={(page) => navigate(page === 'home' ? '/jux' : `/${page}`)}
+          onNotifications={() => navigate('/notifications')}
         />
       </div>
     </PlayerProvider>

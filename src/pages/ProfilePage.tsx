@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { getUserAvatarUrl, pb } from '@/lib/pocketbase';
 import { LogOut, User, UserCog, Upload, Settings, Music, ListMusic } from 'lucide-react';
+import StreakBadge from '@/components/StreakBadge';
 import { useNavigate } from 'react-router-dom';
 import type { Song, Playlist } from '@/types/music';
 import SongCard from '@/components/SongCard';
@@ -57,6 +58,7 @@ export default function ProfilePage() {
         )}
         <div className="flex-1">
           <p className="text-lg font-bold text-foreground">{user.pseudo}</p>
+          <StreakBadge userId={user.id} />
         <div className="flex gap-2 mt-2 flex-wrap">
             <button onClick={() => navigate('/profile-edit')} className="text-xs bg-secondary px-3 py-1.5 rounded-md font-medium">Modifier le profil</button>
             <button onClick={() => navigate('/upload')} className="text-xs bg-secondary px-3 py-1.5 rounded-md font-medium"><Upload className="h-3 w-3" /></button>

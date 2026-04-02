@@ -14,6 +14,7 @@ import Social from '@/pages/Social';
 import UserProfile from '@/pages/UserProfile';
 import ProfilePage from '@/pages/ProfilePage';
 import SharedListen from '@/pages/SharedListen';
+import Notifications from '@/pages/Notifications';
 import MiniPlayer from '@/components/MiniPlayer';
 import PlayerPage from '@/components/PlayerPage';
 import BottomNav from '@/components/BottomNav';
@@ -59,6 +60,7 @@ function AppContent() {
     '/profile': 'profile',
     '/profile-edit': 'profile',
     '/upload': 'profile',
+    '/notifications': 'home',
   };
 
   const active = pathToActive[location.pathname] || 'home';
@@ -114,6 +116,11 @@ function AppContent() {
                 <ProfileSetup />
               </motion.div>
             } />
+            <Route path="/notifications" element={
+              <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }} transition={{ duration: 0.2 }}>
+                {profileCompleted ? <Notifications /> : <Navigate to="/profile-setup" replace />}
+              </motion.div>
+            } />
           </Routes>
         </AnimatePresence>
         <MiniPlayer />
@@ -122,6 +129,7 @@ function AppContent() {
         <BottomNav
           active={active}
           onNavigate={(page) => navigate(page === 'home' ? '/jux' : `/${page}`)}
+          onNotifications={() => navigate('/notifications')}
         />
       </div>
     </PlayerProvider>

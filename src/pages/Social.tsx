@@ -5,6 +5,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { usePlayer } from '@/contexts/PlayerContext';
 import type { PBUser, Follow, Song } from '@/types/music';
 import { User, UserCheck, UserX, Users, Bell, Newspaper, Heart, Music, Upload } from 'lucide-react';
+import StoryCircles from '@/components/StoryCircles';
 import { Button } from '@/components/ui/button';
 
 type Tab = 'feed' | 'requests' | 'friends' | 'following';
@@ -201,6 +202,9 @@ export default function Social() {
       <div className="px-4 py-4">
         <h1 className="text-xl font-bold text-foreground">Espace Social</h1>
       </div>
+
+      {/* Stories */}
+      <StoryCircles />
 
       {/* Tabs */}
       <div className="flex border-b border-border overflow-x-auto">

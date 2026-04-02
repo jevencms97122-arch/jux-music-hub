@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import { pb, getSongAudioUrl, getSongCoverUrl } from '@/lib/pocketbase';
 import { showMediaNotification, closeMediaNotification, setupMediaControlListeners } from '@/lib/notifications';
+import { updateStreak } from '@/lib/streaks';
 import type { Song } from '@/types/music';
 
 type RepeatMode = 'off' | 'all' | 'one';
@@ -398,7 +399,13 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
     }
 
     const onDur = () => setDuration(audio.duration || 0);
-    const onEnd = () => next().catch(console.error);
+    const onEnd = () => {
+      // Song finished = full listen, update streak
+      if (pb.authStore.record) {
+        updateStreak(pb.authStore.record.id).catch(console.error);
+      }
+      next().catch(console.error);
+    };
     const onCanPlay = () => {
       if (isLoadingRef.current) {
         audio.play().catch(console.error);

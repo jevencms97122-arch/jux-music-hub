@@ -116,6 +116,11 @@ function AppContent() {
                 <ProfileSetup />
               </motion.div>
             } />
+            <Route path="/notifications" element={
+              <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }} transition={{ duration: 0.2 }}>
+                {profileCompleted ? <Notifications /> : <Navigate to="/profile-setup" replace />}
+              </motion.div>
+            } />
           </Routes>
         </AnimatePresence>
         <MiniPlayer />

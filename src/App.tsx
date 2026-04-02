@@ -60,6 +60,7 @@ function AppContent() {
     '/profile': 'profile',
     '/profile-edit': 'profile',
     '/upload': 'profile',
+    '/notifications': 'home',
   };
 
   const active = pathToActive[location.pathname] || 'home';

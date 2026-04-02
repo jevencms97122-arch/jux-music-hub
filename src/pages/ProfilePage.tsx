@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { getUserAvatarUrl, pb } from '@/lib/pocketbase';
 import { LogOut, User, UserCog, Upload, Settings, Music, ListMusic } from 'lucide-react';
+import StreakBadge from '@/components/StreakBadge';
 import { useNavigate } from 'react-router-dom';
 import type { Song, Playlist } from '@/types/music';
 import SongCard from '@/components/SongCard';

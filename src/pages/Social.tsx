@@ -5,6 +5,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { usePlayer } from '@/contexts/PlayerContext';
 import type { PBUser, Follow, Song } from '@/types/music';
 import { User, UserCheck, UserX, Users, Bell, Newspaper, Heart, Music, Upload } from 'lucide-react';
+import StoryCircles from '@/components/StoryCircles';
 import { Button } from '@/components/ui/button';
 
 type Tab = 'feed' | 'requests' | 'friends' | 'following';

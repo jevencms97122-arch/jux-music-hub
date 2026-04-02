@@ -14,6 +14,7 @@ import Social from '@/pages/Social';
 import UserProfile from '@/pages/UserProfile';
 import ProfilePage from '@/pages/ProfilePage';
 import SharedListen from '@/pages/SharedListen';
+import Notifications from '@/pages/Notifications';
 import MiniPlayer from '@/components/MiniPlayer';
 import PlayerPage from '@/components/PlayerPage';
 import BottomNav from '@/components/BottomNav';

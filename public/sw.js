@@ -92,6 +92,29 @@ self.addEventListener('fetch', (event) => {
   );
 });
 
+// Web Push handler
+self.addEventListener('push', (event) => {
+  if (!event.data) return;
+  
+  try {
+    const data = event.data.json();
+    const options = {
+      body: data.body || '',
+      icon: '/jux-icon-192.png',
+      badge: '/jux-icon-192.png',
+      tag: data.tag || 'jux-notification',
+      data: data.data || {},
+      requireInteraction: false,
+    };
+    
+    event.waitUntil(
+      self.registration.showNotification(data.title || 'Jux Music', options)
+    );
+  } catch (e) {
+    console.error('Push event error:', e);
+  }
+});
+
 // Media notification handlers
 self.addEventListener('message', (event) => {
   const { type, data } = event.data;
@@ -110,12 +133,13 @@ self.addEventListener('notificationclick', (event) => {
   event.notification.close();
 
   const action = event.action;
+  const notifData = event.notification.data || {};
   const clients = self.clients;
 
   event.waitUntil(
     clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clientList) => {
       if (clientList.length === 0) {
-        clients.openWindow('/');
+        clients.openWindow(notifData.url || '/');
         return;
       }
 

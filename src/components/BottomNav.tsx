@@ -1,8 +1,10 @@
-import { Home, User, ListMusic, Users } from 'lucide-react';
+import { Home, User, ListMusic, Users, Bell } from 'lucide-react';
+import NotificationBell from './NotificationBell';
 
 interface BottomNavProps {
   active: 'home' | 'social' | 'playlists' | 'profile';
   onNavigate: (page: 'home' | 'social' | 'playlists' | 'profile') => void;
+  onNotifications: () => void;
 }
 
 export default function BottomNav({ active, onNavigate }: BottomNavProps) {

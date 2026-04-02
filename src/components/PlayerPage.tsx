@@ -139,6 +139,28 @@ export default function PlayerPage() {
                     <Plus className="h-4 w-4" />
                     Ajouter à une playlist
                   </button>
+                  <button
+                    onClick={() => {
+                      setShowCreateStory(true);
+                      setShowMenu(false);
+                    }}
+                    className="w-full px-4 py-3 text-left text-sm hover:bg-accent/50 flex items-center gap-2 transition-colors"
+                    type="button"
+                  >
+                    <BookOpen className="h-4 w-4" />
+                    Ajouter à la story
+                  </button>
+                  <button
+                    onClick={() => {
+                      setShowListenSession(true);
+                      setShowMenu(false);
+                    }}
+                    className="w-full px-4 py-3 text-left text-sm hover:bg-accent/50 flex items-center gap-2 transition-colors"
+                    type="button"
+                  >
+                    <Radio className="h-4 w-4" />
+                    Écoute synchrone
+                  </button>
                 </div>
               )}
             </div>

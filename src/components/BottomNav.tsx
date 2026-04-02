@@ -7,7 +7,7 @@ interface BottomNavProps {
   onNotifications: () => void;
 }
 
-export default function BottomNav({ active, onNavigate }: BottomNavProps) {
+export default function BottomNav({ active, onNavigate, onNotifications }: BottomNavProps) {
   return (
     <nav className="fixed bottom-0 left-0 right-0 z-30 bg-card/90 backdrop-blur-lg border-t border-border/50 safe-bottom">
       <div className="flex items-center justify-around py-2 pb-safe">

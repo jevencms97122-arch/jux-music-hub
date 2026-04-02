@@ -220,6 +220,11 @@ export default function PlayerPage() {
                       <FriendsLikedBadge songId={currentSong.id} userId={user.id} />
                     )}
 
+                    {/* Timestamped comments */}
+                    {currentSong && (
+                      <SongComments songId={currentSong.id} currentTime={progress} duration={duration} />
+                    )}
+
                     <div className="flex items-center gap-4 mb-6 w-full px-4">
                       <span className="text-xs text-muted-foreground w-12 text-right flex-shrink-0">{formatTime(progress)}</span>
                       <div className="flex-1 relative flex items-center h-3">

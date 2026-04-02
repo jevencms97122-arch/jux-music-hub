@@ -32,31 +32,6 @@ function AppContent() {
     }
   }, [user, loading]);
 
-  useEffect(() => {
-    const controller = new AbortController();
-    const timer = window.setTimeout(() => {
-      controller.abort();
-      window.location.reload();
-    }, 3000);
-
-    fetch(pb.baseUrl, { method: 'GET', signal: controller.signal, cache: 'no-cache' })
-      .then((res) => {
-        window.clearTimeout(timer);
-        if (!res.ok) {
-          window.location.reload();
-        }
-      })
-      .catch(() => {
-        window.clearTimeout(timer);
-        window.location.reload();
-      });
-
-    return () => {
-      window.clearTimeout(timer);
-      controller.abort();
-    };
-  }, []);
-
   if (loading) {
     return (
       <div className="flex min-h-screen items-center justify-center">

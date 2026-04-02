@@ -69,7 +69,7 @@ export interface Playlist {
   playCount: number;
   likesCount: number;
   thumbnailMode: 'grid' | 'single';
-  thumbnailOrder?: string[]; // Array of image URLs
+  thumbnailOrder?: string[];
   created: string;
   updated: string;
   collectionId: string;
@@ -87,6 +87,89 @@ export interface PlaylistLike {
   created: string;
   expand?: {
     playlist?: Playlist;
+  };
+}
+
+// Stories
+export interface Story {
+  id: string;
+  user: string;
+  song: string;
+  startTime: number;
+  endTime: number;
+  comment: string;
+  expiresAt: string;
+  created: string;
+  collectionId: string;
+  collectionName: string;
+  expand?: {
+    user?: PBUser;
+    song?: Song;
+  };
+}
+
+export interface StoryView {
+  id: string;
+  story: string;
+  viewer: string;
+  created: string;
+}
+
+// User Stats (Streaks)
+export interface UserStats {
+  id: string;
+  user: string;
+  currentStreak: number;
+  longestStreak: number;
+  totalListens: number;
+  lastListenDate: string;
+  created: string;
+  updated: string;
+}
+
+// Timestamped Comments
+export interface SongComment {
+  id: string;
+  user: string;
+  song: string;
+  comment: string;
+  timestamp: number; // seconds in the song
+  created: string;
+  expand?: {
+    user?: PBUser;
+    song?: Song;
+  };
+}
+
+// Listen Sessions
+export interface ListenSession {
+  id: string;
+  host: string;
+  song: string;
+  currentTime: number;
+  isPlaying: boolean;
+  participants: string[];
+  active: boolean;
+  created: string;
+  updated: string;
+  expand?: {
+    host?: PBUser;
+    song?: Song;
+  };
+}
+
+// Notifications
+export interface AppNotification {
+  id: string;
+  recipient: string;
+  type: 'new_song' | 'milestone' | 'friend_request' | 'like';
+  title: string;
+  body: string;
+  data: string; // JSON string with extra data
+  read: boolean;
+  created: string;
+  expand?: {
+    recipient?: PBUser;
   };
 }
 

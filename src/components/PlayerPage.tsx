@@ -3,11 +3,13 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { usePlayer, usePlayerProgress } from '@/contexts/PlayerContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { getSongCoverUrl, pb } from '@/lib/pocketbase';
-import { ChevronDown, Play, Pause, SkipForward, SkipBack, Shuffle, Repeat, Repeat1, Heart, Headphones, Loader2, Plus, MoreVertical, LogIn } from 'lucide-react';
+import { ChevronDown, Play, Pause, SkipForward, SkipBack, Shuffle, Repeat, Repeat1, Heart, Headphones, Loader2, Plus, MoreVertical, LogIn, Radio, BookOpen } from 'lucide-react';
 import QueueView from './QueueView';
 import FriendsLikedBadge from './FriendsLikedBadge';
 import AddToPlaylistModal from './AddToPlaylistModal';
-import { useToast } from '@/components/ui/use-toast';
+import CreateStoryModal from './CreateStoryModal';
+import SongComments from './SongComments';
+import ListenSessionModal from './ListenSessionModal';
 import { useNavigate } from 'react-router-dom';
 
 function formatTime(s: number) {

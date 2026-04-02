@@ -40,10 +40,7 @@ export default function BottomNav({ active, onNavigate, onNotifications }: Botto
           <User className={`h-6 w-6 ${active === 'profile' ? 'fill-primary/20' : ''}`} />
           <span className="text-[10px] font-medium">Profil</span>
         </button>
-          <span className="text-[10px] font-medium">Profil</span>
-        </button>
       </div>
     </nav>
   );
 }
-

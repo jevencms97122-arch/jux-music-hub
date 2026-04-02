@@ -202,6 +202,9 @@ export default function Social() {
         <h1 className="text-xl font-bold text-foreground">Espace Social</h1>
       </div>
 
+      {/* Stories */}
+      <StoryCircles />
+
       {/* Tabs */}
       <div className="flex border-b border-border overflow-x-auto">
         {tabs.map(t => (

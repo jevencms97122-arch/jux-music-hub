@@ -1,7 +1,7 @@
 import PocketBase from 'pocketbase';
 import type { Song } from '@/types/music';
 
-export const pb = new PocketBase('https://grumpy-crews-rhyme.loca.lt/').autoCancellation(false);
+export const pb = new PocketBase('https://welding-inquiries-promotional-born.trycloudflare.com/').autoCancellation(false);
 
 export function getFileUrl(record: { id: string; collectionId: string; collectionName: string }, filename: string) {
   const url = pb.files.getURL(record, filename);

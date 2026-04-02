@@ -127,20 +127,6 @@ export interface UserStats {
   updated: string;
 }
 
-// Timestamped Comments
-export interface SongComment {
-  id: string;
-  user: string;
-  song: string;
-  comment: string;
-  timestamp: number; // seconds in the song
-  created: string;
-  expand?: {
-    user?: PBUser;
-    song?: Song;
-  };
-}
-
 // Listen Sessions
 export interface ListenSession {
   id: string;
@@ -149,7 +135,8 @@ export interface ListenSession {
   currentTime: number;
   isPlaying: boolean;
   participants: string[];
-  active: boolean;
+  active?: boolean;
+  isActive?: boolean;
   created: string;
   updated: string;
   expand?: {

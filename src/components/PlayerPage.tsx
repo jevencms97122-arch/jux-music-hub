@@ -8,8 +8,6 @@ import QueueView from './QueueView';
 import FriendsLikedBadge from './FriendsLikedBadge';
 import AddToPlaylistModal from './AddToPlaylistModal';
 import CreateStoryModal from './CreateStoryModal';
-import SongComments from './SongComments';
-import ListenSessionModal from './ListenSessionModal';
 import { useNavigate } from 'react-router-dom';
 
 function formatTime(s: number) {
@@ -31,7 +29,6 @@ export default function PlayerPage() {
   const [isDragging, setIsDragging] = useState(false);
   const [showAddToPlaylist, setShowAddToPlaylist] = useState(false);
   const [showCreateStory, setShowCreateStory] = useState(false);
-  const [showListenSession, setShowListenSession] = useState(false);
   const [showMenu, setShowMenu] = useState(false);
   const navigate = useNavigate();
   const sliderRef = useRef<HTMLInputElement>(null);
@@ -150,17 +147,6 @@ export default function PlayerPage() {
                     <BookOpen className="h-4 w-4" />
                     Ajouter à la story
                   </button>
-                  <button
-                    onClick={() => {
-                      setShowListenSession(true);
-                      setShowMenu(false);
-                    }}
-                    className="w-full px-4 py-3 text-left text-sm hover:bg-accent/50 flex items-center gap-2 transition-colors"
-                    type="button"
-                  >
-                    <Radio className="h-4 w-4" />
-                    Écoute synchrone
-                  </button>
                 </div>
               )}
             </div>
@@ -218,11 +204,6 @@ export default function PlayerPage() {
 
                     {user && currentSong && (
                       <FriendsLikedBadge songId={currentSong.id} userId={user.id} />
-                    )}
-
-                    {/* Timestamped comments */}
-                    {currentSong && (
-                      <SongComments songId={currentSong.id} currentTime={progress} duration={duration} />
                     )}
 
                     <div className="flex items-center gap-4 mb-6 w-full px-4">
@@ -334,11 +315,6 @@ export default function PlayerPage() {
         isOpen={showCreateStory}
         onClose={() => setShowCreateStory(false)}
         song={currentSong}
-      />
-
-      <ListenSessionModal
-        isOpen={showListenSession}
-        onClose={() => setShowListenSession(false)}
       />
     </>
   );

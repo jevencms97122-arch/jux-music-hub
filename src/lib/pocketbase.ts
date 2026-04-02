@@ -1,7 +1,7 @@
 import PocketBase from 'pocketbase';
 import type { Song } from '@/types/music';
 
-export const pb = new PocketBase('http://188.115.125.74:8090/').autoCancellation(false);
+export const pb = new PocketBase('7zs67vd5wago.shares.zrok.io').autoCancellation(false);
 
 export function getFileUrl(record: { id: string; collectionId: string; collectionName: string }, filename: string) {
   const url = pb.files.getURL(record, filename);

@@ -5,7 +5,7 @@ import { pb, getSongCoverUrl, getUserAvatarUrl } from '@/lib/pocketbase';
 import { useAuth } from '@/contexts/AuthContext';
 import { usePlayer, usePlayerProgress } from '@/contexts/PlayerContext';
 import { toast } from 'sonner';
-import type { ListenSession } from '@/types/music';
+import type { ListenSession, Song } from '@/types/music';
 
 interface ListenSessionModalProps {
   isOpen: boolean;
@@ -14,12 +14,28 @@ interface ListenSessionModalProps {
 
 export default function ListenSessionModal({ isOpen, onClose }: ListenSessionModalProps) {
   const { user } = useAuth();
-  const { currentSong, isPlaying, togglePlay, seek } = usePlayer();
+  const { currentSong, isPlaying, togglePlay, pause, resume, seek, playCurrentSongOnly } = usePlayer();
   const { progress } = usePlayerProgress();
   const [session, setSession] = useState<ListenSession | null>(null);
   const [participants, setParticipants] = useState<any[]>([]);
   const [joinCode, setJoinCode] = useState('');
   const syncIntervalRef = useRef<NodeJS.Timeout>();
+  const isPlayingRef = useRef(isPlaying);
+  const currentSongRef = useRef<Song | null>(null);
+  const progressRef = useRef(0);
+  
+  // Keep ref in sync with state
+  useEffect(() => {
+    isPlayingRef.current = isPlaying;
+  }, [isPlaying]);
+
+  useEffect(() => {
+    currentSongRef.current = currentSong;
+  }, [currentSong]);
+
+  useEffect(() => {
+    progressRef.current = progress;
+  }, [progress]);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -27,6 +43,20 @@ export default function ListenSessionModal({ isOpen, onClose }: ListenSessionMod
       clearInterval(syncIntervalRef.current);
     };
   }, [isOpen]);
+
+  useEffect(() => {
+    if (!session || !user || session.host !== user.id) return;
+    if (!currentSong) return;
+    if (session.song === currentSong.id) return;
+
+    // Host changed song, push to session so participants switch too
+    pb.collection('listen_sessions').update(session.id, {
+      song: currentSong.id,
+      currentTime: progress,
+      isPlaying,
+      isActive: true,
+    }).catch(console.error);
+  }, [session, currentSong, progress, isPlaying, user]);
 
   const createSession = async () => {
     if (!user || !currentSong) return;
@@ -37,20 +67,25 @@ export default function ListenSessionModal({ isOpen, onClose }: ListenSessionMod
         currentTime: progress,
         isPlaying,
         participants: [user.id],
-        active: true,
+        isActive: true,
       });
       setSession(newSession as unknown as ListenSession);
+      loadParticipants((newSession as any).participants || []);
       toast.success('Session créée !');
 
-      // Start syncing
+      // Start syncing (host publishes current song, time and play state)
       syncIntervalRef.current = setInterval(async () => {
         try {
           await pb.collection('listen_sessions').update(newSession.id, {
+            song: currentSong.id,
             currentTime: progress,
             isPlaying,
+            isActive: true,
           });
-        } catch { }
-      }, 2000);
+        } catch (err) {
+          console.error('Listen session sync failed:', err);
+        }
+      }, 1000);
 
       // Subscribe to changes
       pb.collection('listen_sessions').subscribe(newSession.id, (e) => {
@@ -71,31 +106,71 @@ export default function ListenSessionModal({ isOpen, onClose }: ListenSessionMod
       const res = await pb.collection('listen_sessions').getOne(joinCode.trim(), {
         expand: 'song,host',
       });
-      if (!res.active) {
+      if (!(res.isActive ?? res.active)) {
         toast.error('Session terminée');
         return;
       }
 
       // Add self to participants
       const currentParticipants = res.participants || [];
+      let sessionToUse = res as unknown as ListenSession;
+
       if (!currentParticipants.includes(user.id)) {
-        await pb.collection('listen_sessions').update(res.id, {
+        const updated = await pb.collection('listen_sessions').update(res.id, {
           'participants+': user.id,
         });
+        sessionToUse = updated as unknown as ListenSession;
       }
 
-      setSession(res as unknown as ListenSession);
+      setSession(sessionToUse);
+      loadParticipants(sessionToUse.participants || []);
+      
+      // Load the song first before syncing position
+      if (res.expand?.song) {
+        await playCurrentSongOnly(res.expand.song);
+      }
+      
+      // Sync playback position
       seek(res.currentTime || 0);
+      
+      // Sync play state using ref to get current value
+      if (res.isPlaying !== isPlayingRef.current) {
+        togglePlay();
+      }
+      
       toast.success('Rejoint !');
 
       // Subscribe for sync
-      pb.collection('listen_sessions').subscribe(res.id, (e) => {
-        if (e.action === 'update') {
-          const updated = e.record as unknown as ListenSession;
-          setSession(updated);
-          // Sync playback
-          seek(updated.currentTime);
-          loadParticipants(updated.participants || []);
+      pb.collection('listen_sessions').subscribe(res.id, async (e) => {
+        if (e.action !== 'update') return;
+
+        const updated = e.record as unknown as ListenSession;
+        setSession(updated);
+        loadParticipants(updated.participants || []);
+
+        // Handle song change
+        if (updated.song && updated.song !== currentSongRef.current?.id) {
+          try {
+            const song = await pb.collection('songs').getOne(updated.song, { expand: 'uploadedBy' }) as unknown as any;
+            if (song) {
+              await playCurrentSongOnly(song);
+            }
+          } catch (err) {
+            console.error('Failed loading updated session song:', err);
+          }
+        }
+
+        // Sync playback position with tolerance to avoid jitter
+        const hostTime = updated.currentTime ?? 0;
+        if (Math.abs(hostTime - progressRef.current) > 0.7) {
+          seek(hostTime);
+        }
+
+        // Sync play state
+        if (updated.isPlaying && !isPlayingRef.current) {
+          resume();
+        } else if (!updated.isPlaying && isPlayingRef.current) {
+          pause();
         }
       }).catch(console.error);
     } catch (error) {
@@ -115,7 +190,7 @@ export default function ListenSessionModal({ isOpen, onClose }: ListenSessionMod
   const endSession = async () => {
     if (!session) return;
     try {
-      await pb.collection('listen_sessions').update(session.id, { active: false });
+      await pb.collection('listen_sessions').update(session.id, { isActive: false });
       pb.collection('listen_sessions').unsubscribe(session.id).catch(() => {});
       clearInterval(syncIntervalRef.current);
       setSession(null);

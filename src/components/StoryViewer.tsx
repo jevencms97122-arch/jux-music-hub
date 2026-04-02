@@ -1,10 +1,10 @@
 import { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, Play, ChevronLeft, ChevronRight, Eye } from 'lucide-react';
+import { X, Play } from 'lucide-react';
 import { pb, getSongCoverUrl, getSongAudioUrl, getUserAvatarUrl } from '@/lib/pocketbase';
 import { usePlayer } from '@/contexts/PlayerContext';
 import { useAuth } from '@/contexts/AuthContext';
-import type { Story } from '@/types/music';
+import type { Story, PBUser } from '@/types/music';
 
 interface StoryViewerProps {
   stories: Story[];
@@ -16,7 +16,7 @@ interface StoryViewerProps {
 export default function StoryViewer({ stories, initialIndex, isOpen, onClose }: StoryViewerProps) {
   const [currentIndex, setCurrentIndex] = useState(initialIndex);
   const [progress, setProgress] = useState(0);
-  const [viewCount, setViewCount] = useState(0);
+  const [viewers, setViewers] = useState<PBUser[]>([]);
   const audioRef = useRef(new Audio());
   const timerRef = useRef<NodeJS.Timeout>();
   const { playSong } = usePlayer();
@@ -47,10 +47,17 @@ export default function StoryViewer({ stories, initialIndex, isOpen, onClose }: 
       }).catch(() => {}); // Ignore duplicates
     }
 
-    // Load view count
-    pb.collection('story_views').getList(1, 1, {
+    // Load viewers for the story owner
+    pb.collection('story_views').getFullList({
       filter: `story="${story.id}"`,
-    }).then(res => setViewCount(res.totalItems)).catch(() => {});
+      expand: 'viewer',
+    }).then(res => {
+      const list = (res as any[])
+        .map(v => v.expand?.viewer)
+        .filter((viewer: PBUser | undefined): viewer is PBUser => Boolean(viewer));
+      const uniqueViewers = Array.from(new Map(list.map(v => [v.id, v])).values());
+      setViewers(uniqueViewers);
+    }).catch(() => {});
 
     // Progress timer
     const duration = (story.endTime - story.startTime) * 1000;
@@ -148,10 +155,32 @@ export default function StoryViewer({ stories, initialIndex, isOpen, onClose }: 
           <div className="flex-1">
             <p className="text-sm font-semibold text-white">{storyUser?.pseudo}</p>
           </div>
-          <div className="flex items-center gap-1 text-white/60 text-xs">
-            <Eye className="h-3.5 w-3.5" />
-            <span>{viewCount}</span>
-          </div>
+          {storyUser?.id === user?.id && (
+            <div className="text-white/80 text-xs">
+              {viewers.length === 0 ? (
+                <span>Aucun visualisateur pour le moment</span>
+              ) : (
+                <>
+                  <div className="flex items-center gap-1 mb-1">
+                    {viewers.slice(0, 4).map(v => (
+                      <img
+                        key={v.id}
+                        src={getUserAvatarUrl(v)}
+                        alt={v.pseudo}
+                        className="h-5 w-5 rounded-full border border-white/30"
+                      />
+                    ))}
+                    {viewers.length > 4 && (
+                      <span className="text-[10px]">+{viewers.length - 4}</span>
+                    )}
+                  </div>
+                  <div className="whitespace-nowrap overflow-hidden overflow-ellipsis text-[10px]">
+                    Vu par {viewers.map(v => v.pseudo).slice(0, 4).join(', ')}{viewers.length > 4 ? ', ...' : ''}
+                  </div>
+                </>
+              )}
+            </div>
+          )}
           <button onClick={onClose} className="p-2 text-white">
             <X className="h-6 w-6" />
           </button>

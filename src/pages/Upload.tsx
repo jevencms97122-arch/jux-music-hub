@@ -1,4 +1,4 @@
-import { useState, useRef, useMemo } from 'react';
+import { useState, useRef, useMemo, useEffect } from 'react';
 import { pb } from '@/lib/pocketbase';
 import { useAuth } from '@/contexts/AuthContext';
 import { Button } from '@/components/ui/button';
@@ -157,6 +157,87 @@ export default function Upload() {
   const [parsingMetadata, setParsingMetadata] = useState(false);
   const audioRef = useRef<HTMLInputElement>(null);
   const imageRef = useRef<HTMLInputElement>(null);
+  
+  // Nouveaux états pour la recherche de cover
+  const [searchingCover, setSearchingCover] = useState(false);
+  const [coverResults, setCoverResults] = useState<string[]>([]);
+  const [showCoverSelector, setShowCoverSelector] = useState(false);
+  const [selectedCoverUrl, setSelectedCoverUrl] = useState('');
+  const [showCoverChoiceModal, setShowCoverChoiceModal] = useState(false);
+
+  // Fonction de recherche de cover sur internet (DuckDuckGo Images)
+  const searchCover = async (searchTitle: string, searchAuthor: string) => {
+    if (!searchTitle.trim()) return;
+    
+    setSearchingCover(true);
+    setCoverResults([]);
+    
+    try {
+      const query = encodeURIComponent(`${searchTitle} ${searchAuthor} album cover official`.trim());
+      
+      // Utilisation directe de DuckDuckGo Image Search avec proxy pour CORS
+      const response = await fetch(`https://corsproxy.io/?https://duckduckgo.com/i.js?q=${query}&o=json&p=1&s=0&u=bing&f=,,,&l=fr-fr`);
+      
+      if (!response.ok) throw new Error('Erreur recherche');
+      
+      const data = await response.json();
+      
+      const images: string[] = [];
+      
+      if (data.results && data.results.length > 0) {
+        // Filtrer uniquement les images qui sont bien des covers (format carré)
+        for (const item of data.results) {
+          if (item.width && item.height && Math.abs(item.width - item.height) < 150) {
+            // Utiliser l'image en taille moyenne optimisée
+            images.push(item.thumbnail || item.image);
+          }
+          if (images.length >= 12) break;
+        }
+      }
+      
+      // Si aucun résultat on utilise le fallback Bing
+      if (images.length === 0) {
+        for (let i = 0; i < 6; i++) {
+          images.push(`https://tse${i%4}.mm.bing.net/th?q=${query}&w=300&h=300&c=7&rs=1&p=${i}`);
+        }
+      }
+      
+      setCoverResults(images);
+      
+      // Sélectionner automatiquement la première image si aucune n'est sélectionnée
+      if (images.length > 0 && !imageFile && !selectedCoverUrl) {
+        setSelectedCoverUrl(images[0]);
+        setImagePreview(images[0]);
+      }
+      
+    } catch (err) {
+      console.warn('Erreur lors de la recherche de cover:', err);
+      // Fallback minimal en cas d'erreur
+      const query = encodeURIComponent(`${searchTitle} ${searchAuthor} album cover`.trim());
+      const fallbackImages = [];
+      for (let i = 0; i < 6; i++) {
+        fallbackImages.push(`https://tse${i%4}.mm.bing.net/th?q=${query}&w=300&h=300&c=7&p=${i}`);
+      }
+      setCoverResults(fallbackImages);
+      
+      if (!imageFile && !selectedCoverUrl) {
+        setSelectedCoverUrl(fallbackImages[0]);
+        setImagePreview(fallbackImages[0]);
+      }
+    } finally {
+      setSearchingCover(false);
+    }
+  };
+  
+  // Recherche automatique quand le titre ou l'auteur change
+  useEffect(() => {
+    if (step === 2 && title.trim()) {
+      const debounce = setTimeout(() => {
+        searchCover(title, author);
+      }, 800);
+      return () => clearTimeout(debounce);
+    }
+  }, [title, author, step]);
 
   const filteredGenres = useMemo(() => {
     if (!genreSearch) return [...MUSIC_GENRES];
@@ -205,8 +286,30 @@ export default function Upload() {
     }
   };
 
+  // Gérer le choix de la source de l'image
+  const handleCoverButtonClick = () => {
+    setShowCoverChoiceModal(true);
+  };
+  
+  const selectCoverFromDevice = () => {
+    setShowCoverChoiceModal(false);
+    imageRef.current?.click();
+  };
+  
+  const selectCoverFromInternet = () => {
+    setShowCoverChoiceModal(false);
+    setShowCoverSelector(true);
+  };
+  
+  const selectCoverResult = (url: string) => {
+    setSelectedCoverUrl(url);
+    setImagePreview(url);
+    setImageFile(null); // On efface le fichier si on sélectionne une url
+    setShowCoverSelector(false);
+  };
+
   const step1Valid = title.trim() && author.trim() && genre;
-  const canUpload = step1Valid && audioFile && imageFile;
+  const canUpload = step1Valid && audioFile && (imageFile || selectedCoverUrl);
 
   const handleUpload = async () => {
     if (!canUpload || !user) return;
@@ -221,7 +324,12 @@ export default function Upload() {
       fd.append('author', author.trim());
       fd.append('genre', genre);
       fd.append('audioFile', audioFile);
-      fd.append('coverImage', imageFile);
+      if (imageFile) {
+        fd.append('coverImage', imageFile);
+      }
+      if (selectedCoverUrl) {
+        fd.append('url_coverSong', selectedCoverUrl);
+      }
       fd.append('uploadedBy', user.id);
       fd.append('playCount', '0');
       fd.append('likesCount', '0');
@@ -374,9 +482,62 @@ export default function Upload() {
             </div>
           </div>
 
+          {/* Modal de choix de source de cover */}
+          {showCoverChoiceModal && (
+            <div className="fixed inset-0 bg-black/50 z-50 flex items-end justify-center" onClick={() => setShowCoverChoiceModal(false)}>
+              <div className="bg-background w-full max-w-md rounded-t-2xl p-6 animate-slide-up" onClick={e => e.stopPropagation()}>
+                <h3 className="text-lg font-bold mb-4 text-center">Choisir la source de l'image</h3>
+                <div className="space-y-3">
+                  <Button onClick={selectCoverFromDevice} className="w-full justify-start">
+                    <Image className="h-5 w-5 mr-3" />
+                    Depuis mon appareil
+                  </Button>
+                  <Button onClick={selectCoverFromInternet} variant="secondary" className="w-full justify-start">
+                    <Search className="h-5 w-5 mr-3" />
+                    Rechercher sur internet
+                  </Button>
+                  <Button onClick={() => setShowCoverChoiceModal(false)} variant="ghost" className="w-full mt-2">
+                    Annuler
+                  </Button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Modal de sélection de cover depuis internet */}
+          {showCoverSelector && (
+            <div className="fixed inset-0 bg-black/50 z-50 flex items-end justify-center" onClick={() => setShowCoverSelector(false)}>
+              <div className="bg-background w-full max-w-md rounded-t-2xl p-6 max-h-[80vh] flex flex-col" onClick={e => e.stopPropagation()}>
+                <h3 className="text-lg font-bold mb-4 text-center">Sélectionner une cover</h3>
+                {searchingCover ? (
+                  <div className="flex items-center justify-center py-8">
+                    <div className="h-8 w-8 rounded-full border-3 border-primary border-t-transparent animate-spin" />
+                  </div>
+                ) : (
+                  <>
+                    <div className="grid grid-cols-3 gap-2 overflow-y-auto max-h-60">
+                      {coverResults.map((url, idx) => (
+                        <button 
+                          key={idx} 
+                          onClick={() => selectCoverResult(url)}
+                          className={`aspect-square rounded-lg overflow-hidden border-2 transition-colors ${selectedCoverUrl === url ? 'border-primary' : 'border-transparent'}`}
+                        >
+                          <img src={url} alt={`Cover ${idx+1}`} className="w-full h-full object-cover" />
+                        </button>
+                      ))}
+                    </div>
+                    <Button onClick={() => setShowCoverSelector(false)} variant="ghost" className="w-full mt-4">
+                      Fermer
+                    </Button>
+                  </>
+                )}
+              </div>
+            </div>
+          )}
+
           <div className="space-y-3">
             <h2 className="text-sm font-semibold text-foreground">Image de couverture</h2>
-            <button onClick={() => imageRef.current?.click()} className="w-full flex items-center gap-3 p-4 rounded-lg bg-secondary border border-border hover:border-primary/50 transition-colors">
+            <button onClick={handleCoverButtonClick} className="w-full flex items-center gap-3 p-4 rounded-lg bg-secondary border border-border hover:border-primary/50 transition-colors">
               {imagePreview ? (
                 <img src={imagePreview} alt="Cover" className="h-12 w-12 rounded object-cover" />
               ) : (

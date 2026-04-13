@@ -15,6 +15,7 @@ interface PlayerContextType {
   likedSongs: Set<string>;
   shuffle: boolean;
   repeatMode: RepeatMode;
+  playbackRate: number;
   playSong: (song: Song, autoQueue?: boolean) => void;
   playSongFromList: (song: Song, list: Song[], index: number, playlistId?: string) => void;
   playCurrentSongOnly: (song: Song) => void;
@@ -28,6 +29,7 @@ interface PlayerContextType {
   toggleLike: (song: Song) => Promise<void>;
   toggleShuffle: () => void;
   cycleRepeat: () => void;
+  setPlaybackRate: (rate: number) => void;
   getImageLoadControl: (songId: string) => { imageKey: string; loadCount: number };
   registerImageLoad: (songId: string) => void;
   radioMode: boolean;
@@ -62,6 +64,7 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
   const [isLoading, setIsLoading] = useState(false);
   const [imageLoadCounts, setImageLoadCounts] = useState<Record<string, number>>({});
   const [radioMode, setRadioMode] = useState(false);
+  const [playbackRate, setPlaybackRateState] = useState(1);
   const audioRef = useRef<HTMLAudioElement>(new Audio());
   const nextAudioRef = useRef<HTMLAudioElement>(new Audio());
   
@@ -69,8 +72,15 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     audioRef.current.preload = 'auto';
     audioRef.current.volume = 1;
+    // Disable preservesPitch so speed changes affect pitch (slowed/sped up effect)
+    (audioRef.current as any).preservesPitch = false;
+    (audioRef.current as any).mozPreservesPitch = false;
+    (audioRef.current as any).webkitPreservesPitch = false;
     nextAudioRef.current.preload = 'auto';
     nextAudioRef.current.volume = 0;
+    (nextAudioRef.current as any).preservesPitch = false;
+    (nextAudioRef.current as any).mozPreservesPitch = false;
+    (nextAudioRef.current as any).webkitPreservesPitch = false;
   }, []);
   
   const loadingMore = useRef(false);

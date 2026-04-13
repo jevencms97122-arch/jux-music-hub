@@ -159,6 +159,31 @@ export default function PlayerPage() {
                      <Radio className="h-4 w-4" />
                      {radioMode ? 'Désactiver mode Radio' : 'Activer mode Radio'}
                    </button>
+                   <button
+                     onClick={() => {
+                       setShowSpeedMenu(true);
+                       setShowMenu(false);
+                     }}
+                     className="w-full px-4 py-3 text-left text-sm hover:bg-accent/50 flex items-center gap-2 transition-colors"
+                     type="button"
+                   >
+                     <Gauge className="h-4 w-4" />
+                     Vitesse ({playbackRate}x)
+                   </button>
+                   <button
+                     onClick={() => {
+                       if (currentSong) {
+                         const url = `${window.location.origin}/listen/${currentSong.id}`;
+                         navigator.clipboard.writeText(url);
+                         setShowMenu(false);
+                       }
+                     }}
+                     className="w-full px-4 py-3 text-left text-sm hover:bg-accent/50 flex items-center gap-2 transition-colors"
+                     type="button"
+                   >
+                     <Share2 className="h-4 w-4" />
+                     Partager le lien
+                   </button>
                  </div>
               )}
             </div>

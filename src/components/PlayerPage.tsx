@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { usePlayer, usePlayerProgress } from '@/contexts/PlayerContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { getSongCoverUrl, pb } from '@/lib/pocketbase';
-import { ChevronDown, Play, Pause, SkipForward, SkipBack, Shuffle, Repeat, Repeat1, Heart, Headphones, Loader2, Plus, MoreVertical, LogIn, Radio, BookOpen } from 'lucide-react';
+import { ChevronDown, Play, Pause, SkipForward, SkipBack, Shuffle, Repeat, Repeat1, Heart, Headphones, Loader2, Plus, MoreVertical, LogIn, Radio, BookOpen, Share2, Gauge } from 'lucide-react';
 import QueueView from './QueueView';
 import FriendsLikedBadge from './FriendsLikedBadge';
 import AddToPlaylistModal from './AddToPlaylistModal';
@@ -18,7 +18,7 @@ function formatTime(s: number) {
 }
 
 export default function PlayerPage() {
-  const { currentSong, isPlaying, isLoading, togglePlay, next, previous, seek, setPlayerOpen, playerOpen, shuffle, repeatMode, toggleShuffle, cycleRepeat, toggleLike: toggleLikeContext, likedSongs, getImageLoadControl, registerImageLoad, radioMode, toggleRadioMode } = usePlayer();
+  const { currentSong, isPlaying, isLoading, togglePlay, next, previous, seek, setPlayerOpen, playerOpen, shuffle, repeatMode, toggleShuffle, cycleRepeat, toggleLike: toggleLikeContext, likedSongs, getImageLoadControl, registerImageLoad, radioMode, toggleRadioMode, playbackRate, setPlaybackRate } = usePlayer();
   const { progress, duration } = usePlayerProgress();
 
   const { imageKey } = currentSong ? getImageLoadControl(currentSong.id) : { imageKey: '' };
@@ -30,6 +30,7 @@ export default function PlayerPage() {
   const [showAddToPlaylist, setShowAddToPlaylist] = useState(false);
   const [showCreateStory, setShowCreateStory] = useState(false);
   const [showMenu, setShowMenu] = useState(false);
+  const [showSpeedMenu, setShowSpeedMenu] = useState(false);
   const navigate = useNavigate();
   const sliderRef = useRef<HTMLInputElement>(null);
   const animationFrameRef = useRef<number>();

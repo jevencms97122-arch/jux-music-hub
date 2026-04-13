@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import { pb, getSongAudioUrl, getSongCoverUrl } from '@/lib/pocketbase';
-import { showMediaNotification, closeMediaNotification, setupMediaControlListeners } from '@/lib/notifications';
+import { showMediaNotification, closeMediaNotification, setupMediaControlListeners, clearMediaControlListeners, updateMediaPosition } from '@/lib/notifications';
 import { updateStreak } from '@/lib/streaks';
 import type { Song } from '@/types/music';
 
@@ -44,13 +44,8 @@ interface PlayerProgressContextType {
 const PlayerContext = createContext<PlayerContextType | null>(null);
 const PlayerProgressContext = createContext<PlayerProgressContextType | null>(null);
 
-const lastProgressTime = 0;
-const progressVelocity = 0;
-
 export function PlayerProvider({ children }: { children: React.ReactNode }) {
   const [currentSong, setCurrentSong] = useState<Song | null>(null);
-  
-
   const [queue, setQueue] = useState<Song[]>([]);
   const [queueIndex, setQueueIndex] = useState(-1);
   const [isPlaying, setIsPlaying] = useState(false);
@@ -65,31 +60,46 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
   const [imageLoadCounts, setImageLoadCounts] = useState<Record<string, number>>({});
   const [radioMode, setRadioMode] = useState(false);
   const [playbackRate, setPlaybackRateState] = useState(1);
-  const audioRef = useRef<HTMLAudioElement>(new Audio());
-  const nextAudioRef = useRef<HTMLAudioElement>(new Audio());
-  
-  // Set preload settings
-  useEffect(() => {
-    audioRef.current.preload = 'auto';
-    audioRef.current.volume = 1;
-    // Disable preservesPitch so speed changes affect pitch (slowed/sped up effect)
-    (audioRef.current as any).preservesPitch = false;
-    (audioRef.current as any).mozPreservesPitch = false;
-    (audioRef.current as any).webkitPreservesPitch = false;
-    nextAudioRef.current.preload = 'auto';
-    nextAudioRef.current.volume = 0;
-    (nextAudioRef.current as any).preservesPitch = false;
-    (nextAudioRef.current as any).mozPreservesPitch = false;
-    (nextAudioRef.current as any).webkitPreservesPitch = false;
-  }, []);
-  
+
+  // Single audio element - no ref swapping
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+  const nextAudioRef = useRef<HTMLAudioElement | null>(null);
   const loadingMore = useRef(false);
-  const lastProgressRef = useRef(0);
   const isLoadingRef = useRef(false);
-  const preloadedNextSong = useRef<Song | null>(null);
   const crossfadeActive = useRef(false);
-  const fadeDuration = 4000; // 4 secondes de transition
-  const preloadThreshold = 15; // Précharger 15s avant la fin
+  const crossfadeTimer = useRef<number | null>(null);
+  const preloadedNextSong = useRef<Song | null>(null);
+  const preloadedNextIdx = useRef<number>(-1);
+  
+  const CROSSFADE_DURATION = 3000; // 3s crossfade
+  const PRELOAD_THRESHOLD = 10; // preload 10s before end
+
+  // Initialize audio elements
+  useEffect(() => {
+    const audio = new Audio();
+    audio.preload = 'auto';
+    audio.volume = 1;
+    (audio as any).preservesPitch = false;
+    (audio as any).mozPreservesPitch = false;
+    (audio as any).webkitPreservesPitch = false;
+    audioRef.current = audio;
+
+    const nextAudio = new Audio();
+    nextAudio.preload = 'auto';
+    nextAudio.volume = 0;
+    (nextAudio as any).preservesPitch = false;
+    (nextAudio as any).mozPreservesPitch = false;
+    (nextAudio as any).webkitPreservesPitch = false;
+    nextAudioRef.current = nextAudio;
+
+    return () => {
+      audio.pause();
+      audio.src = '';
+      nextAudio.pause();
+      nextAudio.src = '';
+      if (crossfadeTimer.current) cancelAnimationFrame(crossfadeTimer.current);
+    };
+  }, []);
 
   const incrementPlayCount = useCallback(async (song: Song) => {
     try {
@@ -102,8 +112,6 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const recordListen = useCallback((song: Song) => {
-    // Backend only - no local optimistic update
-    // Background DB sync
     if (pb.authStore.record) {
       pb.collection('listen_history').create({
         user: pb.authStore.record.id,
@@ -131,273 +139,205 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
     }
   }, []);
 
-  const playSongInternal = useCallback(async (song: Song, q: Song[], idx: number) => {
-    // Fetch fresh song data from backend
-    const freshSong = await pb.collection('songs').getOne(song.id, { expand: 'uploadedBy' }) as unknown as Song;
-    // Reset load count for new song
+  // Update media notification whenever song or playback state changes
+  const updateNotification = useCallback((song: Song | null, playing: boolean, liked: Set<string>) => {
+    if (!song) return;
+    if (radioMode) {
+      closeMediaNotification();
+      clearMediaControlListeners();
+    } else {
+      showMediaNotification(song, playing, liked.has(song.id));
+    }
+  }, [radioMode]);
+
+  // Core play function - handles loading a song into the main audio
+  const loadAndPlay = useCallback(async (song: Song, newQueue: Song[], idx: number) => {
+    const audio = audioRef.current;
+    if (!audio) return;
+
+    // Cancel any active crossfade
+    if (crossfadeTimer.current) {
+      cancelAnimationFrame(crossfadeTimer.current);
+      crossfadeTimer.current = null;
+    }
+    crossfadeActive.current = false;
+    
+    // Stop next audio if playing
+    if (nextAudioRef.current) {
+      nextAudioRef.current.pause();
+      nextAudioRef.current.volume = 0;
+      nextAudioRef.current.src = '';
+    }
+
+    // Fetch fresh song data
+    let freshSong: Song;
+    try {
+      freshSong = await pb.collection('songs').getOne(song.id, { expand: 'uploadedBy' }) as unknown as Song;
+    } catch {
+      freshSong = song;
+    }
+
+    // Reset state
     setImageLoadCounts(prev => ({ ...prev, [freshSong.id]: 0 }));
-    setQueue(q);
+    setQueue(newQueue);
     setCurrentSong(freshSong);
+    setQueueIndex(idx);
     setPlayerOpen(true);
     isLoadingRef.current = true;
     setIsLoading(true);
-    audioRef.current.src = getSongAudioUrl(freshSong);
-    audioRef.current.load();
-    setQueueIndex(idx);
-    await recordListen(freshSong);
-  }, [recordListen]);
+    preloadedNextSong.current = null;
+    preloadedNextIdx.current = -1;
+
+    // Smooth volume fade out on current audio before switching
+    const fadeOutAndSwitch = () => {
+      // Quick fade out (200ms)
+      const startVol = audio.volume;
+      const fadeStart = performance.now();
+      const fadeOut = (time: number) => {
+        const elapsed = time - fadeStart;
+        const progress = Math.min(elapsed / 200, 1);
+        audio.volume = startVol * (1 - progress);
+        if (progress < 1) {
+          requestAnimationFrame(fadeOut);
+        } else {
+          audio.pause();
+          audio.volume = 1;
+          audio.src = getSongAudioUrl(freshSong);
+          audio.playbackRate = playbackRate;
+          audio.load();
+        }
+      };
+      
+      if (audio.src && !audio.paused) {
+        requestAnimationFrame(fadeOut);
+      } else {
+        audio.src = getSongAudioUrl(freshSong);
+        audio.playbackRate = playbackRate;
+        audio.load();
+      }
+    };
+
+    fadeOutAndSwitch();
+    recordListen(freshSong);
+  }, [recordListen, playbackRate]);
 
   const playSong = useCallback(async (song: Song, autoQueue = true) => {
-    // Fetch fresh song data from backend
-    const freshSong = await pb.collection('songs').getOne(song.id, { expand: 'uploadedBy' }) as unknown as Song;
-    // Reset load count for new song
-    setImageLoadCounts(prev => ({ ...prev, [freshSong.id]: 0 }));
     setIsFixedQueue(false);
-    setCurrentSong(freshSong);
-    setPlayerOpen(true);
-    isLoadingRef.current = true;
-    setIsLoading(true);
-    audioRef.current.src = getSongAudioUrl(freshSong);
-    audioRef.current.load();
-    await recordListen(freshSong);
-
+    
     if (autoQueue) {
       try {
         const result = await pb.collection('songs').getList(1, 15, {
           sort: '@random',
-          filter: `id!="${freshSong.id}"`,
+          filter: `id!="${song.id}"`,
           expand: 'uploadedBy',
         });
-        setQueue([freshSong, ...(result.items as unknown as Song[])]);
-        setQueueIndex(0);
+        const newQueue = [song, ...(result.items as unknown as Song[])];
+        await loadAndPlay(song, newQueue, 0);
       } catch {
-        setQueue([freshSong]);
-        setQueueIndex(0);
+        await loadAndPlay(song, [song], 0);
       }
+    } else {
+      await loadAndPlay(song, [song], 0);
     }
-  }, [recordListen]);
+  }, [loadAndPlay]);
 
-  // Play from a fixed list (e.g. Favorites) — no random loading
   const playSongFromList = useCallback((song: Song, list: Song[], index: number, playlistId?: string) => {
     setIsFixedQueue(true);
-    playSongInternal(song, list, index);
-    // Increment playlist playCount if playing from a playlist
+    loadAndPlay(song, list, index);
     if (playlistId) {
       pb.collection('playlists').update(playlistId, { 'playCount+': 1 }).catch(console.error);
     }
-  }, [playSongInternal]);
+  }, [loadAndPlay]);
 
-  // Play single song without auto-queue (fixes playlist add issue)
   const playCurrentSongOnly = useCallback((song: Song) => {
     playSongFromList(song, [song], 0);
   }, [playSongFromList]);
 
+  const getNextIndex = useCallback(() => {
+    if (repeatMode === 'one') return queueIndex;
+    
+    if (shuffle) {
+      const candidates = Array.from({ length: queue.length }, (_, i) => i).filter(i => i !== queueIndex);
+      if (candidates.length === 0) return -1;
+      return candidates[Math.floor(Math.random() * candidates.length)];
+    }
+    
+    const nextIdx = queueIndex + 1;
+    if (nextIdx >= queue.length) {
+      return repeatMode === 'all' ? 0 : -1;
+    }
+    return nextIdx;
+  }, [queue, queueIndex, shuffle, repeatMode]);
+
   const next = useCallback(async () => {
     if (queue.length === 0) return;
 
-    // Repeat one: restart current song
     if (repeatMode === 'one') {
-      audioRef.current.currentTime = 0;
-      audioRef.current.play().catch(console.error);
+      const audio = audioRef.current;
+      if (audio) {
+        audio.currentTime = 0;
+        audio.play().catch(console.error);
+      }
       return;
     }
 
-    let nextIdx: number;
-    if (shuffle) {
-      // Pick a random index that's not the current one
-      const candidates = Array.from({ length: queue.length }, (_, i) => i).filter(i => i !== queueIndex);
-      if (candidates.length === 0) return;
-      nextIdx = candidates[Math.floor(Math.random() * candidates.length)];
-    } else {
-      nextIdx = queueIndex + 1;
-    }
+    const nextIdx = getNextIndex();
+    if (nextIdx < 0 || !queue[nextIdx]) return;
 
-    if (nextIdx >= queue.length) {
-      if (repeatMode === 'all') {
-        nextIdx = 0;
-      } else {
-        return; // End of queue
-      }
-    }
+    await loadAndPlay(queue[nextIdx], queue, nextIdx);
 
-    try {
-      // Fetch fresh nextSong
-      const freshNextSong = await pb.collection('songs').getOne(queue[nextIdx].id, { expand: 'uploadedBy' }) as unknown as Song;
-      // Reset load count for new song
-      setImageLoadCounts(prev => ({ ...prev, [freshNextSong.id]: 0 }));
-      setQueueIndex(nextIdx);
-      setCurrentSong(freshNextSong);
-      isLoadingRef.current = true;
-      setIsLoading(true);
-      audioRef.current.src = getSongAudioUrl(freshNextSong);
-      audioRef.current.load();
-      await recordListen(freshNextSong);
-
-      // Auto-load more only for non-fixed queues
-      if (!isFixedQueue && queue.length - nextIdx - 1 <= 5) {
-        loadMoreQueue(queue.map(s => s.id));
-      }
-    } catch (error) {
-      console.error('Error playing next song:', error);
-    }
-  }, [queue, queueIndex, loadMoreQueue, recordListen, shuffle, repeatMode, isFixedQueue]);
-
-  const previous = useCallback(async () => {
-    if (audioRef.current.currentTime > 3) {
-      audioRef.current.currentTime = 0;
-      return;
-    }
-    if (queueIndex > 0) {
-      try {
-        const prevIdx = queueIndex - 1;
-        // Fetch fresh prevSong
-        const freshPrevSong = await pb.collection('songs').getOne(queue[prevIdx].id, { expand: 'uploadedBy' }) as unknown as Song;
-        // Reset load count for new song
-        setImageLoadCounts(prev => ({ ...prev, [freshPrevSong.id]: 0 }));
-        setQueueIndex(prevIdx);
-        setCurrentSong(freshPrevSong);
-        isLoadingRef.current = true;
-        setIsLoading(true);
-        audioRef.current.src = getSongAudioUrl(freshPrevSong);
-        audioRef.current.load();
-        await recordListen(freshPrevSong);
-      } catch (error) {
-        console.error('Error playing previous song:', error);
-      }
-    }
-  }, [queueIndex, queue, recordListen]);
-
-  const pause = useCallback(() => { 
-    audioRef.current.pause(); 
-    setIsPlaying(false);
-    if (currentSong && !radioMode) {
-      showMediaNotification(currentSong, false, likedSongs.has(currentSong.id));
-    }
-  }, [currentSong, likedSongs, radioMode]);
-
-  const resume = useCallback(() => { 
-    audioRef.current.play().catch(console.error); 
-    setIsPlaying(true);
-    if (currentSong && !radioMode) {
-      showMediaNotification(currentSong, true, likedSongs.has(currentSong.id));
-    }
-  }, [currentSong, likedSongs, radioMode]);
-  const togglePlay = useCallback(() => {
-    if (isPlaying) {
-      pause();
-    } else {
-      resume();
-    }
-  }, [isPlaying, pause, resume]);
-  const seek = useCallback((time: number) => { audioRef.current.currentTime = time; }, []);
-  // Fonction Crossfade smooth entre les deux audios
-  const performCrossfade = useCallback(async (nextSong: Song, nextIdx: number) => {
-    if (crossfadeActive.current) return;
-    crossfadeActive.current = true;
-    
-    const freshNextSong = await pb.collection('songs').getOne(nextSong.id, { expand: 'uploadedBy' }) as unknown as Song;
-    
-    // Préparer le prochain audio
-    setQueueIndex(nextIdx);
-    setCurrentSong(freshNextSong);
-    setImageLoadCounts(prev => ({ ...prev, [freshNextSong.id]: 0 }));
-    await recordListen(freshNextSong);
-    
-    // Commencer la lecture du prochain audio à volume 0
-    nextAudioRef.current.play().catch(console.error);
-    
-    const startTime = Date.now();
-    const fadeInterval = setInterval(() => {
-      const elapsed = Date.now() - startTime;
-      const progress = Math.min(elapsed / fadeDuration, 1);
-      
-      // Courbe d'easing pour transition naturelle (pas linéaire)
-      const easeProgress = 1 - Math.pow(1 - progress, 3);
-      
-      audioRef.current.volume = 1 - easeProgress;
-      nextAudioRef.current.volume = easeProgress;
-      
-      if (progress >= 1) {
-        clearInterval(fadeInterval);
-        
-        // Stopper l'ancien audio
-        audioRef.current.pause();
-        audioRef.current.currentTime = 0;
-        
-        // Echanger les refs audio
-        const temp = audioRef.current;
-        audioRef.current = nextAudioRef.current;
-        nextAudioRef.current = temp;
-        
-        // Reset pour la prochaine fois
-        nextAudioRef.current.volume = 0;
-        nextAudioRef.current.src = '';
-        audioRef.current.volume = 1;
-        preloadedNextSong.current = null;
-        crossfadeActive.current = false;
-        
-        // Mettre à jour la progression
-        setProgress(audioRef.current.currentTime);
-        setDuration(audioRef.current.duration || 0);
-        
-        // Mettre à jour les notifications media
-        if ('mediaSession' in navigator && currentSong) {
-          navigator.mediaSession.metadata = new MediaMetadata({
-            title: currentSong.title,
-            artist: currentSong.expand?.uploadedBy?.pseudo || currentSong.author || 'Unknown Artist',
-            album: 'Jux Music Hub',
-            artwork: [
-              { src: getSongCoverUrl(currentSong), sizes: '256x256', type: 'image/jpeg' },
-              { src: getSongCoverUrl(currentSong), sizes: '512x512', type: 'image/jpeg' },
-            ],
-          });
-          showMediaNotification(currentSong, true, likedSongs.has(currentSong.id));
-        }
-        
-        setIsLoading(false);
-        isLoadingRef.current = false;
-      }
-    }, 16); // 60fps
-    
-    // Auto-charger la suite si besoin
+    // Auto-load more for non-fixed queues
     if (!isFixedQueue && queue.length - nextIdx - 1 <= 5) {
       loadMoreQueue(queue.map(s => s.id));
     }
-  }, [queue, recordListen, loadMoreQueue, isFixedQueue, fadeDuration]);
+  }, [queue, queueIndex, loadAndPlay, getNextIndex, loadMoreQueue, isFixedQueue, repeatMode]);
 
-  // Précharger la musique suivante
-  const preloadNextSong = useCallback(() => {
-    if (repeatMode === 'one' || crossfadeActive.current || preloadedNextSong.current) return;
+  const previous = useCallback(async () => {
+    const audio = audioRef.current;
+    if (!audio) return;
     
-    let nextIdx = shuffle 
-      ? Math.floor(Math.random() * queue.length)
-      : queueIndex + 1;
-    
-    if (nextIdx >= queue.length) {
-      nextIdx = repeatMode === 'all' ? 0 : -1;
+    if (audio.currentTime > 3) {
+      audio.currentTime = 0;
+      return;
     }
-    
-    if (nextIdx >= 0 && queue[nextIdx]) {
-      const nextSong = queue[nextIdx];
-      preloadedNextSong.current = nextSong;
-      nextAudioRef.current.src = getSongAudioUrl(nextSong);
-      nextAudioRef.current.load();
+    if (queueIndex > 0) {
+      await loadAndPlay(queue[queueIndex - 1], queue, queueIndex - 1);
     }
-  }, [queue, queueIndex, shuffle, repeatMode]);
+  }, [queueIndex, queue, loadAndPlay]);
+
+  const pause = useCallback(() => {
+    const audio = audioRef.current;
+    if (audio) audio.pause();
+    setIsPlaying(false);
+    updateNotification(currentSong, false, likedSongs);
+  }, [currentSong, likedSongs, updateNotification]);
+
+  const resume = useCallback(() => {
+    const audio = audioRef.current;
+    if (audio) audio.play().catch(console.error);
+    setIsPlaying(true);
+    updateNotification(currentSong, true, likedSongs);
+  }, [currentSong, likedSongs, updateNotification]);
+
+  const togglePlay = useCallback(() => {
+    if (isPlaying) pause(); else resume();
+  }, [isPlaying, pause, resume]);
+
+  const seek = useCallback((time: number) => {
+    const audio = audioRef.current;
+    if (audio) audio.currentTime = time;
+  }, []);
 
   const toggleShuffle = useCallback(() => setShuffle(p => !p), []);
   const cycleRepeat = useCallback(() => {
     setRepeatMode(prev => prev === 'off' ? 'all' : prev === 'all' ? 'one' : 'off');
   }, []);
-
-  const toggleRadioMode = useCallback(() => {
-    setRadioMode(p => !p);
-  }, []);
+  const toggleRadioMode = useCallback(() => setRadioMode(p => !p), []);
 
   const setPlaybackRate = useCallback((rate: number) => {
     setPlaybackRateState(rate);
-    audioRef.current.playbackRate = rate;
-    nextAudioRef.current.playbackRate = rate;
+    if (audioRef.current) audioRef.current.playbackRate = rate;
+    if (nextAudioRef.current) nextAudioRef.current.playbackRate = rate;
   }, []);
 
   const toggleLike = useCallback(async (song: Song) => {
@@ -422,15 +362,12 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
         await pb.collection('song_likes').create({ user: userId, song: song.id });
         setLikedSongs(prev => new Set(prev).add(song.id));
 
-        // Add to "Titres likés" auto-playlist
         try {
           let likedPlaylist = await pb.collection('playlists').getList(1, 1, {
             filter: `owner="${userId}" && title="Titres likés"`,
           });
-
           if (likedPlaylist.items.length === 0) {
-            // Create the auto-playlist if it doesn't exist
-            likedPlaylist = await pb.collection('playlists').create({
+            await pb.collection('playlists').create({
               title: 'Titres likés',
               description: 'Vos morceaux favoris automatiquement ajoutés',
               public: false,
@@ -442,19 +379,15 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
               thumbnailMode: 'grid',
             });
           } else {
-            // Add song to existing playlist if not already there
             const playlist = likedPlaylist.items[0];
             if (!playlist.songs.includes(song.id)) {
-              await pb.collection('playlists').update(playlist.id, {
-                'songs+': song.id,
-              });
+              await pb.collection('playlists').update(playlist.id, { 'songs+': song.id });
             }
           }
         } catch (playlistError) {
           console.error('Error updating liked playlist:', playlistError);
         }
       }
-      // Force update count on the server side
       const currentLikesCount = song.likesCount || 0;
       await pb.collection('songs').update(song.id, {
         likesCount: isCurrentlyLiked ? Math.max(0, currentLikesCount - 1) : currentLikesCount + 1,
@@ -464,6 +397,7 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
     }
   }, [likedSongs]);
 
+  // Load liked songs on mount
   useEffect(() => {
     const loadLikedSongs = async () => {
       if (!pb.authStore.record) return;
@@ -471,8 +405,7 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
         const likes = await pb.collection('song_likes').getFullList({
           filter: `user="${pb.authStore.record.id}"`,
         });
-        const likedIds = new Set<string>(likes.map((like: any) => like.song));
-        setLikedSongs(likedIds);
+        setLikedSongs(new Set<string>(likes.map((like: any) => like.song)));
       } catch (error) {
         console.error('Error loading liked songs:', error);
       }
@@ -480,172 +413,210 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
     loadLikedSongs();
   }, []);
 
-  // Load image load counts from localStorage
-  useEffect(() => {
+  // Preload next song
+  const preloadNextSong = useCallback(() => {
+    if (repeatMode === 'one' || crossfadeActive.current || preloadedNextSong.current) return;
+    
+    const nextIdx = getNextIndex();
+    if (nextIdx < 0 || !queue[nextIdx] || !nextAudioRef.current) return;
+
+    const nextSong = queue[nextIdx];
+    preloadedNextSong.current = nextSong;
+    preloadedNextIdx.current = nextIdx;
+    nextAudioRef.current.src = getSongAudioUrl(nextSong);
+    nextAudioRef.current.playbackRate = playbackRate;
+    nextAudioRef.current.load();
+  }, [queue, getNextIndex, repeatMode, playbackRate]);
+
+  // Crossfade to next song
+  const performCrossfade = useCallback(async (nextSong: Song, nextIdx: number) => {
+    if (crossfadeActive.current || !audioRef.current || !nextAudioRef.current) return;
+    crossfadeActive.current = true;
+
+    let freshNextSong: Song;
     try {
-      const saved = localStorage.getItem('jux_imageLoadCounts');
-      if (saved) {
-        setImageLoadCounts(JSON.parse(saved));
+      freshNextSong = await pb.collection('songs').getOne(nextSong.id, { expand: 'uploadedBy' }) as unknown as Song;
+    } catch {
+      freshNextSong = nextSong;
+    }
+
+    // Update state for new song
+    setQueueIndex(nextIdx);
+    setCurrentSong(freshNextSong);
+    setImageLoadCounts(prev => ({ ...prev, [freshNextSong.id]: 0 }));
+    recordListen(freshNextSong);
+
+    // Start next audio
+    const nextAudio = nextAudioRef.current;
+    const mainAudio = audioRef.current;
+    nextAudio.play().catch(console.error);
+
+    const startTime = performance.now();
+    
+    const fade = (time: number) => {
+      const elapsed = time - startTime;
+      const t = Math.min(elapsed / CROSSFADE_DURATION, 1);
+      // Ease in-out curve
+      const ease = t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
+      
+      mainAudio.volume = 1 - ease;
+      nextAudio.volume = ease;
+      
+      // Update progress from the new audio
+      setProgress(nextAudio.currentTime);
+      setDuration(nextAudio.duration || 0);
+      
+      if (t < 1) {
+        crossfadeTimer.current = requestAnimationFrame(fade);
+      } else {
+        // Crossfade complete - swap audio elements
+        mainAudio.pause();
+        mainAudio.src = '';
+        mainAudio.volume = 1;
+        
+        // Swap refs
+        const temp = audioRef.current;
+        audioRef.current = nextAudioRef.current;
+        nextAudioRef.current = temp;
+        
+        // Reset next audio
+        if (nextAudioRef.current) {
+          nextAudioRef.current.volume = 0;
+          nextAudioRef.current.src = '';
+        }
+        
+        preloadedNextSong.current = null;
+        preloadedNextIdx.current = -1;
+        crossfadeActive.current = false;
+        crossfadeTimer.current = null;
+        
+        setIsLoading(false);
+        isLoadingRef.current = false;
+
+        // Update notification with new song
+        showMediaNotification(freshNextSong, true, likedSongs.has(freshNextSong.id));
+
+        // Auto-load more
+        if (!isFixedQueue && queue.length - nextIdx - 1 <= 5) {
+          loadMoreQueue(queue.map(s => s.id));
+        }
       }
-    } catch {
-      // Ignore parse errors
-    }
-  }, []);
+    };
+    
+    crossfadeTimer.current = requestAnimationFrame(fade);
+  }, [recordListen, loadMoreQueue, isFixedQueue, likedSongs, queue, CROSSFADE_DURATION]);
 
-  // Save to localStorage when counts change
-  useEffect(() => {
-    try {
-      localStorage.setItem('jux_imageLoadCounts', JSON.stringify(imageLoadCounts));
-    } catch {
-      // Ignore storage errors
-    }
-  }, [imageLoadCounts]);
-
+  // Main audio event listeners - re-attach whenever audio element changes
   useEffect(() => {
     const audio = audioRef.current;
+    if (!audio) return;
 
-    if ('mediaSession' in navigator && currentSong) {
-      if (radioMode) {
-        // Mode Radio : SUPPRIMER COMPLETEMENT la notification système
-        closeMediaNotification();
-        
-        // Désactiver tous les contrôles mediaSession
-        navigator.mediaSession.metadata = null;
-        navigator.mediaSession.setActionHandler('play', null);
-        navigator.mediaSession.setActionHandler('pause', null);
-        navigator.mediaSession.setActionHandler('nexttrack', null);
-        navigator.mediaSession.setActionHandler('previoustrack', null);
-        
-        // Supprimer complètement la barre de progression
-        if ('setPositionState' in navigator.mediaSession) {
-          try {
-            navigator.mediaSession.setPositionState(null);
-          } catch {}
-        }
-      } else {
-        // Mode Normal complet
-        const coverUrl = getSongCoverUrl(currentSong);
-        navigator.mediaSession.metadata = new MediaMetadata({
-          title: currentSong.title,
-          artist: currentSong.expand?.uploadedBy?.pseudo || currentSong.author || 'Unknown Artist',
-          album: 'Jux Music Hub',
-          artwork: [
-            { src: coverUrl, sizes: '256x256', type: 'image/jpeg' },
-            { src: coverUrl, sizes: '512x512', type: 'image/jpeg' },
-          ],
-        });
-
-        navigator.mediaSession.setActionHandler('play', () => resume());
-        navigator.mediaSession.setActionHandler('pause', () => pause());
-        navigator.mediaSession.setActionHandler('nexttrack', () => next());
-        navigator.mediaSession.setActionHandler('previoustrack', () => previous());
-
-        // Show media notification with cover image
-        showMediaNotification(currentSong, isPlaying, likedSongs.has(currentSong.id));
-      }
-    }
-
-    const onDur = () => setDuration(audio.duration || 0);
-    const onEnd = () => {
-      // Empêcher le double appel pendant crossfade
-      if (crossfadeActive.current) return;
-      
-      // Song finished = full listen, update streak
-      if (pb.authStore.record) {
-        updateStreak(pb.authStore.record.id).catch(console.error);
-      }
-      next().catch(console.error);
-    };
+    const onDuration = () => setDuration(audio.duration || 0);
+    
     const onCanPlay = () => {
       if (isLoadingRef.current) {
         audio.play().catch(console.error);
         setIsPlaying(true);
         setIsLoading(false);
         isLoadingRef.current = false;
+        
+        // Update notification once playing
+        if (currentSong && !radioMode) {
+          showMediaNotification(currentSong, true, likedSongs.has(currentSong.id));
+        }
       }
+    };
+
+    const onEnded = () => {
+      if (crossfadeActive.current) return;
+      
+      // Full listen = update streak
+      if (pb.authStore.record) {
+        updateStreak(pb.authStore.record.id).catch(console.error);
+      }
+      next().catch(console.error);
     };
 
     const onTimeUpdate = () => {
+      if (crossfadeActive.current) return;
+      
       setProgress(audio.currentTime);
       
-      // Précharger et lancer crossfade
       if (audio.duration && !crossfadeActive.current) {
         const remaining = audio.duration - audio.currentTime;
         
-        // Précharger 15s avant la fin
-        if (remaining <= preloadThreshold && !preloadedNextSong.current) {
+        // Preload next song
+        if (remaining <= PRELOAD_THRESHOLD && !preloadedNextSong.current) {
           preloadNextSong();
         }
         
-        // Lancer crossfade quand il reste le temps de la transition
-        if (remaining <= fadeDuration / 1000 && preloadedNextSong.current) {
-          let nextIdx = shuffle 
-            ? Math.floor(Math.random() * queue.length)
-            : queueIndex + 1;
-          
-          if (nextIdx >= queue.length) {
-            nextIdx = repeatMode === 'all' ? 0 : -1;
-          }
-          
-          if (nextIdx >= 0) {
-            isLoadingRef.current = true;
-            setIsLoading(true);
-            performCrossfade(preloadedNextSong.current, nextIdx);
-          }
+        // Start crossfade
+        if (remaining <= CROSSFADE_DURATION / 1000 && preloadedNextSong.current && preloadedNextIdx.current >= 0) {
+          performCrossfade(preloadedNextSong.current, preloadedNextIdx.current);
+        }
+        
+        // Update position state for lock screen scrubber
+        if (!radioMode) {
+          updateMediaPosition(audio.currentTime, audio.duration, playbackRate);
         }
       }
     };
 
-    // Fix Chrome mobile: handle visibility change
-    const handleVisibilityChange = () => {
-      if (!document.hidden && audio.duration && audio.currentTime >= audio.duration - 0.5) {
-        // Page became visible and song is near the end
-        if (!crossfadeActive.current) {
-          onEnd();
-        }
-      }
+    const onError = (e: Event) => {
+      console.error('Audio error:', e);
+      setIsLoading(false);
+      isLoadingRef.current = false;
     };
 
-    // Fallback: check periodically if song ended (for mobile background)
-    const checkInterval = setInterval(() => {
-      if (audio.duration && audio.currentTime >= audio.duration - 0.1 && !crossfadeActive.current) {
-        onEnd();
-      }
-    }, 1000);
-
-    audio.addEventListener('loadedmetadata', onDur);
-    audio.addEventListener('ended', onEnd);
+    audio.addEventListener('loadedmetadata', onDuration);
     audio.addEventListener('canplay', onCanPlay);
+    audio.addEventListener('ended', onEnded);
     audio.addEventListener('timeupdate', onTimeUpdate);
-    document.addEventListener('visibilitychange', handleVisibilityChange);
+    audio.addEventListener('error', onError);
 
     return () => {
-      audio.removeEventListener('loadedmetadata', onDur);
-      audio.removeEventListener('ended', onEnd);
+      audio.removeEventListener('loadedmetadata', onDuration);
       audio.removeEventListener('canplay', onCanPlay);
+      audio.removeEventListener('ended', onEnded);
       audio.removeEventListener('timeupdate', onTimeUpdate);
-      document.removeEventListener('visibilitychange', handleVisibilityChange);
-      clearInterval(checkInterval);
+      audio.removeEventListener('error', onError);
     };
-  }, [currentSong, next, previous, pause, resume, preloadNextSong, performCrossfade, shuffle, repeatMode, queueIndex, queue, fadeDuration, preloadThreshold]);
+  }, [currentSong, next, preloadNextSong, performCrossfade, radioMode, likedSongs, playbackRate]);
 
+  // Setup MediaSession controls
+  useEffect(() => {
+    if (radioMode) {
+      closeMediaNotification();
+      clearMediaControlListeners();
+    } else if (currentSong) {
+      setupMediaControlListeners({
+        onPlay: () => resume(),
+        onPause: () => pause(),
+        onNext: () => next(),
+        onPrevious: () => previous(),
+        onSeekBackward: () => {
+          const audio = audioRef.current;
+          if (audio) audio.currentTime = Math.max(0, audio.currentTime - 10);
+        },
+        onSeekForward: () => {
+          const audio = audioRef.current;
+          if (audio) audio.currentTime = Math.min(audio.duration || 0, audio.currentTime + 10);
+        },
+      });
+    }
+  }, [currentSong, radioMode, resume, pause, next, previous]);
 
-
-
-
-
+  // Image load control
   const registerImageLoad = useCallback((songId: string) => {
-    setImageLoadCounts(prev => {
-      const currentCount = prev[songId] || 0;
-      const newCount = Math.min(currentCount + 1, 5);
-      return { ...prev, [songId]: newCount };
-    });
+    setImageLoadCounts(prev => ({
+      ...prev,
+      [songId]: Math.min((prev[songId] || 0) + 1, 5),
+    }));
   }, []);
 
   const getImageLoadControl = useCallback((songId: string) => {
     const loadCount = imageLoadCounts[songId] || 0;
-    const imageKey = loadCount < 5 ? songId : `stable-${songId}`;
-    return { imageKey, loadCount };
+    return { imageKey: loadCount < 5 ? songId : `stable-${songId}`, loadCount };
   }, [imageLoadCounts]);
 
   const playerValue = useMemo(() => ({

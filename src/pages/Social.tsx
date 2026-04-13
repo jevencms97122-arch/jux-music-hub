@@ -6,6 +6,7 @@ import { usePlayer } from '@/contexts/PlayerContext';
 import type { PBUser, Follow, Song } from '@/types/music';
 import { User, UserCheck, UserX, Users, Bell, Newspaper, Heart, Music, Upload } from 'lucide-react';
 import StoryCircles from '@/components/StoryCircles';
+import FriendsListening from '@/components/FriendsListening';
 import { Button } from '@/components/ui/button';
 
 type Tab = 'feed' | 'requests' | 'friends' | 'following';
@@ -205,6 +206,9 @@ export default function Social() {
 
       {/* Stories */}
       <StoryCircles />
+
+      {/* Friends currently listening */}
+      <FriendsListening />
 
       {/* Tabs */}
       <div className="flex border-b border-border overflow-x-auto">

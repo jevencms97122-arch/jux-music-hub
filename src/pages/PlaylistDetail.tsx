@@ -5,7 +5,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { usePlayer } from '@/contexts/PlayerContext';
 import type { Playlist, Song } from '@/types/music';
 import SongCard from '@/components/SongCard';
-import { ArrowLeft, Play, Shuffle, Globe, Lock, Music, Heart, Headphones, MoreVertical, Trash2, Eye } from 'lucide-react';
+import { ArrowLeft, Play, Shuffle, Globe, Lock, Music, Heart, Headphones, MoreVertical, Trash2, Eye, Share2 } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { useToast } from '@/components/ui/use-toast';
 
@@ -284,6 +284,16 @@ export default function PlaylistDetail() {
               className="p-3 bg-secondary rounded-xl text-foreground hover:bg-secondary/80 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             >
               <Shuffle className="h-5 w-5" />
+            </button>
+            <button
+              onClick={() => {
+                const url = `${window.location.origin}/playlist/${playlist.id}`;
+                navigator.clipboard.writeText(url);
+                toast({ title: "Lien copié", description: "Le lien de la playlist a été copié." });
+              }}
+              className="p-3 bg-secondary rounded-xl text-foreground hover:bg-secondary/80 transition-colors"
+            >
+              <Share2 className="h-5 w-5" />
             </button>
             {!isOwner && (
               <button

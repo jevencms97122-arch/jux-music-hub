@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { usePlayer, usePlayerProgress } from '@/contexts/PlayerContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { getSongCoverUrl, pb } from '@/lib/pocketbase';
-import { ChevronDown, Play, Pause, SkipForward, SkipBack, Shuffle, Repeat, Repeat1, Heart, Headphones, Loader2, Plus, MoreVertical, LogIn, Radio, BookOpen } from 'lucide-react';
+import { ChevronDown, Play, Pause, SkipForward, SkipBack, Shuffle, Repeat, Repeat1, Heart, Headphones, Loader2, Plus, MoreVertical, LogIn, Radio, BookOpen, Share2, Gauge } from 'lucide-react';
 import QueueView from './QueueView';
 import FriendsLikedBadge from './FriendsLikedBadge';
 import AddToPlaylistModal from './AddToPlaylistModal';
@@ -18,7 +18,7 @@ function formatTime(s: number) {
 }
 
 export default function PlayerPage() {
-  const { currentSong, isPlaying, isLoading, togglePlay, next, previous, seek, setPlayerOpen, playerOpen, shuffle, repeatMode, toggleShuffle, cycleRepeat, toggleLike: toggleLikeContext, likedSongs, getImageLoadControl, registerImageLoad, radioMode, toggleRadioMode } = usePlayer();
+  const { currentSong, isPlaying, isLoading, togglePlay, next, previous, seek, setPlayerOpen, playerOpen, shuffle, repeatMode, toggleShuffle, cycleRepeat, toggleLike: toggleLikeContext, likedSongs, getImageLoadControl, registerImageLoad, radioMode, toggleRadioMode, playbackRate, setPlaybackRate } = usePlayer();
   const { progress, duration } = usePlayerProgress();
 
   const { imageKey } = currentSong ? getImageLoadControl(currentSong.id) : { imageKey: '' };
@@ -30,6 +30,7 @@ export default function PlayerPage() {
   const [showAddToPlaylist, setShowAddToPlaylist] = useState(false);
   const [showCreateStory, setShowCreateStory] = useState(false);
   const [showMenu, setShowMenu] = useState(false);
+  const [showSpeedMenu, setShowSpeedMenu] = useState(false);
   const navigate = useNavigate();
   const sliderRef = useRef<HTMLInputElement>(null);
   const animationFrameRef = useRef<number>();
@@ -157,6 +158,31 @@ export default function PlayerPage() {
                    >
                      <Radio className="h-4 w-4" />
                      {radioMode ? 'Désactiver mode Radio' : 'Activer mode Radio'}
+                   </button>
+                   <button
+                     onClick={() => {
+                       setShowSpeedMenu(true);
+                       setShowMenu(false);
+                     }}
+                     className="w-full px-4 py-3 text-left text-sm hover:bg-accent/50 flex items-center gap-2 transition-colors"
+                     type="button"
+                   >
+                     <Gauge className="h-4 w-4" />
+                     Vitesse ({playbackRate}x)
+                   </button>
+                   <button
+                     onClick={() => {
+                       if (currentSong) {
+                         const url = `${window.location.origin}/listen/${currentSong.id}`;
+                         navigator.clipboard.writeText(url);
+                         setShowMenu(false);
+                       }
+                     }}
+                     className="w-full px-4 py-3 text-left text-sm hover:bg-accent/50 flex items-center gap-2 transition-colors"
+                     type="button"
+                   >
+                     <Share2 className="h-4 w-4" />
+                     Partager le lien
                    </button>
                  </div>
               )}
@@ -337,6 +363,50 @@ export default function PlayerPage() {
         onClose={() => setShowCreateStory(false)}
         song={currentSong}
       />
+
+      {/* Speed control modal */}
+      <AnimatePresence>
+        {showSpeedMenu && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[60] bg-black/50 flex items-end justify-center"
+            onClick={() => setShowSpeedMenu(false)}
+          >
+            <motion.div
+              initial={{ y: '100%' }}
+              animate={{ y: 0 }}
+              exit={{ y: '100%' }}
+              transition={{ type: 'spring', damping: 25, stiffness: 300 }}
+              className="bg-card rounded-t-2xl w-full max-w-md p-6 safe-bottom"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <h3 className="text-lg font-bold text-foreground mb-1">Vitesse de lecture</h3>
+              <p className="text-xs text-muted-foreground mb-4">Change aussi la hauteur du son (slowed / sped up)</p>
+              <div className="grid grid-cols-4 gap-2">
+                {[0.5, 0.75, 0.8, 0.9, 1, 1.25, 1.5, 2].map(rate => (
+                  <button
+                    key={rate}
+                    onClick={() => {
+                      setPlaybackRate(rate);
+                      setShowSpeedMenu(false);
+                    }}
+                    className={`py-3 rounded-xl text-sm font-medium transition-colors ${
+                      playbackRate === rate
+                        ? 'bg-primary text-primary-foreground'
+                        : 'bg-secondary text-foreground hover:bg-secondary/80'
+                    }`}
+                    type="button"
+                  >
+                    {rate}x
+                  </button>
+                ))}
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </>
   );
 }

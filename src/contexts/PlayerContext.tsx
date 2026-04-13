@@ -15,6 +15,7 @@ interface PlayerContextType {
   likedSongs: Set<string>;
   shuffle: boolean;
   repeatMode: RepeatMode;
+  playbackRate: number;
   playSong: (song: Song, autoQueue?: boolean) => void;
   playSongFromList: (song: Song, list: Song[], index: number, playlistId?: string) => void;
   playCurrentSongOnly: (song: Song) => void;
@@ -28,6 +29,7 @@ interface PlayerContextType {
   toggleLike: (song: Song) => Promise<void>;
   toggleShuffle: () => void;
   cycleRepeat: () => void;
+  setPlaybackRate: (rate: number) => void;
   getImageLoadControl: (songId: string) => { imageKey: string; loadCount: number };
   registerImageLoad: (songId: string) => void;
   radioMode: boolean;
@@ -62,6 +64,7 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
   const [isLoading, setIsLoading] = useState(false);
   const [imageLoadCounts, setImageLoadCounts] = useState<Record<string, number>>({});
   const [radioMode, setRadioMode] = useState(false);
+  const [playbackRate, setPlaybackRateState] = useState(1);
   const audioRef = useRef<HTMLAudioElement>(new Audio());
   const nextAudioRef = useRef<HTMLAudioElement>(new Audio());
   
@@ -69,8 +72,15 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     audioRef.current.preload = 'auto';
     audioRef.current.volume = 1;
+    // Disable preservesPitch so speed changes affect pitch (slowed/sped up effect)
+    (audioRef.current as any).preservesPitch = false;
+    (audioRef.current as any).mozPreservesPitch = false;
+    (audioRef.current as any).webkitPreservesPitch = false;
     nextAudioRef.current.preload = 'auto';
     nextAudioRef.current.volume = 0;
+    (nextAudioRef.current as any).preservesPitch = false;
+    (nextAudioRef.current as any).mozPreservesPitch = false;
+    (nextAudioRef.current as any).webkitPreservesPitch = false;
   }, []);
   
   const loadingMore = useRef(false);
@@ -384,6 +394,12 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
     setRadioMode(p => !p);
   }, []);
 
+  const setPlaybackRate = useCallback((rate: number) => {
+    setPlaybackRateState(rate);
+    audioRef.current.playbackRate = rate;
+    nextAudioRef.current.playbackRate = rate;
+  }, []);
+
   const toggleLike = useCallback(async (song: Song) => {
     if (!pb.authStore.record) return;
     const userId = pb.authStore.record.id;
@@ -633,10 +649,10 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
   }, [imageLoadCounts]);
 
   const playerValue = useMemo(() => ({
-    currentSong, queue, isPlaying, isLoading, playerOpen, likedSongs, shuffle, repeatMode, radioMode,
-    playSong, playSongFromList, playCurrentSongOnly, pause, resume, togglePlay, next, previous, seek, setPlayerOpen, toggleLike, toggleShuffle, cycleRepeat, toggleRadioMode,
+    currentSong, queue, isPlaying, isLoading, playerOpen, likedSongs, shuffle, repeatMode, radioMode, playbackRate,
+    playSong, playSongFromList, playCurrentSongOnly, pause, resume, togglePlay, next, previous, seek, setPlayerOpen, toggleLike, toggleShuffle, cycleRepeat, toggleRadioMode, setPlaybackRate,
     getImageLoadControl, registerImageLoad,
-  }), [currentSong, queue, isPlaying, isLoading, playerOpen, likedSongs, shuffle, repeatMode, radioMode, playSong, playSongFromList, playCurrentSongOnly, pause, resume, togglePlay, next, previous, seek, setPlayerOpen, toggleLike, toggleShuffle, cycleRepeat, toggleRadioMode, getImageLoadControl, registerImageLoad]);
+  }), [currentSong, queue, isPlaying, isLoading, playerOpen, likedSongs, shuffle, repeatMode, radioMode, playbackRate, playSong, playSongFromList, playCurrentSongOnly, pause, resume, togglePlay, next, previous, seek, setPlayerOpen, toggleLike, toggleShuffle, cycleRepeat, toggleRadioMode, setPlaybackRate, getImageLoadControl, registerImageLoad]);
 
   const progressValue = useMemo(() => ({ progress, duration }), [progress, duration]);
 

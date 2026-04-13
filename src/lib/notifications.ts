@@ -1,145 +1,99 @@
 import { getSongCoverUrl } from './pocketbase';
 import type { Song } from '@/types/music';
 
+let currentNotification: Notification | null = null;
+
 export async function showMediaNotification(
   song: Song,
   isPlaying: boolean,
   isLiked: boolean = false,
 ) {
-  if (!('Notification' in window)) {
-    return;
-  }
-
-  // Request permission if needed
-  if (Notification.permission === 'default') {
-    try {
-      const permission = await Notification.requestPermission();
-      if (permission !== 'granted') return;
-    } catch (error) {
-      console.error('Error requesting notification permission:', error);
-      return;
-    }
-  }
-
-  if (Notification.permission !== 'granted') {
-    return;
-  }
-
-  try {
+  // Use MediaSession API for system-level media controls (lock screen, notification shade)
+  if ('mediaSession' in navigator) {
     const coverUrl = getSongCoverUrl(song);
-    console.log('Notification cover URL:', coverUrl);
+    
+    navigator.mediaSession.metadata = new MediaMetadata({
+      title: song.title || 'Titre inconnu',
+      artist: song.expand?.uploadedBy?.pseudo || song.author || 'Artiste inconnu',
+      album: 'Jux Music',
+      artwork: [
+        { src: coverUrl, sizes: '96x96', type: 'image/jpeg' },
+        { src: coverUrl, sizes: '128x128', type: 'image/jpeg' },
+        { src: coverUrl, sizes: '192x192', type: 'image/jpeg' },
+        { src: coverUrl, sizes: '256x256', type: 'image/jpeg' },
+        { src: coverUrl, sizes: '384x384', type: 'image/jpeg' },
+        { src: coverUrl, sizes: '512x512', type: 'image/jpeg' },
+      ],
+    });
 
-    // Use MediaSession API for better media controls (if available)
-    if ('mediaSession' in navigator) {
-      const mediaSession = navigator.mediaSession as any;
-      mediaSession.metadata = new MediaMetadata({
-        title: song.title,
-        artist: song.author,
-        artwork: [
-          {
-            src: coverUrl,
-            sizes: '256x256',
-            type: 'image/jpeg',
-          },
-          {
-            src: coverUrl,
-            sizes: '512x512',
-            type: 'image/jpeg',
-          },
-        ],
-      });
+    navigator.mediaSession.playbackState = isPlaying ? 'playing' : 'paused';
+  }
+}
 
-      mediaSession.playbackState = isPlaying ? 'playing' : 'paused';
-    }
-
-      // Show notification with cover image and actions
+export async function updateMediaPosition(position: number, duration: number, playbackRate: number = 1) {
+  if ('mediaSession' in navigator && 'setPositionState' in navigator.mediaSession) {
     try {
-      const notificationOptions: any = {
-        body: song.author || 'Artiste inconnu',
-        tag: 'media-player',
-        requireInteraction: false,
-        // Use correct image property for Android to display the cover art
-        image: coverUrl,
-        badge: '/jux-icon-192.png', // Small icon for the badge area
-        // Add action buttons for media controls and favorite (limit to 3 for Android compatibility)
-        actions: [
-          { action: 'previous', title: '⏮' },
-          { action: 'play', title: isPlaying ? '⏸' : '▶' },
-          { action: 'next', title: '⏭' },
-        ],
-      };
-
-      // Ensure we have valid title and author
-      const title = song.title || 'Titre inconnu';
-      const author = song.author || 'Artiste inconnu';
-      
-      const notification = new Notification(title, {
-        ...notificationOptions,
-        body: author
-      });
-
-      notification.onclick = () => {
-        window.focus();
-      };
-
-      console.log('Notification created successfully');
-    } catch (error) {
-      console.error('Error creating notification:', error);
+      if (duration > 0 && isFinite(duration) && isFinite(position)) {
+        navigator.mediaSession.setPositionState({
+          duration: duration,
+          playbackRate: playbackRate,
+          position: Math.min(position, duration),
+        });
+      }
+    } catch {
+      // Some browsers don't support this
     }
-  } catch (error) {
-    console.error('Error showing media notification:', error);
   }
 }
 
 export async function closeMediaNotification() {
-  if (!('Notification' in window)) {
-    return;
+  if (currentNotification) {
+    currentNotification.close();
+    currentNotification = null;
   }
-
-  try {
-    // Close notifications with tag 'media-player'
-    const notifications = await Promise.all([]);
-    // We'll need to use service worker for this, but for now we can skip
-  } catch (error) {
-    console.error('Error closing notification:', error);
+  
+  if ('mediaSession' in navigator) {
+    navigator.mediaSession.metadata = null;
+    navigator.mediaSession.playbackState = 'none';
   }
 }
 
-// Listen for media control messages from UI
 export function setupMediaControlListeners(callbacks: {
   onPlay: () => void;
   onPause: () => void;
   onNext: () => void;
   onPrevious: () => void;
-  onLike: () => void;
+  onSeekBackward?: () => void;
+  onSeekForward?: () => void;
 }) {
-  // Setup MediaSession handlers
-  if ('mediaSession' in navigator) {
-    const mediaSession = navigator.mediaSession as any;
+  if (!('mediaSession' in navigator)) return;
 
-    mediaSession.setActionHandler('play', () => {
-      callbacks.onPlay();
-    });
-
-    mediaSession.setActionHandler('pause', () => {
-      callbacks.onPause();
-    });
-
-    mediaSession.setActionHandler('nexttrack', () => {
-      callbacks.onNext();
-    });
-
-    mediaSession.setActionHandler('previoustrack', () => {
-      callbacks.onPrevious();
-    });
-
-    // Note: Like/unlike actions may not be supported by all browsers
+  navigator.mediaSession.setActionHandler('play', callbacks.onPlay);
+  navigator.mediaSession.setActionHandler('pause', callbacks.onPause);
+  navigator.mediaSession.setActionHandler('nexttrack', callbacks.onNext);
+  navigator.mediaSession.setActionHandler('previoustrack', callbacks.onPrevious);
+  
+  if (callbacks.onSeekBackward) {
     try {
-      mediaSession.setActionHandler('togglelike', () => {
-        callbacks.onLike();
-      });
-    } catch (e) {
-      // Action not supported
-    }
+      navigator.mediaSession.setActionHandler('seekbackward', callbacks.onSeekBackward);
+    } catch { /* not supported */ }
   }
+  if (callbacks.onSeekForward) {
+    try {
+      navigator.mediaSession.setActionHandler('seekforward', callbacks.onSeekForward);
+    } catch { /* not supported */ }
+  }
+}
+
+export function clearMediaControlListeners() {
+  if (!('mediaSession' in navigator)) return;
+  
+  try {
+    navigator.mediaSession.setActionHandler('play', null);
+    navigator.mediaSession.setActionHandler('pause', null);
+    navigator.mediaSession.setActionHandler('nexttrack', null);
+    navigator.mediaSession.setActionHandler('previoustrack', null);
+    navigator.mediaSession.setActionHandler('seekbackward', null);
+    navigator.mediaSession.setActionHandler('seekforward', null);
+  } catch { /* ignore */ }
 }

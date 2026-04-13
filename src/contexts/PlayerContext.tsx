@@ -394,6 +394,12 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
     setRadioMode(p => !p);
   }, []);
 
+  const setPlaybackRate = useCallback((rate: number) => {
+    setPlaybackRateState(rate);
+    audioRef.current.playbackRate = rate;
+    nextAudioRef.current.playbackRate = rate;
+  }, []);
+
   const toggleLike = useCallback(async (song: Song) => {
     if (!pb.authStore.record) return;
     const userId = pb.authStore.record.id;
@@ -643,10 +649,10 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
   }, [imageLoadCounts]);
 
   const playerValue = useMemo(() => ({
-    currentSong, queue, isPlaying, isLoading, playerOpen, likedSongs, shuffle, repeatMode, radioMode,
-    playSong, playSongFromList, playCurrentSongOnly, pause, resume, togglePlay, next, previous, seek, setPlayerOpen, toggleLike, toggleShuffle, cycleRepeat, toggleRadioMode,
+    currentSong, queue, isPlaying, isLoading, playerOpen, likedSongs, shuffle, repeatMode, radioMode, playbackRate,
+    playSong, playSongFromList, playCurrentSongOnly, pause, resume, togglePlay, next, previous, seek, setPlayerOpen, toggleLike, toggleShuffle, cycleRepeat, toggleRadioMode, setPlaybackRate,
     getImageLoadControl, registerImageLoad,
-  }), [currentSong, queue, isPlaying, isLoading, playerOpen, likedSongs, shuffle, repeatMode, radioMode, playSong, playSongFromList, playCurrentSongOnly, pause, resume, togglePlay, next, previous, seek, setPlayerOpen, toggleLike, toggleShuffle, cycleRepeat, toggleRadioMode, getImageLoadControl, registerImageLoad]);
+  }), [currentSong, queue, isPlaying, isLoading, playerOpen, likedSongs, shuffle, repeatMode, radioMode, playbackRate, playSong, playSongFromList, playCurrentSongOnly, pause, resume, togglePlay, next, previous, seek, setPlayerOpen, toggleLike, toggleShuffle, cycleRepeat, toggleRadioMode, setPlaybackRate, getImageLoadControl, registerImageLoad]);
 
   const progressValue = useMemo(() => ({ progress, duration }), [progress, duration]);
 

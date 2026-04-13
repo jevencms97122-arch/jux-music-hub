@@ -18,7 +18,7 @@ function formatTime(s: number) {
 }
 
 export default function PlayerPage() {
-  const { currentSong, isPlaying, isLoading, togglePlay, next, previous, seek, setPlayerOpen, playerOpen, shuffle, repeatMode, toggleShuffle, cycleRepeat, toggleLike: toggleLikeContext, likedSongs, getImageLoadControl, registerImageLoad } = usePlayer();
+  const { currentSong, isPlaying, isLoading, togglePlay, next, previous, seek, setPlayerOpen, playerOpen, shuffle, repeatMode, toggleShuffle, cycleRepeat, toggleLike: toggleLikeContext, likedSongs, getImageLoadControl, registerImageLoad, radioMode, toggleRadioMode } = usePlayer();
   const { progress, duration } = usePlayerProgress();
 
   const { imageKey } = currentSong ? getImageLoadControl(currentSong.id) : { imageKey: '' };
@@ -136,18 +136,29 @@ export default function PlayerPage() {
                     <Plus className="h-4 w-4" />
                     Ajouter à une playlist
                   </button>
-                  <button
-                    onClick={() => {
-                      setShowCreateStory(true);
-                      setShowMenu(false);
-                    }}
-                    className="w-full px-4 py-3 text-left text-sm hover:bg-accent/50 flex items-center gap-2 transition-colors"
-                    type="button"
-                  >
-                    <BookOpen className="h-4 w-4" />
-                    Ajouter à la story
-                  </button>
-                </div>
+                   <button
+                     onClick={() => {
+                       setShowCreateStory(true);
+                       setShowMenu(false);
+                     }}
+                     className="w-full px-4 py-3 text-left text-sm hover:bg-accent/50 flex items-center gap-2 transition-colors"
+                     type="button"
+                   >
+                     <BookOpen className="h-4 w-4" />
+                     Ajouter à la story
+                   </button>
+                   <button
+                     onClick={() => {
+                       toggleRadioMode();
+                       setShowMenu(false);
+                     }}
+                     className={`w-full px-4 py-3 text-left text-sm hover:bg-accent/50 flex items-center gap-2 transition-colors ${radioMode ? 'text-primary' : ''}`}
+                     type="button"
+                   >
+                     <Radio className="h-4 w-4" />
+                     {radioMode ? 'Désactiver mode Radio' : 'Activer mode Radio'}
+                   </button>
+                 </div>
               )}
             </div>
           </div>
@@ -206,64 +217,74 @@ export default function PlayerPage() {
                       <FriendsLikedBadge songId={currentSong.id} userId={user.id} />
                     )}
 
-                    <div className="flex items-center gap-4 mb-6 w-full px-4">
-                      <span className="text-xs text-muted-foreground w-12 text-right flex-shrink-0">{formatTime(progress)}</span>
-                      <div className="flex-1 relative flex items-center h-3">
-                        <div className="absolute top-1/2 left-0 h-1 bg-secondary rounded-full w-full transform -translate-y-1/2" />
-                        <div className="absolute top-1/2 left-0 h-1 bg-orange-500 rounded-full transform -translate-y-1/2" style={{ width: duration > 0 ? `${(Math.min(progress, duration) / duration) * 100}%` : '0%' }} />
-                        <input
-                          ref={sliderRef}
-                          type="range"
-                          min={0}
-                          max={duration || 0}
-                          value={progress}
-                          onChange={(e) => {
-                            const val = Number(e.target.value);
-                            if (sliderRef.current) {
-                              sliderRef.current.value = e.target.value;
-                            }
-                            seek(val);
-                          }}
-                          onMouseDown={() => setIsDragging(true)}
-                          onMouseUp={(e) => {
-                            setIsDragging(false);
-                            seek(Number((e.target as HTMLInputElement).value));
-                          }}
-                          onTouchStart={() => setIsDragging(true)}
-                          onTouchEnd={(e) => {
-                            setIsDragging(false);
-                            seek(Number((e.target as HTMLInputElement).value));
-                          }}
-                          className="absolute w-full h-4 opacity-0 cursor-pointer"
-                        />
-                        {/* Thumb */}
-                        <div
-                          className="absolute h-4 w-4 rounded-full bg-orange-500 pointer-events-none transform -translate-x-1/2 -translate-y-1/2 top-1/2"
-                          style={{ left: duration > 0 ? `${(Math.min(progress, duration) / duration) * 100}%` : '0%' }}
-                        />
-                      </div>
-                      <span className="text-xs text-muted-foreground w-12 flex-shrink-0">{formatTime(duration)}</span>
-                    </div>
+                     {!radioMode && (
+                       <div className="flex items-center gap-4 mb-6 w-full px-4">
+                         <span className="text-xs text-muted-foreground w-12 text-right flex-shrink-0">{formatTime(progress)}</span>
+                         <div className="flex-1 relative flex items-center h-3">
+                           <div className="absolute top-1/2 left-0 h-1 bg-secondary rounded-full w-full transform -translate-y-1/2" />
+                           <div className="absolute top-1/2 left-0 h-1 bg-orange-500 rounded-full transform -translate-y-1/2" style={{ width: duration > 0 ? `${(Math.min(progress, duration) / duration) * 100}%` : '0%' }} />
+                           <input
+                             ref={sliderRef}
+                             type="range"
+                             min={0}
+                             max={duration || 0}
+                             value={progress}
+                             onChange={(e) => {
+                               const val = Number(e.target.value);
+                               if (sliderRef.current) {
+                                 sliderRef.current.value = e.target.value;
+                               }
+                               seek(val);
+                             }}
+                             onMouseDown={() => setIsDragging(true)}
+                             onMouseUp={(e) => {
+                               setIsDragging(false);
+                               seek(Number((e.target as HTMLInputElement).value));
+                             }}
+                             onTouchStart={() => setIsDragging(true)}
+                             onTouchEnd={(e) => {
+                               setIsDragging(false);
+                               seek(Number((e.target as HTMLInputElement).value));
+                             }}
+                             className="absolute w-full h-4 opacity-0 cursor-pointer"
+                           />
+                           {/* Thumb */}
+                           <div
+                             className="absolute h-4 w-4 rounded-full bg-orange-500 pointer-events-none transform -translate-x-1/2 -translate-y-1/2 top-1/2"
+                             style={{ left: duration > 0 ? `${(Math.min(progress, duration) / duration) * 100}%` : '0%' }}
+                           />
+                         </div>
+                         <span className="text-xs text-muted-foreground w-12 flex-shrink-0">{formatTime(duration)}</span>
+                       </div>
+                     )}
 
-                    <div className="flex items-center justify-center gap-8">
-                      <button onClick={toggleShuffle} className={`p-2 transition-colors ${shuffle ? 'text-primary' : 'text-muted-foreground'}`} type="button">
-                        <Shuffle className="h-5 w-5" />
-                      </button>
-                      <button onClick={previous} className="p-2 text-foreground" type="button"><SkipBack className="h-7 w-7 fill-foreground" /></button>
-                      <button onClick={togglePlay} className="h-16 w-16 rounded-full bg-foreground flex items-center justify-center" type="button">
-                        {isLoading ? (
-                          <Loader2 className="h-7 w-7 text-background animate-spin" />
-                        ) : isPlaying ? (
-                          <Pause className="h-7 w-7 text-background fill-background" />
-                        ) : (
-                          <Play className="h-7 w-7 text-background fill-background ml-1" />
-                        )}
-                      </button>
-                      <button onClick={next} className="p-2 text-foreground" type="button"><SkipForward className="h-7 w-7 fill-foreground" /></button>
-                      <button onClick={cycleRepeat} className={`p-2 transition-colors ${repeatMode !== 'off' ? 'text-primary' : 'text-muted-foreground'}`} type="button">
-                        <RepeatIcon className="h-5 w-5" />
-                      </button>
-                    </div>
+                     <div className="flex items-center justify-center gap-8">
+                       {!radioMode && (
+                         <button onClick={toggleShuffle} className={`p-2 transition-colors ${shuffle ? 'text-primary' : 'text-muted-foreground'}`} type="button">
+                           <Shuffle className="h-5 w-5" />
+                         </button>
+                       )}
+                       {!radioMode && (
+                         <button onClick={previous} className="p-2 text-foreground" type="button"><SkipBack className="h-7 w-7 fill-foreground" /></button>
+                       )}
+                       <button onClick={togglePlay} className="h-16 w-16 rounded-full bg-foreground flex items-center justify-center" type="button">
+                         {isLoading ? (
+                           <Loader2 className="h-7 w-7 text-background animate-spin" />
+                         ) : isPlaying ? (
+                           <Pause className="h-7 w-7 text-background fill-background" />
+                         ) : (
+                           <Play className="h-7 w-7 text-background fill-background ml-1" />
+                         )}
+                       </button>
+                       {!radioMode && (
+                         <button onClick={next} className="p-2 text-foreground" type="button"><SkipForward className="h-7 w-7 fill-foreground" /></button>
+                       )}
+                       {!radioMode && (
+                         <button onClick={cycleRepeat} className={`p-2 transition-colors ${repeatMode !== 'off' ? 'text-primary' : 'text-muted-foreground'}`} type="button">
+                           <RepeatIcon className="h-5 w-5" />
+                         </button>
+                       )}
+                     </div>
 
                     {!user && (
                       <div className="mt-8 p-4 bg-card/80 backdrop-blur-sm rounded-xl border border-border w-full max-w-sm text-center">

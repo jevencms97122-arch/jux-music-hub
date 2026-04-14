@@ -26,7 +26,7 @@ export default function SharedListen() {
   const [error, setError] = useState(false);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const { user } = useAuth();
-  const { playSongFromList } = usePlayer();
+  const { playSong, playSongFromList } = usePlayer();
 
   useEffect(() => {
     let cancelled = false;
@@ -46,8 +46,13 @@ export default function SharedListen() {
         setSong(s);
 
         if (user) {
-          playSongFromList(s, [s], 0);
-          navigate('/');
+          // Utiliser playSong() pour avoir le comportement normal :
+          // musique ajoutée dans la file d'attente avec les suivantes aléatoires
+          // lecture démarre automatiquement
+          // player s'ouvre NORMALEMENT PAR DESSUS LA PAGE COURANTE
+          playSong(s);
+          // ❌ PAS DE navigate('/') ! ça annulait le chargement en cours et provoquait "musique introuvable"
+          // playSong appelle déjà setPlayerOpen(true) qui ouvre le player par dessus
           return;
         }
 
@@ -115,11 +120,11 @@ export default function SharedListen() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [songId]);
 
-  // If user logs in while on this page, redirect
+  // If user logs in while on this page
   useEffect(() => {
     if (user && song) {
-      playSongFromList(song, [song], 0);
-      navigate('/');
+      playSong(song);
+      // ❌ PAS DE navigate('/') ici non plus
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user]);

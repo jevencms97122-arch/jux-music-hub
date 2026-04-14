@@ -5,6 +5,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { usePlayer } from '@/contexts/PlayerContext';
 import type { Playlist, Song } from '@/types/music';
 import SongCard from '@/components/SongCard';
+import ShareSheet from '@/components/ShareSheet';
 import { ArrowLeft, Play, Shuffle, Globe, Lock, Music, Heart, Headphones, MoreVertical, Trash2, Eye, Share2 } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { useToast } from '@/components/ui/use-toast';
@@ -21,6 +22,7 @@ export default function PlaylistDetail() {
   const [loading, setLoading] = useState(true);
   const [isLiked, setIsLiked] = useState(false);
   const [showMenu, setShowMenu] = useState(false);
+  const [showShareSheet, setShowShareSheet] = useState(false);
 
   useEffect(() => {
     const loadPlaylist = async () => {
@@ -286,11 +288,7 @@ export default function PlaylistDetail() {
               <Shuffle className="h-5 w-5" />
             </button>
             <button
-              onClick={() => {
-                const url = `${window.location.origin}/playlist/${playlist.id}`;
-                navigator.clipboard.writeText(url);
-                toast({ title: "Lien copié", description: "Le lien de la playlist a été copié." });
-              }}
+              onClick={() => setShowShareSheet(true)}
               className="p-3 bg-secondary rounded-xl text-foreground hover:bg-secondary/80 transition-colors"
             >
               <Share2 className="h-5 w-5" />
@@ -357,6 +355,19 @@ export default function PlaylistDetail() {
           </div>
         )}
       </div>
+
+      <ShareSheet
+        isOpen={showShareSheet}
+        onClose={() => setShowShareSheet(false)}
+        type="playlist"
+        data={{
+          id: playlist?.id || '',
+          title: playlist?.title || '',
+          songsCount: songs.length,
+          cover: songs.length > 0 ? getSongCoverUrl(songs[0]) : ''
+        }}
+      />
+
     </div>
   );
 }

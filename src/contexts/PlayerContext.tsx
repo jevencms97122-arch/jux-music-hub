@@ -188,36 +188,42 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
     preloadedNextSong.current = null;
     preloadedNextIdx.current = -1;
 
-    // Smooth volume fade out on current audio before switching
-    const fadeOutAndSwitch = () => {
-      // Quick fade out (200ms)
-      const startVol = audio.volume;
-      const fadeStart = performance.now();
-      const fadeOut = (time: number) => {
-        const elapsed = time - fadeStart;
-        const progress = Math.min(elapsed / 200, 1);
-        audio.volume = startVol * (1 - progress);
-        if (progress < 1) {
-          requestAnimationFrame(fadeOut);
-        } else {
-          audio.pause();
-          audio.volume = 1;
-          audio.src = getSongAudioUrl(freshSong);
-          audio.playbackRate = playbackRate;
-          audio.load();
-        }
-      };
-      
-      if (audio.src && !audio.paused) {
+    // Switch song - NO transition when not in radio mode
+    const switchSong = () => {
+      if (radioMode && audio.src && !audio.paused) {
+        // Only fade out when in RADIO MODE
+        const startVol = audio.volume;
+        const fadeStart = performance.now();
+        const fadeOut = (time: number) => {
+          const elapsed = time - fadeStart;
+          const progress = Math.min(elapsed / 200, 1);
+          audio.volume = startVol * (1 - progress);
+          if (progress < 1) {
+            requestAnimationFrame(fadeOut);
+          } else {
+            audio.pause();
+            // 🔧 CORRECTION: Conserver le volume utilisateur au lieu de remettre a 1
+            audio.volume = startVol;
+            audio.src = getSongAudioUrl(freshSong);
+            audio.playbackRate = playbackRate;
+            audio.load();
+          }
+        };
         requestAnimationFrame(fadeOut);
       } else {
+        // NORMAL MODE: direct change, NO TRANSITION AT ALL
+        if (!audio.paused) {
+          audio.pause();
+        }
+        // 🔧 CORRECTION: Conserver le volume utilisateur au lieu de remettre a 1
+        audio.volume = audio.volume;
         audio.src = getSongAudioUrl(freshSong);
         audio.playbackRate = playbackRate;
         audio.load();
       }
     };
 
-    fadeOutAndSwitch();
+    switchSong();
     recordListen(freshSong);
   }, [recordListen, playbackRate]);
 
@@ -428,83 +434,92 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
     nextAudioRef.current.load();
   }, [queue, getNextIndex, repeatMode, playbackRate]);
 
-  // Crossfade to next song
-  const performCrossfade = useCallback(async (nextSong: Song, nextIdx: number) => {
-    if (crossfadeActive.current || !audioRef.current || !nextAudioRef.current) return;
-    crossfadeActive.current = true;
+    // Crossfade to next song
+    const performCrossfade = useCallback(async (nextSong: Song, nextIdx: number) => {
+      if (crossfadeActive.current || !audioRef.current || !nextAudioRef.current) return;
+      crossfadeActive.current = true;
 
-    let freshNextSong: Song;
-    try {
-      freshNextSong = await pb.collection('songs').getOne(nextSong.id, { expand: 'uploadedBy' }) as unknown as Song;
-    } catch {
-      freshNextSong = nextSong;
-    }
+      let freshNextSong: Song;
+      try {
+        freshNextSong = await pb.collection('songs').getOne(nextSong.id, { expand: 'uploadedBy' }) as unknown as Song;
+      } catch {
+        freshNextSong = nextSong;
+      }
 
-    // Update state for new song
-    setQueueIndex(nextIdx);
-    setCurrentSong(freshNextSong);
-    setImageLoadCounts(prev => ({ ...prev, [freshNextSong.id]: 0 }));
-    recordListen(freshNextSong);
+      // Update state for new song
+      setQueueIndex(nextIdx);
+      setCurrentSong(freshNextSong);
+      setImageLoadCounts(prev => ({ ...prev, [freshNextSong.id]: 0 }));
+      recordListen(freshNextSong);
 
-    // Start next audio
-    const nextAudio = nextAudioRef.current;
-    const mainAudio = audioRef.current;
-    nextAudio.play().catch(console.error);
+      // Start next audio
+      const nextAudio = nextAudioRef.current;
+      const mainAudio = audioRef.current;
+      // ✅ CORRECTION: Sauvegarder le volume actuel de l'utilisateur avant le crossfade
+      const userVolume = mainAudio.volume;
+      nextAudio.play().catch(console.error);
 
-    const startTime = performance.now();
-    
-    const fade = (time: number) => {
-      const elapsed = time - startTime;
-      const t = Math.min(elapsed / CROSSFADE_DURATION, 1);
-      // Ease in-out curve
-      const ease = t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
+      const startTime = performance.now();
       
-      mainAudio.volume = 1 - ease;
-      nextAudio.volume = ease;
-      
-      // Update progress from the new audio
-      setProgress(nextAudio.currentTime);
-      setDuration(nextAudio.duration || 0);
-      
-      if (t < 1) {
-        crossfadeTimer.current = requestAnimationFrame(fade);
-      } else {
-        // Crossfade complete - swap audio elements
+      const fade = (time: number) => {
+        const elapsed = time - startTime;
+        const t = Math.min(elapsed / CROSSFADE_DURATION, 1);
+        // Ease in-out curve
+        const ease = t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
+        
+        // ✅ CORRECTION: Utiliser le vrai volume utilisateur comme maximum, pas 1
+        mainAudio.volume = userVolume * (1 - ease);
+        nextAudio.volume = userVolume * ease;
+        
+        // Update progress from the new audio
+        setProgress(nextAudio.currentTime);
+        setDuration(nextAudio.duration || 0);
+        
+        if (t < 1) {
+          crossfadeTimer.current = requestAnimationFrame(fade);
+        } else {
+          // Crossfade complete - swap audio elements
         mainAudio.pause();
         mainAudio.src = '';
-        mainAudio.volume = 1;
+        // ✅ CORRECTION: Remettre exactement le volume utilisateur
+        mainAudio.volume = userVolume;
+        // ✅ CORRECTION: Appliquer aussi la vitesse de lecture sur l'audio principal
+        mainAudio.playbackRate = playbackRate;
         
         // Swap refs
         const temp = audioRef.current;
         audioRef.current = nextAudioRef.current;
         nextAudioRef.current = temp;
         
-        // Reset next audio
-        if (nextAudioRef.current) {
-          nextAudioRef.current.volume = 0;
-          nextAudioRef.current.src = '';
-        }
-        
-        preloadedNextSong.current = null;
-        preloadedNextIdx.current = -1;
-        crossfadeActive.current = false;
-        crossfadeTimer.current = null;
-        
-        setIsLoading(false);
-        isLoadingRef.current = false;
+        // ✅ FORCER la vitesse sur le NOUVEL audio principal APRÈS l'échange
+        audioRef.current.playbackRate = playbackRate;
+          
+          // Reset next audio
+          if (nextAudioRef.current) {
+            nextAudioRef.current.volume = 0;
+            nextAudioRef.current.src = '';
+          }
+          
+          preloadedNextSong.current = null;
+          preloadedNextIdx.current = -1;
+          crossfadeActive.current = false;
+          crossfadeTimer.current = null;
+          
+          setIsLoading(false);
+          isLoadingRef.current = false;
 
-        // Update notification with new song
-        showMediaNotification(freshNextSong, true, likedSongs.has(freshNextSong.id));
+          // Update notification with new song
+          showMediaNotification(freshNextSong, true, likedSongs.has(freshNextSong.id));
 
-        // Auto-load more
-        if (!isFixedQueue && queue.length - nextIdx - 1 <= 5) {
-          loadMoreQueue(queue.map(s => s.id));
+          // Auto-load more
+          if (!isFixedQueue && queue.length - nextIdx - 1 <= 5) {
+            loadMoreQueue(queue.map(s => s.id));
+          }
         }
-      }
-    };
-    
-    crossfadeTimer.current = requestAnimationFrame(fade);
-  }, [recordListen, loadMoreQueue, isFixedQueue, likedSongs, queue, CROSSFADE_DURATION]);
+      };
+      
+      crossfadeTimer.current = requestAnimationFrame(fade);
+    }, [recordListen, loadMoreQueue, isFixedQueue, likedSongs, queue, CROSSFADE_DURATION, playbackRate]);
 
   // Main audio event listeners - re-attach whenever audio element changes
   useEffect(() => {
@@ -545,13 +560,13 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
       if (audio.duration && !crossfadeActive.current) {
         const remaining = audio.duration - audio.currentTime;
         
-        // Preload next song
-        if (remaining <= PRELOAD_THRESHOLD && !preloadedNextSong.current) {
+        // Preload next song (RADIO MODE ONLY)
+        if (radioMode && remaining <= PRELOAD_THRESHOLD && !preloadedNextSong.current) {
           preloadNextSong();
         }
         
-        // Start crossfade
-        if (remaining <= CROSSFADE_DURATION / 1000 && preloadedNextSong.current && preloadedNextIdx.current >= 0) {
+        // Start crossfade (RADIO MODE ONLY)
+        if (radioMode && remaining <= CROSSFADE_DURATION / 1000 && preloadedNextSong.current && preloadedNextIdx.current >= 0) {
           performCrossfade(preloadedNextSong.current, preloadedNextIdx.current);
         }
         

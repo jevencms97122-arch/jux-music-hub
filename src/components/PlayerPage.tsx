@@ -3,12 +3,13 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { usePlayer, usePlayerProgress } from '@/contexts/PlayerContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { getSongCoverUrl, pb } from '@/lib/pocketbase';
-import { ChevronDown, Play, Pause, SkipForward, SkipBack, Shuffle, Repeat, Repeat1, Heart, Headphones, Loader2, Plus, MoreVertical, LogIn, Radio, BookOpen, Share2, Gauge } from 'lucide-react';
+import { ChevronDown, Play, Pause, SkipForward, SkipBack, Shuffle, Repeat, Repeat1, Heart, Headphones, Loader2, Plus, MoreVertical, LogIn, Radio, BookOpen, Gauge } from 'lucide-react';
 import QueueView from './QueueView';
 import FriendsLikedBadge from './FriendsLikedBadge';
 import AddToPlaylistModal from './AddToPlaylistModal';
 import CreateStoryModal from './CreateStoryModal';
 import { useNavigate } from 'react-router-dom';
+import { useToast } from '@/hooks/use-toast';
 
 function formatTime(s: number) {
   if (!s || isNaN(s)) return '0:00';
@@ -23,6 +24,7 @@ export default function PlayerPage() {
 
   const { imageKey } = currentSong ? getImageLoadControl(currentSong.id) : { imageKey: '' };
   const { user } = useAuth();
+  const { toast } = useToast();
   
   const [tab, setTab] = useState<'player' | 'queue'>('player');
   const [likesCount, setLikesCount] = useState(0);
@@ -169,20 +171,6 @@ export default function PlayerPage() {
                    >
                      <Gauge className="h-4 w-4" />
                      Vitesse ({playbackRate}x)
-                   </button>
-                   <button
-                     onClick={() => {
-                       if (currentSong) {
-                         const url = `${window.location.origin}/listen/${currentSong.id}`;
-                         navigator.clipboard.writeText(url);
-                         setShowMenu(false);
-                       }
-                     }}
-                     className="w-full px-4 py-3 text-left text-sm hover:bg-accent/50 flex items-center gap-2 transition-colors"
-                     type="button"
-                   >
-                     <Share2 className="h-4 w-4" />
-                     Partager le lien
                    </button>
                  </div>
               )}
@@ -363,6 +351,7 @@ export default function PlayerPage() {
         onClose={() => setShowCreateStory(false)}
         song={currentSong}
       />
+
 
       {/* Speed control modal */}
       <AnimatePresence>

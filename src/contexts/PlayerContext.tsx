@@ -116,14 +116,12 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
       await audioRef.current.play();
       // Increment play_count + log history + streak
       if (authUser) {
-        await supabase.from('listen_history').insert({ user_id: authUser.id, song_id: song.id });
-        await supabase.rpc('increment_play_count' as any, { song_id_input: song.id }).catch(() => {
-          // RPC absente : fallback en update manuel
-          supabase
-            .from('songs')
-            .update({ play_count: (song.play_count ?? 0) + 1 })
-            .eq('id', song.id);
-        });
+        supabase.from('listen_history').insert({ user_id: authUser.id, song_id: song.id }).then(() => {});
+        supabase
+          .from('songs')
+          .update({ play_count: (song.play_count ?? 0) + 1 })
+          .eq('id', song.id)
+          .then(() => {});
         updateStreak(authUser.id);
       }
     } catch (e) {

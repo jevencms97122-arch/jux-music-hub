@@ -1,57 +1,79 @@
-export interface Song {
+// Types alignés sur le schéma Supabase
+
+export interface Profile {
   id: string;
-  title: string;
-  author: string;
-  audioFile: string;
-  coverImage: string;
-  uploadedBy: string;
-  genre: string;
-  playCount: number;
-  likesCount: number;
-  created: string;
-  collectionId: string;
-  collectionName: string;
-  expand?: {
-    uploadedBy?: PBUser;
-  };
+  user_id: string;
+  pseudo: string | null;
+  first_name: string | null;
+  last_name: string | null;
+  avatar_url: string | null;
+  bio: string | null;
+  profile_completed: boolean;
+  created_at: string;
+  updated_at: string;
 }
 
+// Alias rétro-compat pour le code existant
 export interface PBUser {
-  id: string;
+  id: string;          // = profile.user_id (auth user id)
   email: string;
   pseudo: string;
   firstName: string;
   lastName: string;
-  avatar: string;
+  avatar: string;      // = avatar_url
   profileCompleted?: boolean;
   profilCompleted?: boolean;
   collectionId: string;
   collectionName: string;
 }
 
+export interface Song {
+  id: string;
+  title: string;
+  author: string;
+  audio_url: string;
+  cover_url: string | null;
+  genre: string | null;
+  uploaded_by: string;
+  play_count: number;
+  likes_count: number;
+  created_at: string;
+  updated_at: string;
+  // legacy aliases
+  audioFile?: string;
+  coverImage?: string;
+  uploadedBy?: string;
+  playCount?: number;
+  likesCount?: number;
+  created?: string;
+  collectionId?: string;
+  collectionName?: string;
+  expand?: {
+    uploadedBy?: PBUser;
+  };
+}
+
 export interface ListenHistory {
   id: string;
-  user: string;
-  song: string;
-  listenedAt: string;
-  expand?: {
-    song?: Song;
-  };
+  user_id: string;
+  song_id: string;
+  listened_at: string;
+  expand?: { song?: Song };
 }
 
 export interface SongLike {
   id: string;
-  user: string;
-  song: string;
-  created: string;
+  user_id: string;
+  song_id: string;
+  created_at: string;
 }
 
 export interface Follow {
   id: string;
-  follower: string;
-  following: string;
+  follower_id: string;
+  following_id: string;
   status: 'pending' | 'accepted';
-  created: string;
+  created_at: string;
   expand?: {
     follower?: PBUser;
     following?: PBUser;
@@ -61,19 +83,17 @@ export interface Follow {
 export interface Playlist {
   id: string;
   title: string;
-  description: string;
-  public: boolean;
-  owner: string;
-  songs: string[];
-  viewCount: number;
-  playCount: number;
-  likesCount: number;
-  thumbnailMode: 'grid' | 'single';
-  thumbnailOrder?: string[];
-  created: string;
-  updated: string;
-  collectionId: string;
-  collectionName: string;
+  description: string | null;
+  is_public: boolean;
+  owner_id: string;
+  view_count: number;
+  play_count: number;
+  likes_count: number;
+  thumbnail_mode: 'grid' | 'single';
+  created_at: string;
+  updated_at: string;
+  // legacy
+  songs?: string[];
   expand?: {
     owner?: PBUser;
     songs?: Song[];
@@ -82,26 +102,21 @@ export interface Playlist {
 
 export interface PlaylistLike {
   id: string;
-  user: string;
-  playlist: string;
-  created: string;
-  expand?: {
-    playlist?: Playlist;
-  };
+  user_id: string;
+  playlist_id: string;
+  created_at: string;
+  expand?: { playlist?: Playlist };
 }
 
-// Stories
 export interface Story {
   id: string;
-  user: string;
-  song: string;
-  startTime: number;
-  endTime: number;
-  comment: string;
-  expiresAt: string;
-  created: string;
-  collectionId: string;
-  collectionName: string;
+  user_id: string;
+  song_id: string;
+  start_time: number;
+  end_time: number;
+  comment: string | null;
+  expires_at: string;
+  created_at: string;
   expand?: {
     user?: PBUser;
     song?: Song;
@@ -110,54 +125,47 @@ export interface Story {
 
 export interface StoryView {
   id: string;
-  story: string;
-  viewer: string;
-  created: string;
+  story_id: string;
+  viewer_id: string;
+  created_at: string;
 }
 
-// User Stats (Streaks)
 export interface UserStats {
   id: string;
-  user: string;
-  currentStreak: number;
-  longestStreak: number;
-  totalListens: number;
-  lastListenDate: string;
-  created: string;
-  updated: string;
+  user_id: string;
+  current_streak: number;
+  longest_streak: number;
+  total_listens: number;
+  last_listen_date: string | null;
+  created_at: string;
+  updated_at: string;
 }
 
-// Listen Sessions
 export interface ListenSession {
   id: string;
-  host: string;
-  song: string;
-  currentTime: number;
-  isPlaying: boolean;
+  host_id: string;
+  song_id: string | null;
+  current_time_seconds: number;
+  is_playing: boolean;
   participants: string[];
-  active?: boolean;
-  isActive?: boolean;
-  created: string;
-  updated: string;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
   expand?: {
     host?: PBUser;
     song?: Song;
   };
 }
 
-// Notifications
 export interface AppNotification {
   id: string;
-  recipient: string;
-  type: 'new_song' | 'milestone' | 'friend_request' | 'like';
+  recipient_id: string;
+  type: 'new_song' | 'milestone' | 'friend_request' | 'like' | 'comment' | 'story_view';
   title: string;
-  body: string;
-  data: string; // JSON string with extra data
-  read: boolean;
-  created: string;
-  expand?: {
-    recipient?: PBUser;
-  };
+  body: string | null;
+  data: Record<string, any>;
+  is_read: boolean;
+  created_at: string;
 }
 
 export const MUSIC_GENRES = [

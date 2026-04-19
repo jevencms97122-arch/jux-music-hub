@@ -14,6 +14,51 @@ export type Database = {
   }
   public: {
     Tables: {
+      app_versions: {
+        Row: {
+          created_at: string
+          description: string | null
+          id: string
+          last_version: number
+        }
+        Insert: {
+          created_at?: string
+          description?: string | null
+          id?: string
+          last_version: number
+        }
+        Update: {
+          created_at?: string
+          description?: string | null
+          id?: string
+          last_version?: number
+        }
+        Relationships: []
+      }
+      follows: {
+        Row: {
+          created_at: string
+          follower_id: string
+          following_id: string
+          id: string
+          status: string
+        }
+        Insert: {
+          created_at?: string
+          follower_id: string
+          following_id: string
+          id?: string
+          status?: string
+        }
+        Update: {
+          created_at?: string
+          follower_id?: string
+          following_id?: string
+          id?: string
+          status?: string
+        }
+        Relationships: []
+      }
       listen_history: {
         Row: {
           id: string
@@ -42,6 +87,83 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      listen_sessions: {
+        Row: {
+          created_at: string
+          current_time_seconds: number
+          host_id: string
+          id: string
+          is_active: boolean
+          is_playing: boolean
+          participants: string[]
+          song_id: string | null
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          current_time_seconds?: number
+          host_id: string
+          id?: string
+          is_active?: boolean
+          is_playing?: boolean
+          participants?: string[]
+          song_id?: string | null
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          current_time_seconds?: number
+          host_id?: string
+          id?: string
+          is_active?: boolean
+          is_playing?: boolean
+          participants?: string[]
+          song_id?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "listen_sessions_song_id_fkey"
+            columns: ["song_id"]
+            isOneToOne: false
+            referencedRelation: "songs"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      notifications: {
+        Row: {
+          body: string | null
+          created_at: string
+          data: Json | null
+          id: string
+          is_read: boolean
+          recipient_id: string
+          title: string
+          type: string
+        }
+        Insert: {
+          body?: string | null
+          created_at?: string
+          data?: Json | null
+          id?: string
+          is_read?: boolean
+          recipient_id: string
+          title: string
+          type: string
+        }
+        Update: {
+          body?: string | null
+          created_at?: string
+          data?: Json | null
+          id?: string
+          is_read?: boolean
+          recipient_id?: string
+          title?: string
+          type?: string
+        }
+        Relationships: []
       }
       playlist_collaborators: {
         Row: {
@@ -227,6 +349,38 @@ export type Database = {
         }
         Relationships: []
       }
+      song_comments: {
+        Row: {
+          content: string
+          created_at: string
+          id: string
+          song_id: string
+          user_id: string
+        }
+        Insert: {
+          content: string
+          created_at?: string
+          id?: string
+          song_id: string
+          user_id: string
+        }
+        Update: {
+          content?: string
+          created_at?: string
+          id?: string
+          song_id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "song_comments_song_id_fkey"
+            columns: ["song_id"]
+            isOneToOne: false
+            referencedRelation: "songs"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       song_likes: {
         Row: {
           created_at: string
@@ -298,6 +452,76 @@ export type Database = {
         }
         Relationships: []
       }
+      stories: {
+        Row: {
+          comment: string | null
+          created_at: string
+          end_time: number
+          expires_at: string
+          id: string
+          song_id: string
+          start_time: number
+          user_id: string
+        }
+        Insert: {
+          comment?: string | null
+          created_at?: string
+          end_time?: number
+          expires_at?: string
+          id?: string
+          song_id: string
+          start_time?: number
+          user_id: string
+        }
+        Update: {
+          comment?: string | null
+          created_at?: string
+          end_time?: number
+          expires_at?: string
+          id?: string
+          song_id?: string
+          start_time?: number
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "stories_song_id_fkey"
+            columns: ["song_id"]
+            isOneToOne: false
+            referencedRelation: "songs"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      story_views: {
+        Row: {
+          created_at: string
+          id: string
+          story_id: string
+          viewer_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          story_id: string
+          viewer_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          story_id?: string
+          viewer_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "story_views_story_id_fkey"
+            columns: ["story_id"]
+            isOneToOne: false
+            referencedRelation: "stories"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       user_roles: {
         Row: {
           created_at: string
@@ -315,6 +539,39 @@ export type Database = {
           created_at?: string
           id?: string
           role?: Database["public"]["Enums"]["app_role"]
+          user_id?: string
+        }
+        Relationships: []
+      }
+      user_stats: {
+        Row: {
+          created_at: string
+          current_streak: number
+          id: string
+          last_listen_date: string | null
+          longest_streak: number
+          total_listens: number
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          current_streak?: number
+          id?: string
+          last_listen_date?: string | null
+          longest_streak?: number
+          total_listens?: number
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          current_streak?: number
+          id?: string
+          last_listen_date?: string | null
+          longest_streak?: number
+          total_listens?: number
+          updated_at?: string
           user_id?: string
         }
         Relationships: []

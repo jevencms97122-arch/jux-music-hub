@@ -14,21 +14,27 @@ const items = [
 
 export default function BottomNav({ active, onNavigate }: Props) {
   return (
-    <nav className="fixed bottom-0 left-0 right-0 z-40 border-t border-border bg-background/95 backdrop-blur">
+    <nav className="fixed bottom-0 left-0 right-0 z-40 border-t border-border bg-background/80 backdrop-blur-xl safe-bottom">
       <ul className="grid grid-cols-4">
-        {items.map(({ key, label, icon: Icon }) => (
-          <li key={key}>
-            <button
-              onClick={() => onNavigate(key)}
-              className={`flex w-full flex-col items-center gap-1 py-2 text-xs ${
-                active === key ? 'text-primary' : 'text-muted-foreground'
-              }`}
-            >
-              <Icon className="h-5 w-5" />
-              {label}
-            </button>
-          </li>
-        ))}
+        {items.map(({ key, label, icon: Icon }) => {
+          const isActive = active === key;
+          return (
+            <li key={key}>
+              <button
+                onClick={() => onNavigate(key)}
+                className={`relative flex w-full flex-col items-center gap-0.5 py-2.5 text-[11px] font-medium transition-colors ${
+                  isActive ? 'text-primary' : 'text-muted-foreground hover:text-foreground'
+                }`}
+              >
+                {isActive && (
+                  <span className="absolute top-0 left-1/2 h-0.5 w-8 -translate-x-1/2 rounded-full bg-gradient-primary" />
+                )}
+                <Icon className={`h-5 w-5 transition-transform ${isActive ? 'scale-110' : ''}`} />
+                {label}
+              </button>
+            </li>
+          );
+        })}
       </ul>
     </nav>
   );

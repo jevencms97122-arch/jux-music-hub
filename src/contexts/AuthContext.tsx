@@ -10,8 +10,8 @@ interface AuthContextType {
   authUser: User | null;
   profile: Profile | null;
   loading: boolean;
-  /** Magic link via email — Supabase envoie un lien de connexion à l'email donné. */
-  sendMagicLink: (email: string) => Promise<void>;
+  signIn: (email: string, password: string) => Promise<void>;
+  signUp: (email: string, password: string) => Promise<void>;
   logout: () => Promise<void>;
   updateProfile: (data: Partial<Profile>) => Promise<void>;
   refreshUser: () => Promise<void>;
@@ -90,9 +90,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return () => subscription.unsubscribe();
   }, [loadProfile]);
 
-  const sendMagicLink = async (email: string) => {
-    const { error } = await supabase.auth.signInWithOtp({
+  const signIn = async (email: string, password: string) => {
+    const { error } = await supabase.auth.signInWithPassword({ email, password });
+    if (error) throw error;
+  };
+
+  const signUp = async (email: string, password: string) => {
+    const { error } = await supabase.auth.signUp({
       email,
+      password,
       options: { emailRedirectTo: `${window.location.origin}/jux` },
     });
     if (error) throw error;
@@ -118,7 +124,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   return (
-    <AuthContext.Provider value={{ user, session, authUser, profile, loading, sendMagicLink, logout, updateProfile, refreshUser }}>
+    <AuthContext.Provider value={{ user, session, authUser, profile, loading, signIn, signUp, logout, updateProfile, refreshUser }}>
       {children}
     </AuthContext.Provider>
   );

@@ -8,10 +8,9 @@ import { useEffect, useState, useRef } from 'react';
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
+import { Minus, Plus } from 'lucide-react';
 import AddToPlaylistModal from './AddToPlaylistModal';
 import CreateStoryModal from './CreateStoryModal';
-
-const SPEEDS = [0.5, 0.75, 1, 1.25, 1.5, 2];
 
 function formatTime(s: number) {
   if (!isFinite(s)) return '0:00';
@@ -76,12 +75,6 @@ export default function PlayerPage() {
               <DropdownMenuContent align="end">
                 <DropdownMenuItem onClick={() => setShowPlaylist(true)}>Ajouter à la playlist</DropdownMenuItem>
                 <DropdownMenuItem onClick={() => setShowStory(true)}>Ajouter à la story</DropdownMenuItem>
-                <div className="border-t border-border" />
-                {SPEEDS.map((s) => (
-                  <DropdownMenuItem key={s} onClick={() => setPlaybackRate(s)}>
-                    {s}x {s < 1 ? '(ralenti)' : s > 1 ? '(accéléré)' : '(normal)'}
-                  </DropdownMenuItem>
-                ))}
               </DropdownMenuContent>
             </DropdownMenu>
           </div>
@@ -122,9 +115,26 @@ export default function PlayerPage() {
                 <span className="flex items-center gap-1"><Heart className="h-3 w-3" /> {(currentSong.likes_count ?? 0).toLocaleString()}</span>
               </div>
             </div>
-            <div className="flex gap-2">
-              <span className="text-xs text-muted-foreground">Actions dans Options</span>
-            </div>
+          </div>
+
+          <div className="mb-3 flex items-center justify-center gap-3 rounded-full bg-secondary/40 px-4 py-2 backdrop-blur">
+            <button
+              onClick={() => setPlaybackRate(Math.max(0.5, Math.round((playbackRate - 0.01) * 100) / 100))}
+              aria-label="Diminuer la vitesse"
+              className="rounded-full p-1.5 hover:bg-secondary"
+            >
+              <Minus className="h-4 w-4" />
+            </button>
+            <span className="min-w-[110px] text-center text-sm font-medium">
+              Musique à {Math.round(playbackRate * 100)}%
+            </span>
+            <button
+              onClick={() => setPlaybackRate(Math.min(2, Math.round((playbackRate + 0.01) * 100) / 100))}
+              aria-label="Augmenter la vitesse"
+              className="rounded-full p-1.5 hover:bg-secondary"
+            >
+              <Plus className="h-4 w-4" />
+            </button>
           </div>
 
           <div className="mb-2">

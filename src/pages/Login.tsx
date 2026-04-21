@@ -81,10 +81,6 @@ export default function Login() {
               </form>
             </TabsContent>
           </Tabs>
-
-          <p className="text-center text-xs text-muted-foreground">
-            Pense à désactiver "Confirm email" dans les paramètres Auth Supabase pour une inscription instantanée.
-          </p>
         </div>
       </div>
     </div>

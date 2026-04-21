@@ -18,7 +18,7 @@ export default defineConfig(({ mode }) => ({
     mode === "development" && componentTagger(),
     VitePWA({
       registerType: "autoUpdate",
-      
+      devOptions: { enabled: false },
       manifest: {
         name: "Jux-Music - Écoute et partage de la musique",
         short_name: "Jux-Music",
@@ -34,45 +34,11 @@ export default defineConfig(({ mode }) => ({
         categories: ["music", "entertainment", "multimedia"],
         prefer_related_applications: false,
         icons: [
-          {
-            src: "/jux-icon-192.png",
-            sizes: "192x192",
-            type: "image/png",
-            purpose: "any"
-          },
-          {
-            src: "/jux-icon-192.png",
-            sizes: "192x192",
-            type: "image/png",
-            purpose: "maskable"
-          },
-          {
-            src: "/jux-icon-512.png",
-            sizes: "512x512",
-            type: "image/png",
-            purpose: "any"
-          },
-          {
-            src: "/jux-icon-512.png",
-            sizes: "512x512",
-            type: "image/png",
-            purpose: "maskable"
-          }
+          { src: "/jux-icon-192.png", sizes: "192x192", type: "image/png", purpose: "any" },
+          { src: "/jux-icon-192.png", sizes: "192x192", type: "image/png", purpose: "maskable" },
+          { src: "/jux-icon-512.png", sizes: "512x512", type: "image/png", purpose: "any" },
+          { src: "/jux-icon-512.png", sizes: "512x512", type: "image/png", purpose: "maskable" },
         ],
-        screenshots: [
-          {
-            src: "/jux-icon-192.png",
-            sizes: "192x192",
-            type: "image/png",
-            form_factor: "narrow"
-          },
-          {
-            src: "/jux-icon-512.png",
-            sizes: "512x512",
-            type: "image/png",
-            form_factor: "wide"
-          }
-        ]
       },
       workbox: {
         globPatterns: ["**/*.{js,css,html,ico,png,svg,woff2,woff}"],
@@ -81,20 +47,43 @@ export default defineConfig(({ mode }) => ({
         clientsClaim: true,
         skipWaiting: true,
         cleanupOutdatedCaches: true,
+        maximumFileSizeToCacheInBytes: 5 * 1024 * 1024,
         runtimeCaching: [
           {
-            urlPattern: /^https:\/\/api\./,
+            // Audio MP3/M4A depuis Supabase Storage — cache offline
+            urlPattern: /\.(?:mp3|m4a|wav|ogg|aac)(\?.*)?$/i,
+            handler: "CacheFirst",
+            options: {
+              cacheName: "audio-cache",
+              rangeRequests: true,
+              expiration: { maxEntries: 80, maxAgeSeconds: 60 * 60 * 24 * 30 },
+              cacheableResponse: { statuses: [0, 200, 206] },
+            },
+          },
+          {
+            // Couvertures et images
+            urlPattern: /\.(?:png|jpg|jpeg|webp|gif|svg)(\?.*)?$/i,
+            handler: "CacheFirst",
+            options: {
+              cacheName: "image-cache",
+              expiration: { maxEntries: 200, maxAgeSeconds: 60 * 60 * 24 * 30 },
+              cacheableResponse: { statuses: [0, 200] },
+            },
+          },
+          {
+            // Supabase REST/Storage public
+            urlPattern: /^https:\/\/.*\.supabase\.co\//,
             handler: "NetworkFirst",
             options: {
-              cacheName: "api-cache",
-              expiration: {
-                maxAgeSeconds: 300
-              }
-            }
-          }
-        ]
+              cacheName: "supabase-cache",
+              networkTimeoutSeconds: 5,
+              expiration: { maxEntries: 100, maxAgeSeconds: 60 * 60 * 24 },
+              cacheableResponse: { statuses: [0, 200] },
+            },
+          },
+        ],
       },
-      includeAssets: ["favicon.ico", "robots.txt", "jux-icon-192.png", "jux-icon-512.png"]
+      includeAssets: ["favicon.ico", "robots.txt", "jux-icon-192.png", "jux-icon-512.png"],
     }),
   ].filter(Boolean),
   resolve: {

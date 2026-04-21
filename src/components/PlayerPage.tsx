@@ -2,7 +2,7 @@ import { usePlayer } from '@/contexts/PlayerContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
 import { songCoverUrl } from '@/lib/storage';
-import { ChevronDown, Play, Pause, SkipBack, SkipForward, Shuffle, Repeat, Repeat1, MoreHorizontal, Heart, ListPlus, Sparkles, Headphones } from 'lucide-react';
+import { ChevronDown, Play, Pause, SkipBack, SkipForward, Shuffle, Repeat, Repeat1, MoreHorizontal, Heart, ListPlus, Sparkles, Headphones, Radio } from 'lucide-react';
 import { Slider } from '@/components/ui/slider';
 import { useEffect, useState, useRef } from 'react';
 import {
@@ -26,6 +26,7 @@ export default function PlayerPage() {
     closePlayer, togglePlay, next, previous, seek,
     isShuffled, toggleShuffle, repeatMode, cycleRepeat,
     playbackRate, setPlaybackRate,
+    crossfadeSeconds, setCrossfadeSeconds, startRadio,
   } = usePlayer();
   const [seeking, setSeeking] = useState<number | null>(null);
   const [liked, setLiked] = useState(false);
@@ -72,9 +73,25 @@ export default function PlayerPage() {
               <DropdownMenuTrigger className="flex items-center gap-1 rounded-full bg-secondary/60 px-3 py-1.5 text-xs font-medium backdrop-blur hover:bg-secondary">
                 <MoreHorizontal className="h-4 w-4" /> Options
               </DropdownMenuTrigger>
-              <DropdownMenuContent align="end">
+              <DropdownMenuContent align="end" className="w-64">
                 <DropdownMenuItem onClick={() => setShowPlaylist(true)}>Ajouter à la playlist</DropdownMenuItem>
                 <DropdownMenuItem onClick={() => setShowStory(true)}>Ajouter à la story</DropdownMenuItem>
+                <DropdownMenuItem onClick={() => currentSong && startRadio(currentSong)}>
+                  <Radio className="mr-2 h-4 w-4" /> Démarrer une radio
+                </DropdownMenuItem>
+                <div className="my-1 border-t border-border" />
+                <div className="px-2 py-2">
+                  <div className="mb-1 flex items-center justify-between text-xs">
+                    <span className="text-muted-foreground">Crossfade</span>
+                    <span className="font-medium">{crossfadeSeconds}s</span>
+                  </div>
+                  <input
+                    type="range" min={0} max={12} step={1}
+                    value={crossfadeSeconds}
+                    onChange={(e) => setCrossfadeSeconds(Number(e.target.value))}
+                    className="w-full accent-primary"
+                  />
+                </div>
               </DropdownMenuContent>
             </DropdownMenu>
           </div>

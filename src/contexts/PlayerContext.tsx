@@ -50,6 +50,7 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
   const [repeatMode, setRepeatMode] = useState<'off' | 'all' | 'one'>('off');
   const [isPlayerOpen, setIsPlayerOpen] = useState(false);
   const [playbackRate, setPlaybackRateState] = useState(1);
+  const [playedSongIds, setPlayedSongIds] = useState<Set<string>>(new Set());
 
   // Init audio element
   useEffect(() => {
@@ -133,6 +134,7 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
     setCurrentSong(song);
     setQueue([song]);
     setQueueIndex(0);
+    setPlayedSongIds(new Set([song.id]));
     loadAndPlay(song);
   }, [loadAndPlay]);
 
@@ -141,6 +143,7 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
     setQueue(list);
     setQueueIndex(idx);
     setCurrentSong(song);
+    setPlayedSongIds(new Set([song.id]));
     loadAndPlay(song);
   }, [loadAndPlay]);
 
@@ -150,11 +153,44 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
     else audioRef.current.pause();
   }, [currentSong]);
 
+  // Find recommended songs based on genre and other factors
+  const findRecommendedSongs = useCallback(async (baseSong: Song): Promise<Song[]> => {
+    try {
+      const allSongsRes = await supabase
+        .from('songs')
+        .select('*')
+        .limit(500);
+      
+      const allSongs = (allSongsRes.data ?? []) as Song[];
+      const queueIds = new Set(queue.map((s) => s.id));
+      const filteredSongs = allSongs.filter((s) => !playedSongIds.has(s.id) && !queueIds.has(s.id) && s.id !== baseSong.id);
+      
+      // Sort by genre similarity first, then by play count
+      const sameGenreSongs = filteredSongs
+        .filter((s) => s.genre && s.genre === baseSong.genre)
+        .sort((a, b) => (b.play_count ?? 0) - (a.play_count ?? 0));
+      
+      // If we have songs in same genre, use them
+      if (sameGenreSongs.length > 0) {
+        return sameGenreSongs.slice(0, 10); // Return up to 10 recommendations
+      }
+      
+      // Otherwise, return most popular songs (sorted by play count)
+      return filteredSongs
+        .sort((a, b) => (b.play_count ?? 0) - (a.play_count ?? 0))
+        .slice(0, 10);
+    } catch (err) {
+      console.error('Error finding recommended songs:', err);
+      return [];
+    }
+  }, [playedSongIds, queue]);
+
   const playAtIndex = useCallback((idx: number) => {
     if (idx < 0 || idx >= queue.length) return;
     const song = queue[idx];
     setQueueIndex(idx);
     setCurrentSong(song);
+    setPlayedSongIds((prev) => new Set([...prev, song.id]));
     loadAndPlay(song);
   }, [queue, loadAndPlay]);
 
@@ -162,12 +198,35 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
     if (queue.length === 0) return;
     if (repeatMode === 'one') { playAtIndex(queueIndex); return; }
     let nextIdx = isShuffled ? Math.floor(Math.random() * queue.length) : queueIndex + 1;
+    
     if (nextIdx >= queue.length) {
-      if (repeatMode === 'all') nextIdx = 0;
-      else { audioRef.current?.pause(); return; }
+      if (repeatMode === 'all') {
+        nextIdx = 0;
+        playAtIndex(nextIdx);
+      } else {
+        // Auto-play mode: find recommended songs and add to queue
+        if (currentSong) {
+          findRecommendedSongs(currentSong).then((recommended) => {
+            if (recommended.length > 0) {
+              const song = recommended[0];
+              const currentQueueLength = queue.length;
+              setCurrentSong(song);
+              setQueue((prevQueue) => [...prevQueue, ...recommended]);
+              setQueueIndex(currentQueueLength);
+              setPlayedSongIds((prev) => new Set([...prev, song.id]));
+              loadAndPlay(song);
+            } else {
+              audioRef.current?.pause();
+            }
+          });
+        } else {
+          audioRef.current?.pause();
+        }
+      }
+    } else {
+      playAtIndex(nextIdx);
     }
-    playAtIndex(nextIdx);
-  }, [queue, queueIndex, repeatMode, isShuffled, playAtIndex]);
+  }, [queue, queueIndex, repeatMode, isShuffled, playAtIndex, currentSong, findRecommendedSongs, loadAndPlay]);
 
   const previous = useCallback(() => {
     if (audioRef.current && audioRef.current.currentTime > 3) {

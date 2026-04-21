@@ -1,11 +1,10 @@
 import { useEffect, useState } from 'react';
 import { supabase } from '@/integrations/supabase/client';
-import { usePlayer } from '@/contexts/PlayerContext';
-import SongCard from '@/components/SongCard';
+import { usePlayer } from '@/contexts/PlayerContext';import { songCoverUrl } from '@/lib/storage';import SongCard from '@/components/SongCard';
 import StoryCircles from '@/components/StoryCircles';
 import { Button } from '@/components/ui/button';
 import { useNavigate } from 'react-router-dom';
-import { Search as SearchIcon, Bell, Heart, Flame, TrendingUp } from 'lucide-react';
+import { Search as SearchIcon, Bell, Heart, Flame, TrendingUp, Clock } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import type { Song } from '@/types/music';
 import juxLogo from '@/assets/jux-logo.png';
@@ -43,7 +42,7 @@ export default function Home() {
 
   return (
     <div className="relative min-h-screen pb-40">
-      <div className="pointer-events-none absolute inset-x-0 top-0 h-80 bg-gradient-hero" />
+      <div className="pointer-events-none absolute inset-x-0 top-0 h-96 bg-gradient-hero" />
 
       <header className="relative flex items-center justify-between p-4">
         <img src={juxLogo} alt="Jux" className="h-8" />
@@ -61,30 +60,38 @@ export default function Home() {
         </div>
       </header>
 
+      <div className="relative px-4 pb-6">
+        <h1 className="text-3xl font-bold text-foreground">Bonjour {authUser?.pseudo || '!'}</h1>
+        <p className="text-muted-foreground">Découvrez de nouvelles musiques</p>
+      </div>
+
       <StoryCircles />
 
       {trending.length > 0 && (
-        <section className="relative mb-6 px-4">
-          <div className="mb-3 flex items-center gap-2">
-            <Flame className="h-5 w-5 text-primary" />
-            <h2 className="text-lg font-bold text-foreground">Tendances</h2>
+        <section className="relative mb-8 px-4">
+          <div className="mb-4 flex items-center gap-2">
+            <Flame className="h-6 w-6 text-primary" />
+            <h2 className="text-xl font-bold text-foreground">Tendances</h2>
           </div>
-          <div className="-mx-4 flex gap-3 overflow-x-auto scrollbar-hide px-4 pb-2">
-            {trending.map((s, i) => (
+          <div className="-mx-4 flex gap-4 overflow-x-auto scrollbar-hide px-4 pb-2">
+            {trending.slice(0, 5).map((s, i) => (
               <button
                 key={s.id}
                 onClick={() => playSongFromList(s, trending)}
-                className="group relative flex w-40 flex-shrink-0 flex-col gap-2 text-left"
+                className="group relative flex w-48 flex-shrink-0 flex-col gap-3 text-left"
               >
-                <div className="relative aspect-square w-full overflow-hidden rounded-xl shadow-card">
-                  <img src={s.cover_url ?? '/placeholder.svg'} alt={s.title} loading="lazy"
-                    className="h-full w-full object-cover transition-transform group-hover:scale-110" />
-                  <div className="absolute left-2 top-2 flex h-7 w-7 items-center justify-center rounded-full bg-gradient-primary text-xs font-bold text-primary-foreground shadow-elegant">
-                    {i + 1}
+                <div className="relative aspect-square w-full overflow-hidden rounded-xl shadow-card transition-transform group-hover:scale-105">
+                  <img src={songCoverUrl(s)} alt={s.title} loading="lazy"
+                    className="h-full w-full object-cover" />
+                  <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent" />
+                  <div className="absolute bottom-3 left-3 right-3">
+                    <div className="flex h-8 w-8 items-center justify-center rounded-full bg-primary text-sm font-bold text-primary-foreground shadow-elegant">
+                      {i + 1}
+                    </div>
                   </div>
                 </div>
                 <div>
-                  <p className="truncate text-sm font-semibold">{s.title}</p>
+                  <p className="truncate text-sm font-semibold text-foreground">{s.title}</p>
                   <p className="truncate text-xs text-muted-foreground">{s.author}</p>
                 </div>
               </button>

@@ -2,9 +2,9 @@ import { usePlayer } from '@/contexts/PlayerContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
 import { songCoverUrl } from '@/lib/storage';
-import { ChevronDown, Play, Pause, SkipBack, SkipForward, Shuffle, Repeat, Repeat1, Gauge, Heart, ListPlus, Sparkles, Headphones } from 'lucide-react';
+import { ChevronDown, Play, Pause, SkipBack, SkipForward, Shuffle, Repeat, Repeat1, MoreHorizontal, Heart, ListPlus, Sparkles, Headphones } from 'lucide-react';
 import { Slider } from '@/components/ui/slider';
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
@@ -32,6 +32,8 @@ export default function PlayerPage() {
   const [liked, setLiked] = useState(false);
   const [showPlaylist, setShowPlaylist] = useState(false);
   const [showStory, setShowStory] = useState(false);
+  const [showLikeAnim, setShowLikeAnim] = useState(false);
+  const lastTap = useRef<number>(0);
 
   useEffect(() => {
     if (!authUser || !currentSong) { setLiked(false); return; }
@@ -69,12 +71,15 @@ export default function PlayerPage() {
             <span className="text-xs font-medium uppercase tracking-wider text-muted-foreground">En cours</span>
             <DropdownMenu>
               <DropdownMenuTrigger className="flex items-center gap-1 rounded-full bg-secondary/60 px-3 py-1.5 text-xs font-medium backdrop-blur hover:bg-secondary">
-                <Gauge className="h-4 w-4" /> {playbackRate}x
+                <MoreHorizontal className="h-4 w-4" /> Options
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end">
+                <DropdownMenuItem onClick={() => setShowPlaylist(true)}>Ajouter à la playlist</DropdownMenuItem>
+                <DropdownMenuItem onClick={() => setShowStory(true)}>Ajouter à la story</DropdownMenuItem>
+                <div className="border-t border-border" />
                 {SPEEDS.map((s) => (
                   <DropdownMenuItem key={s} onClick={() => setPlaybackRate(s)}>
-                    {s}x {s < 1 ? '(slowed)' : s > 1 ? '(sped up)' : '(normal)'}
+                    {s}x {s < 1 ? '(ralenti)' : s > 1 ? '(accéléré)' : '(normal)'}
                   </DropdownMenuItem>
                 ))}
               </DropdownMenuContent>
@@ -82,11 +87,30 @@ export default function PlayerPage() {
           </div>
 
           <div className="flex flex-1 items-center justify-center py-8">
-            <img
-              src={songCoverUrl(currentSong)}
-              alt={currentSong.title}
-              className="aspect-square w-full max-w-sm rounded-2xl object-cover shadow-elegant"
-            />
+            <div className="relative w-full max-w-sm">
+              <img
+                src={songCoverUrl(currentSong)}
+                alt={currentSong.title}
+                className="aspect-square w-full rounded-2xl object-cover shadow-elegant"
+                onDoubleClick={async () => {
+                  await toggleLike();
+                  setShowLikeAnim(true);
+                  setTimeout(() => setShowLikeAnim(false), 800);
+                }}
+                onTouchStart={() => {
+                  const now = Date.now();
+                  if (now - lastTap.current < 300) {
+                    toggleLike();
+                    setShowLikeAnim(true);
+                    setTimeout(() => setShowLikeAnim(false), 800);
+                    lastTap.current = 0;
+                  } else lastTap.current = now;
+                }}
+              />
+              <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
+                <Heart className={`h-24 w-24 transition-all duration-300 ${showLikeAnim ? 'scale-100 opacity-100 text-primary' : 'scale-0 opacity-0 text-white'}`} />
+              </div>
+            </div>
           </div>
 
           <div className="mb-3 flex items-center justify-between gap-3">
@@ -99,15 +123,7 @@ export default function PlayerPage() {
               </div>
             </div>
             <div className="flex gap-2">
-              <button onClick={toggleLike} aria-label="Like" className="rounded-full p-2 hover:bg-secondary">
-                <Heart className={`h-6 w-6 transition-all ${liked ? 'fill-primary text-primary scale-110' : 'text-muted-foreground'}`} />
-              </button>
-              <button onClick={() => setShowPlaylist(true)} aria-label="Ajouter à playlist" className="rounded-full p-2 hover:bg-secondary">
-                <ListPlus className="h-6 w-6 text-muted-foreground" />
-              </button>
-              <button onClick={() => setShowStory(true)} aria-label="Créer story" className="rounded-full p-2 hover:bg-secondary">
-                <Sparkles className="h-6 w-6 text-muted-foreground" />
-              </button>
+              <span className="text-xs text-muted-foreground">Actions dans Options</span>
             </div>
           </div>
 

@@ -28,46 +28,65 @@ export default function Login() {
   };
 
   return (
-    <div className="flex min-h-screen flex-col items-center justify-center px-6">
-      <img src={juxLogo} alt="Jux" className="mb-8 h-16 w-auto" />
-      <h1 className="mb-6 text-2xl font-bold text-foreground">Bienvenue sur Jux</h1>
+    <div className="flex min-h-screen bg-gradient-to-br from-background via-secondary to-background">
+      <div className="flex w-full items-center justify-center px-6 py-12">
+        <div className="w-full max-w-md space-y-8">
+          <div className="text-center">
+            <img src={juxLogo} alt="Jux" className="mx-auto mb-8 h-20 w-auto" />
+            <h1 className="text-3xl font-bold text-foreground">Bienvenue sur Jux</h1>
+            <p className="mt-2 text-muted-foreground">Connecte-toi pour découvrir de nouvelles musiques</p>
+          </div>
 
-      <Tabs value={mode} onValueChange={(v) => { setMode(v as any); setError(''); }} className="w-full max-w-sm">
-        <TabsList className="grid w-full grid-cols-2">
-          <TabsTrigger value="signin">Connexion</TabsTrigger>
-          <TabsTrigger value="signup">Inscription</TabsTrigger>
-        </TabsList>
+          <Tabs value={mode} onValueChange={(v) => { setMode(v as any); setError(''); }} className="w-full">
+            <TabsList className="grid w-full grid-cols-2 bg-secondary">
+              <TabsTrigger value="signin" className="text-sm">Connexion</TabsTrigger>
+              <TabsTrigger value="signup" className="text-sm">Inscription</TabsTrigger>
+            </TabsList>
 
-        <TabsContent value={mode} className="mt-4">
-          <form onSubmit={handleSubmit} className="space-y-3">
-            <Input
-              type="email"
-              placeholder="ton@email.com"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              required
-              autoComplete="email"
-            />
-            <Input
-              type="password"
-              placeholder="Mot de passe"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              required
-              minLength={6}
-              autoComplete={mode === 'signin' ? 'current-password' : 'new-password'}
-            />
-            {error && <p className="text-sm text-destructive">{error}</p>}
-            <Button type="submit" className="w-full" disabled={loading || !email || !password}>
-              {loading ? 'Patiente...' : mode === 'signin' ? 'Se connecter' : "S'inscrire"}
-            </Button>
-          </form>
-        </TabsContent>
-      </Tabs>
+            <TabsContent value={mode} className="mt-6">
+              <form onSubmit={handleSubmit} className="space-y-4">
+                <div className="space-y-2">
+                  <label className="text-sm font-medium text-foreground">Email</label>
+                  <Input
+                    type="email"
+                    placeholder="ton@email.com"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    required
+                    autoComplete="email"
+                    className="h-12"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-sm font-medium text-foreground">Mot de passe</label>
+                  <Input
+                    type="password"
+                    placeholder="Mot de passe"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    required
+                    minLength={6}
+                    autoComplete={mode === 'signin' ? 'current-password' : 'new-password'}
+                    className="h-12"
+                  />
+                </div>
+                {error && (
+                  <div className="rounded-lg border border-destructive/20 bg-destructive/10 p-3">
+                    <p className="text-sm text-destructive">{error}</p>
+                  </div>
+                )}
+                <Button type="submit" className="h-12 w-full bg-gradient-primary text-primary-foreground hover:opacity-90" disabled={loading || !email || !password}>
+                  {loading ? 'Chargement...' : mode === 'signin' ? 'Se connecter' : "S'inscrire"}
+                </Button>
+              </form>
+            </TabsContent>
+          </Tabs>
 
-      <p className="mt-6 max-w-sm text-center text-xs text-muted-foreground">
-        Pense à désactiver "Confirm email" dans les paramètres Auth Supabase pour une inscription instantanée.
-      </p>
+          <p className="text-center text-xs text-muted-foreground">
+            Pense à désactiver "Confirm email" dans les paramètres Auth Supabase pour une inscription instantanée.
+          </p>
+        </div>
+      </div>
     </div>
   );
 }

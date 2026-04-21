@@ -16,6 +16,7 @@ import UserProfile from '@/pages/UserProfile';
 import Search from '@/pages/Search';
 import Favorites from '@/pages/Favorites';
 import Notifications from '@/pages/Notifications';
+import CarMode from '@/pages/CarMode';
 import MiniPlayer from '@/components/MiniPlayer';
 import PlayerPage from '@/components/PlayerPage';
 import BottomNav from '@/components/BottomNav';
@@ -89,6 +90,7 @@ function AppContent() {
           <Route path="/search" element={guard(<Search />)} />
           <Route path="/favorites" element={guard(<Favorites />)} />
           <Route path="/notifications" element={guard(<Notifications />)} />
+          <Route path="/car" element={guard(<CarMode />)} />
           <Route path="/profile" element={guard(<ProfilePage />)} />
           <Route path="/profile-edit" element={guard(<ProfileEdit onBack={() => navigate('/profile')} />)} />
           <Route path="*" element={<Navigate to="/jux" replace />} />

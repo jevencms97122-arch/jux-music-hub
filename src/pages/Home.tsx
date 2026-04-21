@@ -18,6 +18,7 @@ export default function Home() {
   const navigate = useNavigate();
   const [songs, setSongs] = useState<Song[]>([]);
   const [trending, setTrending] = useState<Song[]>([]);
+  const [dailyMix, setDailyMix] = useState<Song[]>([]);
   const [loading, setLoading] = useState(true);
   const [unread, setUnread] = useState(0);
 
@@ -41,6 +42,11 @@ export default function Home() {
         .eq('recipient_id', authUser.id).eq('is_read', false);
       setUnread(count ?? 0);
     })();
+  }, [authUser]);
+
+  useEffect(() => {
+    if (!authUser) return;
+    generateDailyMix(authUser.id).then(setDailyMix);
   }, [authUser]);
 
   return (

@@ -4,10 +4,20 @@ import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { usePlayer } from '@/contexts/PlayerContext';
 import { Button } from '@/components/ui/button';
-import { ArrowLeft, Play, Trash2, Heart, ListMusic } from 'lucide-react';
-import { songCoverUrl } from '@/lib/storage';
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import { Input } from '@/components/ui/input';
+import { ArrowLeft, Play, Trash2, Heart, ListMusic, UserPlus, X } from 'lucide-react';
+import { songCoverUrl, avatarUrl } from '@/lib/storage';
 import { toast } from 'sonner';
-import type { Playlist, Song } from '@/types/music';
+import type { Playlist, Song, Profile } from '@/types/music';
+
+interface Collaborator {
+  id: string;
+  user_id: string;
+  role: string;
+  profile?: Profile;
+}
 
 export default function PlaylistDetail() {
   const { id } = useParams();
@@ -17,6 +27,10 @@ export default function PlaylistDetail() {
   const [playlist, setPlaylist] = useState<Playlist | null>(null);
   const [songs, setSongs] = useState<Song[]>([]);
   const [liked, setLiked] = useState(false);
+  const [collaborators, setCollaborators] = useState<Collaborator[]>([]);
+  const [isCollabOpen, setIsCollabOpen] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [searchResults, setSearchResults] = useState<Profile[]>([]);
 
   const load = async () => {
     if (!id) return;
@@ -37,11 +51,35 @@ export default function PlaylistDetail() {
         .from('playlist_likes').select('id').eq('playlist_id', id).eq('user_id', authUser.id).maybeSingle();
       setLiked(!!like);
     }
+
+    // Charger les collaborateurs
+    const { data: collabs } = await supabase
+      .from('playlist_collaborators').select('*').eq('playlist_id', id);
+    const userIds = (collabs ?? []).map((c: any) => c.user_id);
+    if (userIds.length > 0) {
+      const { data: profiles } = await supabase.from('profiles').select('*').in('user_id', userIds);
+      setCollaborators((collabs ?? []).map((c: any) => ({
+        ...c,
+        profile: (profiles ?? []).find((p: any) => p.user_id === c.user_id),
+      })));
+    } else setCollaborators([]);
   };
 
   useEffect(() => { load(); }, [id, authUser]);
 
+  // Realtime : nouveaux titres ajoutés par les collaborateurs
+  useEffect(() => {
+    if (!id) return;
+    const channel = supabase
+      .channel('playlist-' + id)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'playlist_songs', filter: `playlist_id=eq.${id}` }, () => load())
+      .subscribe();
+    return () => { supabase.removeChannel(channel); };
+  }, [id]);
+
   const isOwner = authUser && playlist?.owner_id === authUser.id;
+  const isCollaborator = authUser && collaborators.some((c) => c.user_id === authUser.id);
+  const canEdit = isOwner || isCollaborator;
 
   const removeSong = async (songId: string) => {
     if (!id) return;
@@ -67,6 +105,34 @@ export default function PlaylistDetail() {
     navigate('/playlists');
   };
 
+  const searchUsers = async (q: string) => {
+    setSearchQuery(q);
+    if (!q.trim()) { setSearchResults([]); return; }
+    const { data } = await supabase
+      .from('profiles').select('*')
+      .ilike('pseudo', `%${q}%`).limit(8);
+    setSearchResults(((data ?? []) as Profile[]).filter(
+      (p) => p.user_id !== playlist?.owner_id && !collaborators.some((c) => c.user_id === p.user_id)
+    ));
+  };
+
+  const addCollaborator = async (userId: string) => {
+    if (!id) return;
+    const { error } = await supabase
+      .from('playlist_collaborators')
+      .insert({ playlist_id: id, user_id: userId, role: 'editor' });
+    if (error) { toast.error(error.message); return; }
+    toast.success('Collaborateur ajouté');
+    setSearchQuery('');
+    setSearchResults([]);
+    load();
+  };
+
+  const removeCollaborator = async (collabId: string) => {
+    await supabase.from('playlist_collaborators').delete().eq('id', collabId);
+    load();
+  };
+
   if (!playlist) return <div className="p-6 text-sm text-muted-foreground">Chargement...</div>;
 
   return (
@@ -74,6 +140,54 @@ export default function PlaylistDetail() {
       <header className="flex items-center gap-2 p-4">
         <Button variant="ghost" size="icon" onClick={() => navigate(-1)}><ArrowLeft className="h-5 w-5" /></Button>
         <h1 className="flex-1 truncate font-bold">{playlist.title}</h1>
+        {isOwner && (
+          <Dialog open={isCollabOpen} onOpenChange={setIsCollabOpen}>
+            <DialogTrigger asChild>
+              <Button variant="ghost" size="icon"><UserPlus className="h-5 w-5" /></Button>
+            </DialogTrigger>
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle>Collaborateurs</DialogTitle>
+              </DialogHeader>
+              <div className="space-y-3">
+                <div className="space-y-1">
+                  {collaborators.length === 0 ? (
+                    <p className="text-sm text-muted-foreground">Aucun collaborateur.</p>
+                  ) : collaborators.map((c) => c.profile && (
+                    <div key={c.id} className="flex items-center gap-2 rounded-lg p-2 hover:bg-secondary">
+                      <Avatar className="h-8 w-8">
+                        <AvatarImage src={avatarUrl(c.profile)} />
+                        <AvatarFallback>{c.profile.pseudo?.[0]?.toUpperCase() ?? '?'}</AvatarFallback>
+                      </Avatar>
+                      <p className="flex-1 text-sm">{c.profile.pseudo}</p>
+                      <Button variant="ghost" size="icon" onClick={() => removeCollaborator(c.id)}>
+                        <X className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  ))}
+                </div>
+                <div className="border-t border-border pt-3">
+                  <Input placeholder="Rechercher un utilisateur..." value={searchQuery} onChange={(e) => searchUsers(e.target.value)} />
+                  <div className="mt-2 space-y-1">
+                    {searchResults.map((p) => (
+                      <button
+                        key={p.user_id}
+                        onClick={() => addCollaborator(p.user_id)}
+                        className="flex w-full items-center gap-2 rounded-lg p-2 text-left hover:bg-secondary"
+                      >
+                        <Avatar className="h-8 w-8">
+                          <AvatarImage src={avatarUrl(p)} />
+                          <AvatarFallback>{p.pseudo?.[0]?.toUpperCase() ?? '?'}</AvatarFallback>
+                        </Avatar>
+                        <p className="text-sm">{p.pseudo}</p>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            </DialogContent>
+          </Dialog>
+        )}
         {!isOwner && (
           <Button variant="ghost" size="icon" onClick={toggleLike}>
             <Heart className={`h-5 w-5 ${liked ? 'fill-primary text-primary' : ''}`} />
@@ -87,11 +201,25 @@ export default function PlaylistDetail() {
       </header>
 
       <div className="px-4">
-        <div className="mb-4 flex h-40 w-40 items-center justify-center rounded-lg bg-secondary">
-          <ListMusic className="h-16 w-16 text-muted-foreground" />
+        <div className="mb-4 flex h-40 w-40 items-center justify-center rounded-lg bg-gradient-primary shadow-elegant">
+          <ListMusic className="h-16 w-16 text-primary-foreground" />
         </div>
         {playlist.description && <p className="mb-2 text-sm text-muted-foreground">{playlist.description}</p>}
-        <p className="mb-4 text-xs text-muted-foreground">{songs.length} morceau{songs.length > 1 ? 'x' : ''}</p>
+        <p className="mb-2 text-xs text-muted-foreground">
+          {songs.length} morceau{songs.length > 1 ? 'x' : ''}
+          {collaborators.length > 0 && ` • ${collaborators.length} collaborateur${collaborators.length > 1 ? 's' : ''}`}
+        </p>
+
+        {collaborators.length > 0 && (
+          <div className="mb-4 flex -space-x-2">
+            {collaborators.slice(0, 5).map((c) => c.profile && (
+              <Avatar key={c.id} className="h-8 w-8 ring-2 ring-background">
+                <AvatarImage src={avatarUrl(c.profile)} />
+                <AvatarFallback className="text-[10px]">{c.profile.pseudo?.[0]?.toUpperCase() ?? '?'}</AvatarFallback>
+              </Avatar>
+            ))}
+          </div>
+        )}
 
         {songs.length > 0 && (
           <Button className="mb-4" onClick={() => playSongFromList(songs[0], songs)}>
@@ -109,7 +237,7 @@ export default function PlaylistDetail() {
                   <p className="truncate text-xs text-muted-foreground">{s.author}</p>
                 </div>
               </button>
-              {isOwner && (
+              {canEdit && (
                 <Button variant="ghost" size="icon" onClick={() => removeSong(s.id)}>
                   <Trash2 className="h-4 w-4 text-destructive" />
                 </Button>

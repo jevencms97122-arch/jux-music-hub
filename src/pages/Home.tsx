@@ -1,11 +1,14 @@
 import { useEffect, useState } from 'react';
 import { supabase } from '@/integrations/supabase/client';
-import { usePlayer } from '@/contexts/PlayerContext';import { songCoverUrl } from '@/lib/storage';import SongCard from '@/components/SongCard';
+import { usePlayer } from '@/contexts/PlayerContext';
+import { songCoverUrl } from '@/lib/storage';
+import SongCard from '@/components/SongCard';
 import StoryCircles from '@/components/StoryCircles';
 import { Button } from '@/components/ui/button';
 import { useNavigate } from 'react-router-dom';
-import { Search as SearchIcon, Bell, Heart, Flame, TrendingUp, Clock } from 'lucide-react';
+import { Search as SearchIcon, Bell, Heart, Flame, TrendingUp, Sparkles, Car, Play } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
+import { generateDailyMix } from '@/lib/dailyMix';
 import type { Song } from '@/types/music';
 import juxLogo from '@/assets/jux-logo.png';
 

@@ -61,7 +61,7 @@ export default function Home() {
       </header>
 
       <div className="relative px-4 pb-6">
-        <h1 className="text-3xl font-bold text-foreground">Bonjour {authUser?.pseudo || '!'}</h1>
+        <h1 className="text-3xl font-bold text-foreground">Bonjour !</h1>
         <p className="text-muted-foreground">Découvrez de nouvelles musiques</p>
       </div>
 

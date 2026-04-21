@@ -56,6 +56,9 @@ export default function Home() {
       <header className="relative flex items-center justify-between p-4">
         <img src={juxLogo} alt="Jux" className="h-8" />
         <div className="flex items-center gap-1">
+          <Button variant="ghost" size="icon" onClick={() => navigate('/car')} aria-label="Mode voiture">
+            <Car className="h-5 w-5" />
+          </Button>
           <Button variant="ghost" size="icon" onClick={() => navigate('/search')}>
             <SearchIcon className="h-5 w-5" />
           </Button>
@@ -75,6 +78,33 @@ export default function Home() {
       </div>
 
       <StoryCircles />
+
+      {dailyMix.length > 0 && (
+        <section className="relative mb-8 px-4">
+          <div className="mb-4 flex items-center gap-2">
+            <Sparkles className="h-6 w-6 text-primary" />
+            <h2 className="text-xl font-bold text-foreground">Daily Mix</h2>
+          </div>
+          <button
+            onClick={() => playSongFromList(dailyMix[0], dailyMix)}
+            className="group relative flex w-full items-center gap-4 overflow-hidden rounded-2xl bg-gradient-primary p-4 text-left shadow-elegant transition-transform hover:scale-[1.01] active:scale-[0.99]"
+          >
+            <div className="grid h-20 w-20 flex-shrink-0 grid-cols-2 grid-rows-2 gap-0.5 overflow-hidden rounded-xl">
+              {dailyMix.slice(0, 4).map((s) => (
+                <img key={s.id} src={songCoverUrl(s)} alt="" className="h-full w-full object-cover" loading="lazy" />
+              ))}
+            </div>
+            <div className="min-w-0 flex-1">
+              <p className="text-xs font-medium uppercase tracking-wider text-primary-foreground/80">Pour toi</p>
+              <p className="truncate text-lg font-bold text-primary-foreground">Ton Daily Mix</p>
+              <p className="truncate text-xs text-primary-foreground/80">{dailyMix.length} titres rien que pour toi</p>
+            </div>
+            <div className="flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-full bg-background text-foreground shadow-elegant transition-transform group-hover:scale-110">
+              <Play className="h-5 w-5 fill-current" />
+            </div>
+          </button>
+        </section>
+      )}
 
       {trending.length > 0 && (
         <section className="relative mb-8 px-4">

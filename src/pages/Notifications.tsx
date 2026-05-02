@@ -1,12 +1,14 @@
 import { useEffect, useState } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
-import { Bell, Trash2 } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { Bell, Trash2, Check, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import type { AppNotification } from '@/types/music';
 
 export default function Notifications() {
   const { authUser } = useAuth();
+  const navigate = useNavigate();
   const [notifs, setNotifs] = useState<AppNotification[]>([]);
 
   const load = async () => {
@@ -50,18 +52,32 @@ export default function Notifications() {
         <p className="text-sm text-muted-foreground">Aucune notification.</p>
       ) : (
         <div className="space-y-2">
-          {notifs.map((n) => (
-            <div key={n.id} className="flex items-start gap-2 rounded-lg border border-border bg-card p-3">
-              <div className="flex-1">
-                <p className="text-sm font-medium">{n.title}</p>
-                {n.body && <p className="text-xs text-muted-foreground">{n.body}</p>}
-                <p className="mt-1 text-[10px] text-muted-foreground">{new Date(n.created_at).toLocaleString()}</p>
+          {notifs.map((n) => {
+            const isInvite = n.type === 'session_invite';
+            const code = (n.data as any)?.code;
+            return (
+              <div key={n.id} className="flex items-start gap-2 rounded-lg border border-border bg-card p-3">
+                <div className="flex-1">
+                  <p className="text-sm font-medium">{n.title}</p>
+                  {n.body && <p className="text-xs text-muted-foreground">{n.body}</p>}
+                  <p className="mt-1 text-[10px] text-muted-foreground">{new Date(n.created_at).toLocaleString()}</p>
+                  {isInvite && code && (
+                    <div className="mt-2 flex gap-2">
+                      <Button size="sm" onClick={() => { remove(n.id); navigate(`/listen-together?code=${code}`); }}>
+                        <Check className="mr-1 h-3 w-3" /> Rejoindre
+                      </Button>
+                      <Button size="sm" variant="outline" onClick={() => remove(n.id)}>
+                        <X className="mr-1 h-3 w-3" /> Décliner
+                      </Button>
+                    </div>
+                  )}
+                </div>
+                <Button variant="ghost" size="icon" onClick={() => remove(n.id)}>
+                  <Trash2 className="h-4 w-4" />
+                </Button>
               </div>
-              <Button variant="ghost" size="icon" onClick={() => remove(n.id)}>
-                <Trash2 className="h-4 w-4" />
-              </Button>
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
     </div>

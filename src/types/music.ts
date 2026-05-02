@@ -160,7 +160,7 @@ export interface ListenSession {
 export interface AppNotification {
   id: string;
   recipient_id: string;
-  type: 'new_song' | 'milestone' | 'friend_request' | 'like' | 'comment' | 'story_view';
+  type: 'new_song' | 'milestone' | 'friend_request' | 'like' | 'comment' | 'story_view' | 'session_invite';
   title: string;
   body: string | null;
   data: Record<string, any>;

@@ -318,7 +318,9 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
     if (prevIdx >= 0) playAtIndex(prevIdx);
   }, [queueIndex, playAtIndex]);
 
-  const handleEnded = useCallback(() => { next(); }, [next]);
+  // Sync refs avec dernières versions des callbacks
+  useEffect(() => { nextRef.current = next; }, [next]);
+  useEffect(() => { triggerCrossfadeRef.current = triggerCrossfade; }, [triggerCrossfade]);
 
   const seek = useCallback((t: number) => { const a = getActive(); if (a) a.currentTime = t; }, []);
   const setVolume = useCallback((v: number) => setVolumeState(Math.max(0, Math.min(1, v))), []);

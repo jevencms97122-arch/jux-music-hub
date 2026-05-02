@@ -68,6 +68,14 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
   const getActive = () => (activeRef.current === 'A' ? audioARef.current! : audioBRef.current!);
   const getInactive = () => (activeRef.current === 'A' ? audioBRef.current! : audioARef.current!);
 
+  // Refs vers les dernières fonctions pour éviter les closures stales dans les listeners
+  const nextRef = useRef<() => void>(() => {});
+  const triggerCrossfadeRef = useRef<() => void>(() => {});
+  const crossfadeSecondsRef = useRef(crossfadeSeconds);
+  const repeatModeRef = useRef(repeatMode);
+  useEffect(() => { crossfadeSecondsRef.current = crossfadeSeconds; }, [crossfadeSeconds]);
+  useEffect(() => { repeatModeRef.current = repeatMode; }, [repeatMode]);
+
   // Init audio elements
   useEffect(() => {
     const create = () => {
@@ -85,19 +93,19 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
     const onTime = () => {
       const a = getActive();
       setCurrentTime(a.currentTime);
-      // Crossfade trigger
+      const cf = crossfadeSecondsRef.current;
       if (
-        crossfadeSeconds > 0 &&
+        cf > 0 &&
         !crossfadingRef.current &&
         a.duration &&
-        a.duration - a.currentTime <= crossfadeSeconds &&
-        repeatMode !== 'one'
+        a.duration - a.currentTime <= cf &&
+        repeatModeRef.current !== 'one'
       ) {
-        triggerCrossfade();
+        triggerCrossfadeRef.current();
       }
     };
     const onDur = () => setDuration(getActive().duration || 0);
-    const onEnd = () => { if (!crossfadingRef.current) handleEnded(); };
+    const onEnd = () => { if (!crossfadingRef.current) nextRef.current(); };
     const onPlay = () => setIsPlaying(true);
     const onPause = () => {
       // Ne pas marquer pause pendant le crossfade

@@ -90,6 +90,7 @@ export type Database = {
       }
       listen_sessions: {
         Row: {
+          code: string | null
           created_at: string
           current_time_seconds: number
           host_id: string
@@ -97,10 +98,12 @@ export type Database = {
           is_active: boolean
           is_playing: boolean
           participants: string[]
+          ready_participants: string[]
           song_id: string | null
           updated_at: string
         }
         Insert: {
+          code?: string | null
           created_at?: string
           current_time_seconds?: number
           host_id: string
@@ -108,10 +111,12 @@ export type Database = {
           is_active?: boolean
           is_playing?: boolean
           participants?: string[]
+          ready_participants?: string[]
           song_id?: string | null
           updated_at?: string
         }
         Update: {
+          code?: string | null
           created_at?: string
           current_time_seconds?: number
           host_id?: string
@@ -119,6 +124,7 @@ export type Database = {
           is_active?: boolean
           is_playing?: boolean
           participants?: string[]
+          ready_participants?: string[]
           song_id?: string | null
           updated_at?: string
         }

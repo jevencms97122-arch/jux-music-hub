@@ -238,7 +238,30 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
     setQueueIndex(0);
     setPlayedSongIds(new Set([song.id]));
     loadAndPlay(song);
-  }, [loadAndPlay]);
+
+    // Auto-queue : si le user a liké ce morceau, on enchaîne avec ses autres likes
+    if (authUser) {
+      (async () => {
+        const { data: likeRow } = await supabase
+          .from('song_likes').select('id')
+          .eq('user_id', authUser.id).eq('song_id', song.id).maybeSingle();
+        if (!likeRow) return;
+        const { data: allLikes } = await supabase
+          .from('song_likes').select('song_id')
+          .eq('user_id', authUser.id);
+        const otherIds = (allLikes ?? []).map((l) => l.song_id).filter((id) => id !== song.id);
+        if (otherIds.length === 0) return;
+        const { data: songsData } = await supabase.from('songs').select('*').in('id', otherIds);
+        const others = (songsData ?? []) as Song[];
+        // shuffle
+        for (let i = others.length - 1; i > 0; i--) {
+          const j = Math.floor(Math.random() * (i + 1));
+          [others[i], others[j]] = [others[j], others[i]];
+        }
+        setQueue((q) => (q.length === 1 && q[0].id === song.id ? [song, ...others] : q));
+      })();
+    }
+  }, [loadAndPlay, authUser]);
 
   const playSongFromList = useCallback((song: Song, list: Song[]) => {
     const idx = Math.max(0, list.findIndex((s) => s.id === song.id));

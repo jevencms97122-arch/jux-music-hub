@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
-import { Bell, Trash2 } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { Bell, Trash2, Check, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import type { AppNotification } from '@/types/music';
 

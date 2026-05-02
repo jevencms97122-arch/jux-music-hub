@@ -68,6 +68,14 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
   const getActive = () => (activeRef.current === 'A' ? audioARef.current! : audioBRef.current!);
   const getInactive = () => (activeRef.current === 'A' ? audioBRef.current! : audioARef.current!);
 
+  // Refs vers les dernières fonctions pour éviter les closures stales dans les listeners
+  const nextRef = useRef<() => void>(() => {});
+  const triggerCrossfadeRef = useRef<() => void>(() => {});
+  const crossfadeSecondsRef = useRef(crossfadeSeconds);
+  const repeatModeRef = useRef(repeatMode);
+  useEffect(() => { crossfadeSecondsRef.current = crossfadeSeconds; }, [crossfadeSeconds]);
+  useEffect(() => { repeatModeRef.current = repeatMode; }, [repeatMode]);
+
   // Init audio elements
   useEffect(() => {
     const create = () => {
@@ -85,19 +93,19 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
     const onTime = () => {
       const a = getActive();
       setCurrentTime(a.currentTime);
-      // Crossfade trigger
+      const cf = crossfadeSecondsRef.current;
       if (
-        crossfadeSeconds > 0 &&
+        cf > 0 &&
         !crossfadingRef.current &&
         a.duration &&
-        a.duration - a.currentTime <= crossfadeSeconds &&
-        repeatMode !== 'one'
+        a.duration - a.currentTime <= cf &&
+        repeatModeRef.current !== 'one'
       ) {
-        triggerCrossfade();
+        triggerCrossfadeRef.current();
       }
     };
     const onDur = () => setDuration(getActive().duration || 0);
-    const onEnd = () => { if (!crossfadingRef.current) handleEnded(); };
+    const onEnd = () => { if (!crossfadingRef.current) nextRef.current(); };
     const onPlay = () => setIsPlaying(true);
     const onPause = () => {
       // Ne pas marquer pause pendant le crossfade
@@ -230,7 +238,30 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
     setQueueIndex(0);
     setPlayedSongIds(new Set([song.id]));
     loadAndPlay(song);
-  }, [loadAndPlay]);
+
+    // Auto-queue : si le user a liké ce morceau, on enchaîne avec ses autres likes
+    if (authUser) {
+      (async () => {
+        const { data: likeRow } = await supabase
+          .from('song_likes').select('id')
+          .eq('user_id', authUser.id).eq('song_id', song.id).maybeSingle();
+        if (!likeRow) return;
+        const { data: allLikes } = await supabase
+          .from('song_likes').select('song_id')
+          .eq('user_id', authUser.id);
+        const otherIds = (allLikes ?? []).map((l) => l.song_id).filter((id) => id !== song.id);
+        if (otherIds.length === 0) return;
+        const { data: songsData } = await supabase.from('songs').select('*').in('id', otherIds);
+        const others = (songsData ?? []) as Song[];
+        // shuffle
+        for (let i = others.length - 1; i > 0; i--) {
+          const j = Math.floor(Math.random() * (i + 1));
+          [others[i], others[j]] = [others[j], others[i]];
+        }
+        setQueue((q) => (q.length === 1 && q[0].id === song.id ? [song, ...others] : q));
+      })();
+    }
+  }, [loadAndPlay, authUser]);
 
   const playSongFromList = useCallback((song: Song, list: Song[]) => {
     const idx = Math.max(0, list.findIndex((s) => s.id === song.id));
@@ -310,7 +341,9 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
     if (prevIdx >= 0) playAtIndex(prevIdx);
   }, [queueIndex, playAtIndex]);
 
-  const handleEnded = useCallback(() => { next(); }, [next]);
+  // Sync refs avec dernières versions des callbacks
+  useEffect(() => { nextRef.current = next; }, [next]);
+  useEffect(() => { triggerCrossfadeRef.current = triggerCrossfade; }, [triggerCrossfade]);
 
   const seek = useCallback((t: number) => { const a = getActive(); if (a) a.currentTime = t; }, []);
   const setVolume = useCallback((v: number) => setVolumeState(Math.max(0, Math.min(1, v))), []);

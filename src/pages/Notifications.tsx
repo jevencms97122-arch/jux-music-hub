@@ -8,6 +8,7 @@ import type { AppNotification } from '@/types/music';
 
 export default function Notifications() {
   const { authUser } = useAuth();
+  const navigate = useNavigate();
   const [notifs, setNotifs] = useState<AppNotification[]>([]);
 
   const load = async () => {

@@ -4,6 +4,7 @@ import { PlayerProvider } from '@/contexts/PlayerContext';
 import { BrowserRouter, Routes, Route, Navigate, useNavigate, useLocation } from 'react-router-dom';
 import { AnimatePresence, motion } from 'framer-motion';
 import { supabase } from '@/integrations/supabase/client';
+import { toast } from 'sonner';
 import Login from '@/pages/Login';
 import Home from '@/pages/Home';
 import Upload from '@/pages/Upload';

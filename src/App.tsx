@@ -24,6 +24,7 @@ import Wrapped from '@/pages/Wrapped';
 import MiniPlayer from '@/components/MiniPlayer';
 import PlayerPage from '@/components/PlayerPage';
 import BottomNav from '@/components/BottomNav';
+import { Toaster } from '@/components/ui/sonner';
 
 const pageVariants = {
   initial: { opacity: 0, y: 8 },

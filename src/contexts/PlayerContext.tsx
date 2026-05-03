@@ -217,14 +217,16 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
     a.src = songAudioUrl(song);
     a.playbackRate = playbackRate;
     a.volume = volume;
-    if (!autoPlay) { a.load(); return; }
+    // Si host de session : ne pas démarrer tout de suite, attendre que tous soient prêts
+    const inSessionAsHost = !!(sessionRef.current && authUser && sessionRef.current.host_id === authUser.id);
+    if (!autoPlay || inSessionAsHost) { a.load(); return; }
     try {
       await a.play();
       recordPlay(song);
     } catch (e) {
       console.error('Audio play failed', e);
     }
-  }, [playbackRate, volume, recordPlay]);
+  }, [playbackRate, volume, recordPlay, authUser]);
 
   const triggerCrossfade = useCallback(() => {
     if (queue.length === 0) return;

@@ -4,6 +4,7 @@ import { PlayerProvider } from '@/contexts/PlayerContext';
 import { BrowserRouter, Routes, Route, Navigate, useNavigate, useLocation } from 'react-router-dom';
 import { AnimatePresence, motion } from 'framer-motion';
 import { supabase } from '@/integrations/supabase/client';
+import { toast } from 'sonner';
 import Login from '@/pages/Login';
 import Home from '@/pages/Home';
 import Upload from '@/pages/Upload';
@@ -23,6 +24,7 @@ import Wrapped from '@/pages/Wrapped';
 import MiniPlayer from '@/components/MiniPlayer';
 import PlayerPage from '@/components/PlayerPage';
 import BottomNav from '@/components/BottomNav';
+import { Toaster } from '@/components/ui/sonner';
 
 const pageVariants = {
   initial: { opacity: 0, y: 8 },
@@ -67,10 +69,24 @@ function AppContent() {
         if ('Notification' in window && Notification.permission === 'granted') {
           new Notification(n.title, { body: n.body ?? '' });
         }
+        // Toast in-app + bouton rejoindre pour invitation session
+        if (n.type === 'session_invite') {
+          const code = n.data?.code;
+          toast(n.title, {
+            description: n.body,
+            duration: 15000,
+            action: code ? {
+              label: 'Rejoindre',
+              onClick: () => navigate(`/listen-together?code=${code}`),
+            } : undefined,
+          });
+        } else {
+          toast(n.title, { description: n.body ?? undefined });
+        }
       })
       .subscribe();
     return () => { supabase.removeChannel(channel); };
-  }, [authUser]);
+  }, [authUser, navigate]);
 
   if (loading) {
     return (
@@ -129,6 +145,7 @@ function AppContent() {
             onNavigate={(page) => navigate(page === 'home' ? '/jux' : `/${page}`)}
           />
         )}
+        <Toaster />
       </div>
     </PlayerProvider>
   );

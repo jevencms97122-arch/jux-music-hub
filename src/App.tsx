@@ -145,6 +145,7 @@ function AppContent() {
             onNavigate={(page) => navigate(page === 'home' ? '/jux' : `/${page}`)}
           />
         )}
+        <Toaster />
       </div>
     </PlayerProvider>
   );

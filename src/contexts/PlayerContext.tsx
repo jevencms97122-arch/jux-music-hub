@@ -236,12 +236,17 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
   const loadAndPlay = useCallback(async (song: Song, autoPlay = true) => {
     const a = getActive();
     if (!a) return;
+    crossfadingRef.current = false;
     a.src = songAudioUrl(song);
     a.playbackRate = playbackRate;
     a.volume = volume;
     // Si host de session : ne pas démarrer tout de suite, attendre que tous soient prêts
     const inSessionAsHost = !!(sessionRef.current && authUser && sessionRef.current.host_id === authUser.id);
-    if (!autoPlay || inSessionAsHost) { a.load(); return; }
+    if (!autoPlay || inSessionAsHost) {
+      pendingSessionAutoplayRef.current = !!inSessionAsHost;
+      a.load();
+      return;
+    }
     try {
       await a.play();
       recordPlay(song);

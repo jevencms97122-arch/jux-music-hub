@@ -274,11 +274,14 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
     const fromAudio = getActive();
     const toAudio = getInactive();
     toAudio.src = songAudioUrl(nextSong);
-    toAudio.playbackRate = playbackRate;
     toAudio.volume = 0;
-    toAudio.play().catch(console.error);
+    const setRate = () => { toAudio.playbackRate = playbackRate; };
+    setRate();
+    toAudio.addEventListener('loadedmetadata', setRate, { once: true });
+    toAudio.addEventListener('playing', setRate, { once: true });
+    toAudio.play().then(setRate).catch(console.error);
 
-    const dur = crossfadeSeconds * 1000;
+    const dur = Math.max(500, crossfadeSeconds * 1000);
     const steps = 30;
     const stepTime = dur / steps;
     let i = 0;
@@ -293,6 +296,7 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
         fromAudio.currentTime = 0;
         fromAudio.volume = volume;
         activeRef.current = activeRef.current === 'A' ? 'B' : 'A';
+        toAudio.playbackRate = playbackRate;
         setCurrentSong(nextSong);
         setQueueIndex(realNextIdx);
         setPlayedSongIds((p) => new Set([...p, nextSong.id]));

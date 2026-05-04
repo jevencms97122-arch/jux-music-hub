@@ -199,12 +199,31 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
     localStorage.setItem(CROSSFADE_KEY, String(v));
   }, []);
 
+  const refreshSongStats = useCallback(async (songId: string) => {
+    const { data } = await supabase
+      .from('songs')
+      .select('play_count, likes_count')
+      .eq('id', songId)
+      .maybeSingle();
+    if (!data) return;
+    setCurrentSong((cur) => cur?.id === songId ? { ...cur, ...data } : cur);
+    setQueue((q) => q.map((s) => s.id === songId ? { ...s, ...data } : s));
+  }, []);
+
   const recordPlay = useCallback((song: Song) => {
     if (!authUser) return;
     supabase.from('listen_history').insert({ user_id: authUser.id, song_id: song.id }).then(() => {});
-    supabase.from('songs').update({ play_count: (song.play_count ?? 0) + 1 }).eq('id', song.id).then(() => {});
+    supabase.rpc('increment_song_play', { _song_id: song.id }).then(({ data }) => {
+      if (typeof data === 'number') {
+        const stats = { play_count: data };
+        setCurrentSong((cur) => cur?.id === song.id ? { ...cur, ...stats } : cur);
+        setQueue((q) => q.map((s) => s.id === song.id ? { ...s, ...stats } : s));
+      } else {
+        refreshSongStats(song.id);
+      }
+    });
     updateStreak(authUser.id);
-  }, [authUser]);
+  }, [authUser, refreshSongStats]);
 
   const stopAudio = useCallback(() => {
     [audioARef.current, audioBRef.current].forEach((a) => {

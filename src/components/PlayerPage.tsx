@@ -1,9 +1,10 @@
 import { usePlayer } from '@/contexts/PlayerContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
-import { songCoverUrl } from '@/lib/storage';
+import { songCoverUrl, avatarUrl } from '@/lib/storage';
 import { ChevronDown, Play, Pause, SkipBack, SkipForward, Shuffle, Repeat, Repeat1, MoreHorizontal, Heart, ListPlus, Sparkles, Headphones, Radio } from 'lucide-react';
 import { Slider } from '@/components/ui/slider';
+import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
 import { useEffect, useState, useRef } from 'react';
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
@@ -34,6 +35,7 @@ export default function PlayerPage() {
   const [showPlaylist, setShowPlaylist] = useState(false);
   const [showStory, setShowStory] = useState(false);
   const [showLikeAnim, setShowLikeAnim] = useState(false);
+  const [friendLikers, setFriendLikers] = useState<Array<{ user_id: string; pseudo: string | null; avatar_url: string | null }>>([]);
   const lastTap = useRef<number>(0);
 
   useEffect(() => {
@@ -42,6 +44,26 @@ export default function PlayerPage() {
       .from('song_likes').select('id')
       .eq('song_id', currentSong.id).eq('user_id', authUser.id).maybeSingle()
       .then(({ data }) => setLiked(!!data));
+  }, [authUser, currentSong]);
+
+  // Récupère les amis (suivis acceptés) qui ont liké ce titre
+  useEffect(() => {
+    if (!authUser || !currentSong) { setFriendLikers([]); return; }
+    (async () => {
+      const { data: follows } = await supabase
+        .from('follows').select('following_id')
+        .eq('follower_id', authUser.id).eq('status', 'accepted');
+      const ids = (follows ?? []).map((f: any) => f.following_id);
+      if (ids.length === 0) { setFriendLikers([]); return; }
+      const { data: likes } = await supabase
+        .from('song_likes').select('user_id')
+        .eq('song_id', currentSong.id).in('user_id', ids);
+      const likerIds = (likes ?? []).map((l: any) => l.user_id);
+      if (likerIds.length === 0) { setFriendLikers([]); return; }
+      const { data: profiles } = await supabase
+        .from('profiles').select('user_id, pseudo, avatar_url').in('user_id', likerIds);
+      setFriendLikers((profiles ?? []) as any);
+    })();
   }, [authUser, currentSong]);
 
   const toggleLike = async () => {
@@ -147,6 +169,24 @@ export default function PlayerPage() {
               </div>
             </div>
           </div>
+
+          {friendLikers.length > 0 && (
+            <div className="mb-2 flex items-center gap-2 rounded-full bg-secondary/40 px-3 py-1.5 backdrop-blur">
+              <div className="flex -space-x-2">
+                {friendLikers.slice(0, 3).map((f) => (
+                  <Avatar key={f.user_id} className="h-6 w-6 border-2 border-background">
+                    <AvatarImage src={avatarUrl({ avatar_url: f.avatar_url })} />
+                    <AvatarFallback className="text-[10px]">{(f.pseudo ?? '?').slice(0, 2).toUpperCase()}</AvatarFallback>
+                  </Avatar>
+                ))}
+              </div>
+              <span className="truncate text-xs text-muted-foreground">
+                {friendLikers.length === 1
+                  ? <><span className="font-medium text-foreground">{friendLikers[0].pseudo ?? 'Un ami'}</span> a aimé ce titre</>
+                  : <><span className="font-medium text-foreground">{friendLikers[0].pseudo ?? 'Un ami'}</span> et {friendLikers.length - 1} autre{friendLikers.length - 1 > 1 ? 's' : ''} ont aimé ce titre</>}
+              </span>
+            </div>
+          )}
 
           <div className="mb-3 flex items-center justify-center gap-3 rounded-full bg-secondary/40 px-4 py-2 backdrop-blur">
             <button

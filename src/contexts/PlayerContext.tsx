@@ -238,8 +238,12 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
     if (!a) return;
     crossfadingRef.current = false;
     a.src = songAudioUrl(song);
-    a.playbackRate = playbackRate;
     a.volume = volume;
+    // Force playbackRate après changement de src (certains navigateurs reset à 1)
+    const applyRate = () => { a.playbackRate = playbackRate; };
+    applyRate();
+    a.addEventListener('loadedmetadata', applyRate, { once: true });
+    a.addEventListener('playing', applyRate, { once: true });
     // Si host de session : ne pas démarrer tout de suite, attendre que tous soient prêts
     const inSessionAsHost = !!(sessionRef.current && authUser && sessionRef.current.host_id === authUser.id);
     if (!autoPlay || inSessionAsHost) {
@@ -249,6 +253,7 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
     }
     try {
       await a.play();
+      a.playbackRate = playbackRate;
       recordPlay(song);
     } catch (e) {
       console.error('Audio play failed', e);
@@ -269,11 +274,14 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
     const fromAudio = getActive();
     const toAudio = getInactive();
     toAudio.src = songAudioUrl(nextSong);
-    toAudio.playbackRate = playbackRate;
     toAudio.volume = 0;
-    toAudio.play().catch(console.error);
+    const setRate = () => { toAudio.playbackRate = playbackRate; };
+    setRate();
+    toAudio.addEventListener('loadedmetadata', setRate, { once: true });
+    toAudio.addEventListener('playing', setRate, { once: true });
+    toAudio.play().then(setRate).catch(console.error);
 
-    const dur = crossfadeSeconds * 1000;
+    const dur = Math.max(500, crossfadeSeconds * 1000);
     const steps = 30;
     const stepTime = dur / steps;
     let i = 0;
@@ -288,6 +296,7 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
         fromAudio.currentTime = 0;
         fromAudio.volume = volume;
         activeRef.current = activeRef.current === 'A' ? 'B' : 'A';
+        toAudio.playbackRate = playbackRate;
         setCurrentSong(nextSong);
         setQueueIndex(realNextIdx);
         setPlayedSongIds((p) => new Set([...p, nextSong.id]));

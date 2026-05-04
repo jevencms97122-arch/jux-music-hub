@@ -40,6 +40,7 @@ interface PlayerContextType {
   refreshSession: () => Promise<void>;
   setActiveSession: (s: ListenSessionRow | null) => void;
   stopAudio: () => void;
+  refreshSongStats: (songId: string) => Promise<void>;
 
   playSong: (song: Song) => void;
   playSongFromList: (song: Song, list: Song[]) => void;
@@ -104,6 +105,8 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
   const crossfadeSecondsRef = useRef(crossfadeSeconds);
   const repeatModeRef = useRef(repeatMode);
   const isSessionGuestRef = useRef(isSessionGuest);
+  const pendingSessionAutoplayRef = useRef(false);
+  const sessionGuestRecordedRef = useRef<string | null>(null);
   useEffect(() => { crossfadeSecondsRef.current = crossfadeSeconds; }, [crossfadeSeconds]);
   useEffect(() => { repeatModeRef.current = repeatMode; }, [repeatMode]);
   useEffect(() => { isSessionGuestRef.current = isSessionGuest; }, [isSessionGuest]);
@@ -131,7 +134,7 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
         cf > 0 && !crossfadingRef.current && a.duration &&
         a.duration - a.currentTime <= cf &&
         repeatModeRef.current !== 'one' &&
-        !isSessionGuestRef.current
+        !sessionRef.current
       ) {
         triggerCrossfadeRef.current();
       }

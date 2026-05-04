@@ -11,6 +11,7 @@ import {
 import { Minus, Plus } from 'lucide-react';
 import AddToPlaylistModal from './AddToPlaylistModal';
 import CreateStoryModal from './CreateStoryModal';
+import { toast } from 'sonner';
 
 function formatTime(s: number) {
   if (!isFinite(s)) return '0:00';
@@ -25,7 +26,7 @@ export default function PlayerPage() {
     currentSong, isPlaying, currentTime, duration, isPlayerOpen,
     closePlayer, togglePlay, next, previous, seek,
     isShuffled, toggleShuffle, repeatMode, cycleRepeat,
-    playbackRate, setPlaybackRate,
+    playbackRate, setPlaybackRate, refreshSongStats,
     crossfadeSeconds, setCrossfadeSeconds, startRadio,
   } = usePlayer();
   const [seeking, setSeeking] = useState<number | null>(null);
@@ -44,14 +45,22 @@ export default function PlayerPage() {
   }, [authUser, currentSong]);
 
   const toggleLike = async () => {
-    if (!authUser || !currentSong) return;
+    if (!authUser || !currentSong) return false;
     if (liked) {
-      await supabase.from('song_likes').delete()
+      const { error } = await supabase.from('song_likes').delete()
         .eq('song_id', currentSong.id).eq('user_id', authUser.id);
+      if (error) { toast.error("Impossible de retirer le j'aime"); return false; }
       setLiked(false);
+      await refreshSongStats(currentSong.id);
+      toast('Like retiré', { description: currentSong.title, position: 'bottom-center' });
+      return false;
     } else {
-      await supabase.from('song_likes').insert({ song_id: currentSong.id, user_id: authUser.id });
+      const { error } = await supabase.from('song_likes').insert({ song_id: currentSong.id, user_id: authUser.id });
+      if (error) { toast.error("Impossible d'ajouter le j'aime"); return false; }
       setLiked(true);
+      await refreshSongStats(currentSong.id);
+      toast.success('Ajouté aux titres likés', { description: currentSong.title, position: 'bottom-center' });
+      return true;
     }
   };
 

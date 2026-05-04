@@ -373,13 +373,15 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
       toast.info("Seul l'hôte peut contrôler la lecture");
       return;
     }
-    if (a.paused) a.play().catch(console.error);
+    const shouldPlay = a.paused;
+    pendingSessionAutoplayRef.current = false;
+    if (shouldPlay) a.play().catch(console.error);
     else a.pause();
     // Host : broadcast play/pause
     const s = sessionRef.current;
     if (s && authUser && s.host_id === authUser.id) {
       supabase.from('listen_sessions').update({
-        is_playing: a.paused ? false : true,
+        is_playing: shouldPlay,
         current_time_seconds: a.currentTime,
       }).eq('id', s.id).then(() => {});
     }

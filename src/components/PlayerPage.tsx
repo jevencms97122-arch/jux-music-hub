@@ -170,6 +170,24 @@ export default function PlayerPage() {
             </div>
           </div>
 
+          {friendLikers.length > 0 && (
+            <div className="mb-2 flex items-center gap-2 rounded-full bg-secondary/40 px-3 py-1.5 backdrop-blur">
+              <div className="flex -space-x-2">
+                {friendLikers.slice(0, 3).map((f) => (
+                  <Avatar key={f.user_id} className="h-6 w-6 border-2 border-background">
+                    <AvatarImage src={avatarUrl({ avatar_url: f.avatar_url })} />
+                    <AvatarFallback className="text-[10px]">{(f.pseudo ?? '?').slice(0, 2).toUpperCase()}</AvatarFallback>
+                  </Avatar>
+                ))}
+              </div>
+              <span className="truncate text-xs text-muted-foreground">
+                {friendLikers.length === 1
+                  ? <><span className="font-medium text-foreground">{friendLikers[0].pseudo ?? 'Un ami'}</span> a aimé ce titre</>
+                  : <><span className="font-medium text-foreground">{friendLikers[0].pseudo ?? 'Un ami'}</span> et {friendLikers.length - 1} autre{friendLikers.length - 1 > 1 ? 's' : ''} ont aimé ce titre</>}
+              </span>
+            </div>
+          )}
+
           <div className="mb-3 flex items-center justify-center gap-3 rounded-full bg-secondary/40 px-4 py-2 backdrop-blur">
             <button
               onClick={() => setPlaybackRate(Math.max(0.5, Math.round((playbackRate - 0.01) * 100) / 100))}

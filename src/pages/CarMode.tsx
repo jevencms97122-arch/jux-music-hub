@@ -5,6 +5,7 @@ import { Play, Pause, SkipBack, SkipForward, X, Heart, Radio } from 'lucide-reac
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { useEffect, useState } from 'react';
+import { toast } from 'sonner';
 
 /**
  * Mode Voiture : interface plein écran avec très gros boutons
@@ -13,7 +14,7 @@ import { useEffect, useState } from 'react';
 export default function CarMode() {
   const navigate = useNavigate();
   const { authUser } = useAuth();
-  const { currentSong, isPlaying, togglePlay, next, previous, startRadio } = usePlayer();
+  const { currentSong, isPlaying, togglePlay, next, previous, startRadio, refreshSongStats } = usePlayer();
   const [liked, setLiked] = useState(false);
 
   useEffect(() => {
@@ -26,12 +27,18 @@ export default function CarMode() {
   const toggleLike = async () => {
     if (!authUser || !currentSong) return;
     if (liked) {
-      await supabase.from('song_likes').delete()
+      const { error } = await supabase.from('song_likes').delete()
         .eq('song_id', currentSong.id).eq('user_id', authUser.id);
+      if (error) { toast.error("Impossible de retirer le j'aime", { position: 'bottom-center' }); return; }
       setLiked(false);
+      await refreshSongStats(currentSong.id);
+      toast('Like retiré', { description: currentSong.title, position: 'bottom-center' });
     } else {
-      await supabase.from('song_likes').insert({ song_id: currentSong.id, user_id: authUser.id });
+      const { error } = await supabase.from('song_likes').insert({ song_id: currentSong.id, user_id: authUser.id });
+      if (error) { toast.error("Impossible d'ajouter le j'aime", { position: 'bottom-center' }); return; }
       setLiked(true);
+      await refreshSongStats(currentSong.id);
+      toast.success('Ajouté aux titres likés', { description: currentSong.title, position: 'bottom-center' });
     }
   };
 

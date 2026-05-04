@@ -238,8 +238,12 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
     if (!a) return;
     crossfadingRef.current = false;
     a.src = songAudioUrl(song);
-    a.playbackRate = playbackRate;
     a.volume = volume;
+    // Force playbackRate après changement de src (certains navigateurs reset à 1)
+    const applyRate = () => { a.playbackRate = playbackRate; };
+    applyRate();
+    a.addEventListener('loadedmetadata', applyRate, { once: true });
+    a.addEventListener('playing', applyRate, { once: true });
     // Si host de session : ne pas démarrer tout de suite, attendre que tous soient prêts
     const inSessionAsHost = !!(sessionRef.current && authUser && sessionRef.current.host_id === authUser.id);
     if (!autoPlay || inSessionAsHost) {
@@ -249,6 +253,7 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
     }
     try {
       await a.play();
+      a.playbackRate = playbackRate;
       recordPlay(song);
     } catch (e) {
       console.error('Audio play failed', e);

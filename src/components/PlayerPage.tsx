@@ -35,6 +35,7 @@ export default function PlayerPage() {
   const [showPlaylist, setShowPlaylist] = useState(false);
   const [showStory, setShowStory] = useState(false);
   const [showLikeAnim, setShowLikeAnim] = useState(false);
+  const [friendLikers, setFriendLikers] = useState<Array<{ user_id: string; pseudo: string | null; avatar_url: string | null }>>([]);
   const lastTap = useRef<number>(0);
 
   useEffect(() => {
@@ -43,6 +44,26 @@ export default function PlayerPage() {
       .from('song_likes').select('id')
       .eq('song_id', currentSong.id).eq('user_id', authUser.id).maybeSingle()
       .then(({ data }) => setLiked(!!data));
+  }, [authUser, currentSong]);
+
+  // Récupère les amis (suivis acceptés) qui ont liké ce titre
+  useEffect(() => {
+    if (!authUser || !currentSong) { setFriendLikers([]); return; }
+    (async () => {
+      const { data: follows } = await supabase
+        .from('follows').select('following_id')
+        .eq('follower_id', authUser.id).eq('status', 'accepted');
+      const ids = (follows ?? []).map((f: any) => f.following_id);
+      if (ids.length === 0) { setFriendLikers([]); return; }
+      const { data: likes } = await supabase
+        .from('song_likes').select('user_id')
+        .eq('song_id', currentSong.id).in('user_id', ids);
+      const likerIds = (likes ?? []).map((l: any) => l.user_id);
+      if (likerIds.length === 0) { setFriendLikers([]); return; }
+      const { data: profiles } = await supabase
+        .from('profiles').select('user_id, pseudo, avatar_url').in('user_id', likerIds);
+      setFriendLikers((profiles ?? []) as any);
+    })();
   }, [authUser, currentSong]);
 
   const toggleLike = async () => {

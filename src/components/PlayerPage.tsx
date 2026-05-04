@@ -112,16 +112,21 @@ export default function PlayerPage() {
                 alt={currentSong.title}
                 className="aspect-square w-full rounded-2xl object-cover shadow-elegant"
                 onDoubleClick={async () => {
-                  await toggleLike();
-                  setShowLikeAnim(true);
-                  setTimeout(() => setShowLikeAnim(false), 800);
+                  const isNowLiked = await toggleLike();
+                  if (isNowLiked) {
+                    setShowLikeAnim(true);
+                    setTimeout(() => setShowLikeAnim(false), 800);
+                  }
                 }}
                 onTouchStart={() => {
                   const now = Date.now();
                   if (now - lastTap.current < 300) {
-                    toggleLike();
-                    setShowLikeAnim(true);
-                    setTimeout(() => setShowLikeAnim(false), 800);
+                    toggleLike().then((isNowLiked) => {
+                      if (isNowLiked) {
+                        setShowLikeAnim(true);
+                        setTimeout(() => setShowLikeAnim(false), 800);
+                      }
+                    });
                     lastTap.current = 0;
                   } else lastTap.current = now;
                 }}

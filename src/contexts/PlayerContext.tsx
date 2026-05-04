@@ -621,7 +621,7 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
         queue, queueIndex, isShuffled, repeatMode, isPlayerOpen, playbackRate,
         crossfadeSeconds,
         activeSession, isSessionHost, isSessionGuest, allParticipantsReady,
-        refreshSession, setActiveSession, stopAudio,
+        refreshSession, setActiveSession, stopAudio, refreshSongStats,
         playSong, playSongFromList, togglePlay, next, previous, seek, setVolume,
         toggleShuffle, cycleRepeat, openPlayer, closePlayer, setPlaybackRate,
         setCrossfadeSeconds, addToQueue, startRadio,

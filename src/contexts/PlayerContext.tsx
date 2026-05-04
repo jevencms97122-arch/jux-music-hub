@@ -532,6 +532,7 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
       const { data } = await supabase.from('songs').select('*').eq('id', activeSession.song_id).maybeSingle();
       if (!data) return;
       const song = data as Song;
+      sessionGuestRecordedRef.current = null;
       setCurrentSong(song);
       setQueue([song]);
       setQueueIndex(0);
@@ -565,11 +566,16 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
       a.currentTime = activeSession.current_time_seconds;
     }
     if (activeSession.is_playing) {
-      a.play().catch(console.error);
+      a.play().then(() => {
+        if (currentSong && sessionGuestRecordedRef.current !== currentSong.id) {
+          sessionGuestRecordedRef.current = currentSong.id;
+          recordPlay(currentSong);
+        }
+      }).catch(console.error);
     } else {
       a.pause();
     }
-  }, [isSessionGuest, activeSession?.is_playing, activeSession?.current_time_seconds, activeSession]);
+  }, [isSessionGuest, activeSession?.is_playing, activeSession?.current_time_seconds, activeSession, currentSong, recordPlay]);
 
   // === HOST: sync time toutes les 1s + démarrer quand tous prêts ===
   useEffect(() => {
@@ -581,9 +587,9 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
         current_time_seconds: a.currentTime,
         updated_at: new Date().toISOString(),
       };
-      // Sync is_playing si écart
-      if (sessionRef.current.is_playing !== !a.paused) {
-        updates.is_playing = !a.paused;
+      // Sync pause immédiate ; ne relance jamais automatiquement une pause utilisateur.
+      if (a.paused && sessionRef.current.is_playing) {
+        updates.is_playing = false;
       }
       supabase.from('listen_sessions').update(updates).eq('id', sessionRef.current.id).then(() => {});
     }, 1500);
@@ -593,18 +599,20 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
   // HOST : quand tout le monde est prêt et qu'on a une song mais is_playing=false → lancer
   useEffect(() => {
     if (!isSessionHost || !activeSession?.song_id) return;
-    if (activeSession.is_playing) return;
+    if (activeSession.is_playing || !pendingSessionAutoplayRef.current) return;
     if (!allParticipantsReady) return;
     const a = getActive();
     if (a && a.paused) {
       a.play().then(() => {
+        pendingSessionAutoplayRef.current = false;
+        if (currentSong) recordPlay(currentSong);
         supabase.from('listen_sessions').update({
           is_playing: true,
           current_time_seconds: a.currentTime,
         }).eq('id', activeSession.id).then(() => {});
       }).catch(console.error);
     }
-  }, [isSessionHost, allParticipantsReady, activeSession]);
+  }, [isSessionHost, allParticipantsReady, activeSession, currentSong, recordPlay]);
 
   return (
     <PlayerContext.Provider

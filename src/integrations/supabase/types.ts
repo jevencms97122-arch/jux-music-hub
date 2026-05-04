@@ -594,10 +594,12 @@ export type Database = {
         }
         Returns: boolean
       }
+      increment_song_play: { Args: { _song_id: string }; Returns: number }
       is_playlist_collaborator: {
         Args: { _min_role?: string; _playlist_id: string; _user_id: string }
         Returns: boolean
       }
+      sync_song_likes_count: { Args: { _song_id: string }; Returns: number }
     }
     Enums: {
       app_role: "admin" | "user"

@@ -40,6 +40,7 @@ interface PlayerContextType {
   refreshSession: () => Promise<void>;
   setActiveSession: (s: ListenSessionRow | null) => void;
   stopAudio: () => void;
+  refreshSongStats: (songId: string) => Promise<void>;
 
   playSong: (song: Song) => void;
   playSongFromList: (song: Song, list: Song[]) => void;
@@ -104,6 +105,8 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
   const crossfadeSecondsRef = useRef(crossfadeSeconds);
   const repeatModeRef = useRef(repeatMode);
   const isSessionGuestRef = useRef(isSessionGuest);
+  const pendingSessionAutoplayRef = useRef(false);
+  const sessionGuestRecordedRef = useRef<string | null>(null);
   useEffect(() => { crossfadeSecondsRef.current = crossfadeSeconds; }, [crossfadeSeconds]);
   useEffect(() => { repeatModeRef.current = repeatMode; }, [repeatMode]);
   useEffect(() => { isSessionGuestRef.current = isSessionGuest; }, [isSessionGuest]);
@@ -131,7 +134,7 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
         cf > 0 && !crossfadingRef.current && a.duration &&
         a.duration - a.currentTime <= cf &&
         repeatModeRef.current !== 'one' &&
-        !isSessionGuestRef.current
+        !sessionRef.current
       ) {
         triggerCrossfadeRef.current();
       }
@@ -196,12 +199,31 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
     localStorage.setItem(CROSSFADE_KEY, String(v));
   }, []);
 
+  const refreshSongStats = useCallback(async (songId: string) => {
+    const { data } = await supabase
+      .from('songs')
+      .select('play_count, likes_count')
+      .eq('id', songId)
+      .maybeSingle();
+    if (!data) return;
+    setCurrentSong((cur) => cur?.id === songId ? { ...cur, ...data } : cur);
+    setQueue((q) => q.map((s) => s.id === songId ? { ...s, ...data } : s));
+  }, []);
+
   const recordPlay = useCallback((song: Song) => {
     if (!authUser) return;
     supabase.from('listen_history').insert({ user_id: authUser.id, song_id: song.id }).then(() => {});
-    supabase.from('songs').update({ play_count: (song.play_count ?? 0) + 1 }).eq('id', song.id).then(() => {});
+    supabase.rpc('increment_song_play', { _song_id: song.id }).then(({ data }) => {
+      if (typeof data === 'number') {
+        const stats = { play_count: data };
+        setCurrentSong((cur) => cur?.id === song.id ? { ...cur, ...stats } : cur);
+        setQueue((q) => q.map((s) => s.id === song.id ? { ...s, ...stats } : s));
+      } else {
+        refreshSongStats(song.id);
+      }
+    });
     updateStreak(authUser.id);
-  }, [authUser]);
+  }, [authUser, refreshSongStats]);
 
   const stopAudio = useCallback(() => {
     [audioARef.current, audioBRef.current].forEach((a) => {
@@ -214,12 +236,17 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
   const loadAndPlay = useCallback(async (song: Song, autoPlay = true) => {
     const a = getActive();
     if (!a) return;
+    crossfadingRef.current = false;
     a.src = songAudioUrl(song);
     a.playbackRate = playbackRate;
     a.volume = volume;
     // Si host de session : ne pas démarrer tout de suite, attendre que tous soient prêts
     const inSessionAsHost = !!(sessionRef.current && authUser && sessionRef.current.host_id === authUser.id);
-    if (!autoPlay || inSessionAsHost) { a.load(); return; }
+    if (!autoPlay || inSessionAsHost) {
+      pendingSessionAutoplayRef.current = !!inSessionAsHost;
+      a.load();
+      return;
+    }
     try {
       await a.play();
       recordPlay(song);
@@ -346,13 +373,15 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
       toast.info("Seul l'hôte peut contrôler la lecture");
       return;
     }
-    if (a.paused) a.play().catch(console.error);
+    const shouldPlay = a.paused;
+    pendingSessionAutoplayRef.current = false;
+    if (shouldPlay) a.play().catch(console.error);
     else a.pause();
     // Host : broadcast play/pause
     const s = sessionRef.current;
     if (s && authUser && s.host_id === authUser.id) {
       supabase.from('listen_sessions').update({
-        is_playing: a.paused ? false : true,
+        is_playing: shouldPlay,
         current_time_seconds: a.currentTime,
       }).eq('id', s.id).then(() => {});
     }
@@ -503,6 +532,7 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
       const { data } = await supabase.from('songs').select('*').eq('id', activeSession.song_id).maybeSingle();
       if (!data) return;
       const song = data as Song;
+      sessionGuestRecordedRef.current = null;
       setCurrentSong(song);
       setQueue([song]);
       setQueueIndex(0);
@@ -536,11 +566,16 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
       a.currentTime = activeSession.current_time_seconds;
     }
     if (activeSession.is_playing) {
-      a.play().catch(console.error);
+      a.play().then(() => {
+        if (currentSong && sessionGuestRecordedRef.current !== currentSong.id) {
+          sessionGuestRecordedRef.current = currentSong.id;
+          recordPlay(currentSong);
+        }
+      }).catch(console.error);
     } else {
       a.pause();
     }
-  }, [isSessionGuest, activeSession?.is_playing, activeSession?.current_time_seconds, activeSession]);
+  }, [isSessionGuest, activeSession?.is_playing, activeSession?.current_time_seconds, activeSession, currentSong, recordPlay]);
 
   // === HOST: sync time toutes les 1s + démarrer quand tous prêts ===
   useEffect(() => {
@@ -552,9 +587,9 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
         current_time_seconds: a.currentTime,
         updated_at: new Date().toISOString(),
       };
-      // Sync is_playing si écart
-      if (sessionRef.current.is_playing !== !a.paused) {
-        updates.is_playing = !a.paused;
+      // Sync pause immédiate ; ne relance jamais automatiquement une pause utilisateur.
+      if (a.paused && sessionRef.current.is_playing) {
+        updates.is_playing = false;
       }
       supabase.from('listen_sessions').update(updates).eq('id', sessionRef.current.id).then(() => {});
     }, 1500);
@@ -564,18 +599,20 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
   // HOST : quand tout le monde est prêt et qu'on a une song mais is_playing=false → lancer
   useEffect(() => {
     if (!isSessionHost || !activeSession?.song_id) return;
-    if (activeSession.is_playing) return;
+    if (activeSession.is_playing || !pendingSessionAutoplayRef.current) return;
     if (!allParticipantsReady) return;
     const a = getActive();
     if (a && a.paused) {
       a.play().then(() => {
+        pendingSessionAutoplayRef.current = false;
+        if (currentSong) recordPlay(currentSong);
         supabase.from('listen_sessions').update({
           is_playing: true,
           current_time_seconds: a.currentTime,
         }).eq('id', activeSession.id).then(() => {});
       }).catch(console.error);
     }
-  }, [isSessionHost, allParticipantsReady, activeSession]);
+  }, [isSessionHost, allParticipantsReady, activeSession, currentSong, recordPlay]);
 
   return (
     <PlayerContext.Provider
@@ -584,7 +621,7 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
         queue, queueIndex, isShuffled, repeatMode, isPlayerOpen, playbackRate,
         crossfadeSeconds,
         activeSession, isSessionHost, isSessionGuest, allParticipantsReady,
-        refreshSession, setActiveSession, stopAudio,
+        refreshSession, setActiveSession, stopAudio, refreshSongStats,
         playSong, playSongFromList, togglePlay, next, previous, seek, setVolume,
         toggleShuffle, cycleRepeat, openPlayer, closePlayer, setPlaybackRate,
         setCrossfadeSeconds, addToQueue, startRadio,

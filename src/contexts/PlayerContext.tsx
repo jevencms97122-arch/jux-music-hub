@@ -194,7 +194,7 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
           try { active.pause(); active.currentTime = 0; active.removeAttribute('src'); active.load(); } catch {}
           activeRef.current = activeRef.current === 'A' ? 'B' : 'A';
           inactive.volume = targetVol;
-          // Mettre à jour la durée et le temps avec ceux du NOUVEAU son actif
+          // Mettre à jour la durée et le temps avec ceux du NOUVEAU son actifs
           setDuration(inactive.duration || 0);
           setCurrentTime(inactive.currentTime || 0);
           setQueueIndex(nextIdx);

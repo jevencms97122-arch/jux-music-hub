@@ -9,6 +9,7 @@ import { getBadges, type Badge } from '@/lib/badges';
 import { supabase } from '@/integrations/supabase/client';
 import { usePlayer } from '@/contexts/PlayerContext';
 import SongCard from '@/components/SongCard';
+import NativeAppSettings from '@/components/NativeAppSettings';
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger,
 } from '@/components/ui/dialog';
@@ -41,7 +42,7 @@ export default function ProfilePage() {
   return (
     <div className="min-h-screen pb-32">
       {/* Header style Instagram */}
-      <header className="px-6 pt-6">
+      <header className="px-6 pt-6" style={{ animation: 'fadeSlideUp 0.6s cubic-bezier(0.16,1,0.3,1) both' }}>
         <div className="flex items-center gap-5">
           <Avatar className="h-20 w-20 ring-2 ring-primary/30">
             <AvatarImage src={profile ? avatarUrl(profile) : ''} />
@@ -74,7 +75,7 @@ export default function ProfilePage() {
         </div>
 
         {/* Boutons d'action regroupés */}
-        <div className="mt-4 grid grid-cols-2 gap-2">
+        <div className="mt-4 grid grid-cols-2 gap-2" style={{ animation: 'fadeSlideUp 0.6s cubic-bezier(0.16,1,0.3,1) both', animationDelay: '0.1s' }}>
           <Button variant="secondary" size="sm" onClick={() => navigate('/profile-edit')}>
             <Pencil className="mr-2 h-4 w-4" /> Modifier
           </Button>
@@ -126,8 +127,10 @@ export default function ProfilePage() {
         </Button>
       </header>
 
+      <NativeAppSettings />
+
       {/* Feed des sons publiés */}
-      <div className="mt-6 border-t border-border pt-4">
+      <div className="mt-6 border-t border-border pt-4" style={{ animation: 'fadeIn 0.6s ease-out both', animationDelay: '0.2s' }}>
         <div className="mb-3 flex items-center justify-center gap-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
           <Music2 className="h-4 w-4" /> Publications
         </div>
@@ -137,8 +140,10 @@ export default function ProfilePage() {
           </p>
         ) : (
           <div className="grid grid-cols-3 gap-1 px-1 sm:grid-cols-4 md:grid-cols-5">
-            {songs.map((s) => (
-              <SongCard key={s.id} song={s} onPlay={() => playSongFromList(s, songs)} />
+            {songs.map((s, i) => (
+              <div key={s.id} style={{ animation: 'scaleIn 0.4s cubic-bezier(0.16,1,0.3,1) both', animationDelay: `${0.25 + i * 0.03}s` }}>
+                <SongCard song={s} onPlay={() => playSongFromList(s, songs)} />
+              </div>
             ))}
           </div>
         )}

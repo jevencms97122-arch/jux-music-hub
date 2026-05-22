@@ -137,7 +137,7 @@ export default function PlaylistDetail() {
 
   return (
     <div className="min-h-screen pb-40">
-      <header className="flex items-center gap-2 p-4">
+      <header className="flex items-center gap-2 p-4" style={{ animation: 'fadeSlideUp 0.6s cubic-bezier(0.16,1,0.3,1) both' }}>
         <Button variant="ghost" size="icon" onClick={() => navigate(-1)}><ArrowLeft className="h-5 w-5" /></Button>
         <h1 className="flex-1 truncate font-bold">{playlist.title}</h1>
         {isOwner && (
@@ -146,9 +146,7 @@ export default function PlaylistDetail() {
               <Button variant="ghost" size="icon"><UserPlus className="h-5 w-5" /></Button>
             </DialogTrigger>
             <DialogContent>
-              <DialogHeader>
-                <DialogTitle>Collaborateurs</DialogTitle>
-              </DialogHeader>
+              <DialogHeader><DialogTitle>Collaborateurs</DialogTitle></DialogHeader>
               <div className="space-y-3">
                 <div className="space-y-1">
                   {collaborators.length === 0 ? (
@@ -201,17 +199,17 @@ export default function PlaylistDetail() {
       </header>
 
       <div className="px-4">
-        <div className="mb-4 flex h-40 w-40 items-center justify-center rounded-lg bg-gradient-primary shadow-elegant">
+        <div className="mb-4 flex h-40 w-40 items-center justify-center rounded-lg bg-gradient-primary shadow-elegant" style={{ animation: 'scaleIn 0.6s cubic-bezier(0.16,1,0.3,1) both', animationDelay: '0.1s' }}>
           <ListMusic className="h-16 w-16 text-primary-foreground" />
         </div>
-        {playlist.description && <p className="mb-2 text-sm text-muted-foreground">{playlist.description}</p>}
-        <p className="mb-2 text-xs text-muted-foreground">
+        {playlist.description && <p className="mb-2 text-sm text-muted-foreground" style={{ animation: 'fadeIn 0.5s ease-out both', animationDelay: '0.2s' }}>{playlist.description}</p>}
+        <p className="mb-2 text-xs text-muted-foreground" style={{ animation: 'fadeIn 0.5s ease-out both', animationDelay: '0.25s' }}>
           {songs.length} morceau{songs.length > 1 ? 'x' : ''}
           {collaborators.length > 0 && ` • ${collaborators.length} collaborateur${collaborators.length > 1 ? 's' : ''}`}
         </p>
 
         {collaborators.length > 0 && (
-          <div className="mb-4 flex -space-x-2">
+          <div className="mb-4 flex -space-x-2" style={{ animation: 'fadeIn 0.5s ease-out both', animationDelay: '0.3s' }}>
             {collaborators.slice(0, 5).map((c) => c.profile && (
               <Avatar key={c.id} className="h-8 w-8 ring-2 ring-background">
                 <AvatarImage src={avatarUrl(c.profile)} />
@@ -222,14 +220,18 @@ export default function PlaylistDetail() {
         )}
 
         {songs.length > 0 && (
-          <Button className="mb-4" onClick={() => playSongFromList(songs[0], songs)}>
+          <Button className="mb-4" onClick={() => playSongFromList(songs[0], songs)} style={{ animation: 'fadeIn 0.5s ease-out both', animationDelay: '0.35s' }}>
             <Play className="mr-2 h-4 w-4 fill-current" /> Lire tout
           </Button>
         )}
 
         <div className="space-y-1">
-          {songs.map((s) => (
-            <div key={s.id} className="flex items-center gap-3 rounded-lg p-2 hover:bg-secondary">
+          {songs.map((s, i) => (
+            <div
+              key={s.id}
+              className="flex items-center gap-3 rounded-lg p-2 hover:bg-secondary"
+              style={{ animation: 'fadeSlideUp 0.4s cubic-bezier(0.16,1,0.3,1) both', animationDelay: `${0.4 + i * 0.04}s` }}
+            >
               <button onClick={() => playSongFromList(s, songs)} className="flex flex-1 items-center gap-3">
                 <img src={songCoverUrl(s)} alt={s.title} className="h-10 w-10 rounded object-cover" />
                 <div className="min-w-0 text-left">

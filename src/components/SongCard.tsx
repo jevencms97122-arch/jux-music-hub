@@ -1,6 +1,6 @@
 import { songCoverUrl } from '@/lib/storage';
 import type { Song } from '@/types/music';
-import { Play, Heart, Headphones } from 'lucide-react';
+import { Play, Heart, Headphones, Video } from 'lucide-react';
 
 interface Props {
   song: Song;
@@ -36,6 +36,11 @@ export default function SongCard({ song, onPlay }: Props) {
           <span className="flex items-center gap-1 rounded-full bg-black/50 px-1.5 py-0.5 backdrop-blur">
             <Headphones className="h-2.5 w-2.5" /> {formatCount(song.play_count ?? 0)}
           </span>
+          {song.video_url && (
+            <span className="flex items-center gap-1 rounded-full bg-primary/80 px-1.5 py-0.5 backdrop-blur">
+              <Video className="h-2.5 w-2.5" /> Vidéo
+            </span>
+          )}
         </div>
       </div>
       <div className="w-full px-0.5">

@@ -100,7 +100,6 @@ export default function ListenTogether() {
 
   const createSession = async () => {
     if (!authUser) return;
-    // Stop la musique en cours
     stopAudio();
     let code = generate4DigitCode();
     for (let i = 0; i < 5; i++) {
@@ -162,12 +161,12 @@ export default function ListenTogether() {
 
   return (
     <div className="min-h-screen pb-40">
-      <header className="flex items-center gap-2 p-4">
+      <header className="flex items-center gap-2 p-4" style={{ animation: 'fadeSlideUp 0.6s cubic-bezier(0.16,1,0.3,1) both' }}>
         <Button variant="ghost" size="icon" onClick={() => navigate(-1)}><ArrowLeft className="h-5 w-5" /></Button>
         <h1 className="flex-1 text-xl font-bold">Écoute partagée</h1>
       </header>
 
-      <div className="px-4">
+      <div className="px-4" style={{ animation: 'fadeSlideUp 0.6s cubic-bezier(0.16,1,0.3,1) both', animationDelay: '0.1s' }}>
         {!activeSession ? (
           <div className="space-y-6">
             <div className="rounded-2xl border border-border bg-card p-6 text-center">

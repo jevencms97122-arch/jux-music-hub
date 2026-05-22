@@ -46,10 +46,12 @@ export default function ProfileSetup() {
 
   return (
     <div className="min-h-screen px-6 py-8">
-      <h1 className="mb-2 text-2xl font-bold">Bienvenue sur Jux 👋</h1>
-      <p className="mb-6 text-sm text-muted-foreground">Complète ton profil pour commencer.</p>
+      <h1 className="mb-2 text-2xl font-bold" style={{ animation: 'fadeSlideUp 0.6s cubic-bezier(0.16,1,0.3,1) both' }}>Bienvenue sur Jux 👋</h1>
+      <p className="mb-6 text-sm text-muted-foreground" style={{ animation: 'fadeSlideUp 0.6s cubic-bezier(0.16,1,0.3,1) both', animationDelay: '0.1s' }}>
+        Complète ton profil pour commencer.
+      </p>
 
-      <form onSubmit={handleSubmit} className="space-y-4">
+      <form onSubmit={handleSubmit} className="space-y-4" style={{ animation: 'fadeSlideUp 0.6s cubic-bezier(0.16,1,0.3,1) both', animationDelay: '0.2s' }}>
         <div>
           <Label htmlFor="pseudo">Pseudo *</Label>
           <Input id="pseudo" value={pseudo} onChange={(e) => setPseudo(e.target.value)} required />

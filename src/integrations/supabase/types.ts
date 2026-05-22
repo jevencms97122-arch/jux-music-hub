@@ -429,6 +429,7 @@ export type Database = {
           title: string
           updated_at: string
           uploaded_by: string
+          weekly_play_count: number
         }
         Insert: {
           audio_url: string
@@ -442,6 +443,7 @@ export type Database = {
           title: string
           updated_at?: string
           uploaded_by: string
+          weekly_play_count?: number
         }
         Update: {
           audio_url?: string
@@ -455,6 +457,7 @@ export type Database = {
           title?: string
           updated_at?: string
           uploaded_by?: string
+          weekly_play_count?: number
         }
         Relationships: []
       }
@@ -595,6 +598,7 @@ export type Database = {
         Returns: boolean
       }
       increment_song_play: { Args: { _song_id: string }; Returns: number }
+      increment_song_weekly_play: { Args: { _song_id: string }; Returns: number }
       is_playlist_collaborator: {
         Args: { _min_role?: string; _playlist_id: string; _user_id: string }
         Returns: boolean

@@ -1,21 +1,50 @@
 import type { Song } from '@/types/music';
 import { songCoverUrl } from '@/lib/storage';
 
+/** Devine le mime-type à partir de l'extension d'URL. */
+function guessImageMime(url: string): string {
+  const u = url.split('?')[0].toLowerCase();
+  if (u.endsWith('.png')) return 'image/png';
+  if (u.endsWith('.webp')) return 'image/webp';
+  if (u.endsWith('.gif')) return 'image/gif';
+  if (u.endsWith('.svg')) return 'image/svg+xml';
+  return 'image/jpeg';
+}
+
 /** Met à jour les métadonnées MediaSession (notification système / écran verrouillé). */
 export function setMediaSessionMetadata(song: Song | null) {
   if (!('mediaSession' in navigator)) return;
   if (!song) {
-    navigator.mediaSession.metadata = null;
+    try { navigator.mediaSession.metadata = null; } catch { /* noop */ }
     return;
   }
-  navigator.mediaSession.metadata = new MediaMetadata({
-    title: song.title,
-    artist: song.author,
-    album: 'Jux',
-    artwork: [
-      { src: songCoverUrl(song), sizes: '512x512', type: 'image/png' },
-    ],
-  });
+  const cover = songCoverUrl(song);
+  const mime = guessImageMime(cover);
+  try {
+    navigator.mediaSession.metadata = new MediaMetadata({
+      title: song.title || 'Sans titre',
+      artist: song.author || 'Inconnu',
+      album: 'Jux',
+      // Plusieurs tailles pour qu'Android/Chrome choisissent la meilleure.
+      artwork: [
+        { src: cover, sizes: '96x96', type: mime },
+        { src: cover, sizes: '192x192', type: mime },
+        { src: cover, sizes: '256x256', type: mime },
+        { src: cover, sizes: '384x384', type: mime },
+        { src: cover, sizes: '512x512', type: mime },
+      ],
+    });
+    if ('playbackState' in navigator.mediaSession) {
+      navigator.mediaSession.playbackState = 'playing';
+    }
+  } catch (e) {
+    console.warn('MediaSession metadata error', e);
+  }
+}
+
+export function setMediaSessionPlaybackState(state: 'playing' | 'paused' | 'none') {
+  if (!('mediaSession' in navigator)) return;
+  try { navigator.mediaSession.playbackState = state; } catch { /* noop */ }
 }
 
 export function setMediaSessionHandlers(handlers: {
@@ -24,20 +53,27 @@ export function setMediaSessionHandlers(handlers: {
   next?: () => void;
   previous?: () => void;
   seek?: (time: number) => void;
+  seekForward?: () => void;
+  seekBackward?: () => void;
+  stop?: () => void;
 }) {
   if (!('mediaSession' in navigator)) return;
-  try {
-    navigator.mediaSession.setActionHandler('play', handlers.play ?? null);
-    navigator.mediaSession.setActionHandler('pause', handlers.pause ?? null);
-    navigator.mediaSession.setActionHandler('nexttrack', handlers.next ?? null);
-    navigator.mediaSession.setActionHandler('previoustrack', handlers.previous ?? null);
-    if (handlers.seek) {
-      navigator.mediaSession.setActionHandler('seekto', (e) => {
-        if (e.seekTime != null) handlers.seek!(e.seekTime);
-      });
-    }
-  } catch (e) {
-    console.warn('MediaSession handler error', e);
+  const safe = (action: MediaSessionAction, fn: (() => void) | ((d: any) => void) | null) => {
+    try { navigator.mediaSession.setActionHandler(action, fn as any); } catch { /* unsupported */ }
+  };
+  safe('play', handlers.play ?? null);
+  safe('pause', handlers.pause ?? null);
+  safe('nexttrack', handlers.next ?? null);
+  safe('previoustrack', handlers.previous ?? null);
+  safe('stop', handlers.stop ?? null);
+  safe('seekforward', handlers.seekForward ?? null);
+  safe('seekbackward', handlers.seekBackward ?? null);
+  if (handlers.seek) {
+    safe('seekto', (e: any) => {
+      if (e?.seekTime != null) handlers.seek!(e.seekTime);
+    });
+  } else {
+    safe('seekto', null);
   }
 }
 
@@ -47,8 +83,8 @@ export function setMediaSessionPosition(duration: number, position: number, rate
   try {
     navigator.mediaSession.setPositionState({
       duration,
-      position: Math.min(position, duration),
-      playbackRate: rate,
+      position: Math.max(0, Math.min(position, duration)),
+      playbackRate: rate || 1,
     });
   } catch {
     // ignore
@@ -57,8 +93,8 @@ export function setMediaSessionPosition(duration: number, position: number, rate
 
 export function clearMediaSession() {
   if (!('mediaSession' in navigator)) return;
-  navigator.mediaSession.metadata = null;
-  ['play', 'pause', 'nexttrack', 'previoustrack', 'seekto'].forEach((a) => {
-    try { navigator.mediaSession.setActionHandler(a as MediaSessionAction, null); } catch { /* noop */ }
-  });
+  try { navigator.mediaSession.metadata = null; } catch { /* noop */ }
+  try { navigator.mediaSession.playbackState = 'none'; } catch { /* noop */ }
+  (['play', 'pause', 'nexttrack', 'previoustrack', 'seekto', 'seekforward', 'seekbackward', 'stop'] as MediaSessionAction[])
+    .forEach((a) => { try { navigator.mediaSession.setActionHandler(a, null); } catch { /* noop */ } });
 }

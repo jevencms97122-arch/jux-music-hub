@@ -87,7 +87,7 @@ export default function Playlists() {
     <div className="relative min-h-screen pb-40">
       <div className="pointer-events-none absolute inset-x-0 top-0 h-60 bg-gradient-hero" />
       <div className="relative px-4 py-6">
-        <div className="mb-4 flex items-center justify-between">
+        <div className="mb-4 flex items-center justify-between" style={{ animation: 'fadeSlideUp 0.6s cubic-bezier(0.16,1,0.3,1) both' }}>
           <h1 className="text-2xl font-bold">Playlists</h1>
           <Dialog open={open} onOpenChange={setOpen}>
             <DialogTrigger asChild>
@@ -110,37 +110,39 @@ export default function Playlists() {
           </Dialog>
         </div>
 
-        <Tabs defaultValue="mine" className="w-full">
-          <TabsList className="mb-4 w-full">
-            <TabsTrigger value="mine" className="flex-1">Mes playlists</TabsTrigger>
-            <TabsTrigger value="liked" className="flex-1">Likées</TabsTrigger>
-            <TabsTrigger value="discover" className="flex-1"><Compass className="mr-1 h-3.5 w-3.5" />Explorer</TabsTrigger>
-          </TabsList>
+        <div style={{ animation: 'fadeSlideUp 0.6s cubic-bezier(0.16,1,0.3,1) both', animationDelay: '0.1s' }}>
+          <Tabs defaultValue="mine" className="w-full">
+            <TabsList className="mb-4 w-full">
+              <TabsTrigger value="mine" className="flex-1">Mes playlists</TabsTrigger>
+              <TabsTrigger value="liked" className="flex-1">Likées</TabsTrigger>
+              <TabsTrigger value="discover" className="flex-1"><Compass className="mr-1 h-3.5 w-3.5" />Explorer</TabsTrigger>
+            </TabsList>
 
-          <TabsContent value="mine" className="space-y-1.5">
-            {own.length === 0 ? (
-              <div className="rounded-xl border border-border bg-card p-8 text-center">
-                <p className="text-sm text-muted-foreground">Tu n'as pas encore de playlist.</p>
-              </div>
-            ) : own.map((p) => <Card key={p.id} p={p} />)}
-          </TabsContent>
+            <TabsContent value="mine" className="space-y-1.5">
+              {own.length === 0 ? (
+                <div className="rounded-xl border border-border bg-card p-8 text-center">
+                  <p className="text-sm text-muted-foreground">Tu n'as pas encore de playlist.</p>
+                </div>
+              ) : own.map((p, i) => <div key={p.id} style={{ animation: 'fadeSlideUp 0.4s cubic-bezier(0.16,1,0.3,1) both', animationDelay: `${0.15 + i * 0.04}s` }}><Card p={p} /></div>)}
+            </TabsContent>
 
-          <TabsContent value="liked" className="space-y-1.5">
-            {liked.length === 0 ? (
-              <div className="rounded-xl border border-border bg-card p-8 text-center">
-                <p className="text-sm text-muted-foreground">Aucune playlist likée.</p>
-              </div>
-            ) : liked.map((p) => <Card key={p.id} p={p} />)}
-          </TabsContent>
+            <TabsContent value="liked" className="space-y-1.5">
+              {liked.length === 0 ? (
+                <div className="rounded-xl border border-border bg-card p-8 text-center">
+                  <p className="text-sm text-muted-foreground">Aucune playlist likée.</p>
+                </div>
+              ) : liked.map((p, i) => <div key={p.id} style={{ animation: 'fadeSlideUp 0.4s cubic-bezier(0.16,1,0.3,1) both', animationDelay: `${0.15 + i * 0.04}s` }}><Card p={p} /></div>)}
+            </TabsContent>
 
-          <TabsContent value="discover" className="space-y-1.5">
-            {publicPlaylists.length === 0 ? (
-              <div className="rounded-xl border border-border bg-card p-8 text-center">
-                <p className="text-sm text-muted-foreground">Pas encore de playlists publiques.</p>
-              </div>
-            ) : publicPlaylists.map((p) => <Card key={p.id} p={p} />)}
-          </TabsContent>
-        </Tabs>
+            <TabsContent value="discover" className="space-y-1.5">
+              {publicPlaylists.length === 0 ? (
+                <div className="rounded-xl border border-border bg-card p-8 text-center">
+                  <p className="text-sm text-muted-foreground">Pas encore de playlists publiques.</p>
+                </div>
+              ) : publicPlaylists.map((p, i) => <div key={p.id} style={{ animation: 'fadeSlideUp 0.4s cubic-bezier(0.16,1,0.3,1) both', animationDelay: `${0.15 + i * 0.04}s` }}><Card p={p} /></div>)}
+            </TabsContent>
+          </Tabs>
+        </div>
       </div>
     </div>
   );

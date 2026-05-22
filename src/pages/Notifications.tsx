@@ -47,16 +47,24 @@ export default function Notifications() {
 
   return (
     <div className="min-h-screen px-4 py-6 pb-40">
-      <h1 className="mb-4 flex items-center gap-2 text-xl font-bold"><Bell className="h-5 w-5" /> Notifications</h1>
+      <h1 className="mb-4 flex items-center gap-2 text-xl font-bold" style={{ animation: 'fadeSlideUp 0.6s cubic-bezier(0.16,1,0.3,1) both' }}>
+        <Bell className="h-5 w-5" /> Notifications
+      </h1>
       {notifs.length === 0 ? (
-        <p className="text-sm text-muted-foreground">Aucune notification.</p>
+        <p className="text-sm text-muted-foreground" style={{ animation: 'fadeIn 0.5s ease-out both', animationDelay: '0.1s' }}>
+          Aucune notification.
+        </p>
       ) : (
         <div className="space-y-2">
-          {notifs.map((n) => {
+          {notifs.map((n, i) => {
             const isInvite = n.type === 'session_invite';
             const code = (n.data as any)?.code;
             return (
-              <div key={n.id} className="flex items-start gap-2 rounded-lg border border-border bg-card p-3">
+              <div
+                key={n.id}
+                className="flex items-start gap-2 rounded-lg border border-border bg-card p-3"
+                style={{ animation: 'fadeSlideUp 0.5s cubic-bezier(0.16,1,0.3,1) both', animationDelay: `${0.1 + i * 0.05}s` }}
+              >
                 <div className="flex-1">
                   <p className="text-sm font-medium">{n.title}</p>
                   {n.body && <p className="text-xs text-muted-foreground">{n.body}</p>}

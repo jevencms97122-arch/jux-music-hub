@@ -74,13 +74,13 @@ export default function UserProfile() {
 
   return (
     <div className="min-h-screen pb-40">
-      <header className="flex items-center gap-2 p-4">
+      <header className="flex items-center gap-2 p-4" style={{ animation: 'fadeSlideUp 0.6s cubic-bezier(0.16,1,0.3,1) both' }}>
         <Button variant="ghost" size="icon" onClick={() => navigate(-1)}><ArrowLeft className="h-5 w-5" /></Button>
         <h1 className="flex-1 truncate font-bold">@{profile.pseudo}</h1>
       </header>
 
-      <div className="flex flex-col items-center gap-2 px-6">
-        <Avatar className="h-24 w-24">
+      <div className="flex flex-col items-center gap-2 px-6" style={{ animation: 'fadeSlideUp 0.6s cubic-bezier(0.16,1,0.3,1) both', animationDelay: '0.1s' }}>
+        <Avatar className="h-24 w-24" style={{ animation: 'scaleIn 0.5s cubic-bezier(0.16,1,0.3,1) both', animationDelay: '0.15s' }}>
           <AvatarImage src={avatarUrl(profile)} />
           <AvatarFallback>{profile.pseudo?.[0]?.toUpperCase() ?? '?'}</AvatarFallback>
         </Avatar>
@@ -102,14 +102,16 @@ export default function UserProfile() {
         )}
       </div>
 
-      <section className="mt-8 px-4">
+      <section className="mt-8 px-4" style={{ animation: 'fadeIn 0.6s ease-out both', animationDelay: '0.25s' }}>
         <h3 className="mb-3 text-sm font-bold text-muted-foreground">Morceaux publiés</h3>
         {songs.length === 0 ? (
           <p className="text-sm text-muted-foreground">Aucun morceau publié.</p>
         ) : (
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4">
-            {songs.map((s) => (
-              <SongCard key={s.id} song={s} onPlay={() => playSongFromList(s, songs)} />
+            {songs.map((s, i) => (
+              <div key={s.id} style={{ animation: 'scaleIn 0.4s cubic-bezier(0.16,1,0.3,1) both', animationDelay: `${0.3 + i * 0.04}s` }}>
+                <SongCard song={s} onPlay={() => playSongFromList(s, songs)} />
+              </div>
             ))}
           </div>
         )}

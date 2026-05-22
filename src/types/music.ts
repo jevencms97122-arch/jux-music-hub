@@ -33,9 +33,11 @@ export interface Song {
   author: string;
   audio_url: string;
   cover_url: string | null;
+  video_url: string | null;
   genre: string | null;
   uploaded_by: string;
   play_count: number;
+  weekly_play_count?: number;
   likes_count: number;
   created_at: string;
   updated_at: string;

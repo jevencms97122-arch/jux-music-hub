@@ -74,6 +74,87 @@
   }
 }
 
+/* ── Smooth spawn animations ── */
+
+@keyframes fadeSlideUp {
+  0% {
+    opacity: 0;
+    transform: translateY(24px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes fadeIn {
+  0% {
+    opacity: 0;
+  }
+  100% {
+    opacity: 1;
+  }
+}
+
+@keyframes fadeOut {
+  0% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+
+@keyframes scaleIn {
+  0% {
+    opacity: 0;
+    transform: scale(0.92);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+.animate-fade-slide-up {
+  animation: fadeSlideUp 0.6s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.animate-fade-in {
+  animation: fadeIn 0.5s ease-out both;
+}
+
+.animate-scale-in {
+  animation: scaleIn 0.5s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+/* Utility: apply animation via a custom property so we can reuse without repeating the cubic-bezier */
+@keyframes _fadeSlideUp { from { opacity: 0; transform: translateY(24px); } to { opacity: 1; transform: translateY(0); } }
+@keyframes _fadeIn { from { opacity: 0; } to { opacity: 1; } }
+@keyframes _scaleIn { from { opacity: 0; transform: scale(0.92); } to { opacity: 1; transform: scale(1); } }
+:root {
+  --anim-fade-slide-up: _fadeSlideUp 0.6s cubic-bezier(0.16,1,0.3,1) both;
+  --anim-fade-in: _fadeIn 0.5s ease-out both;
+  --anim-scale-in: _scaleIn 0.5s cubic-bezier(0.16,1,0.3,1) both;
+}
+
+/* Delay helpers */
+.delay-1  { animation-delay: 0.05s; }
+.delay-2  { animation-delay: 0.10s; }
+.delay-3  { animation-delay: 0.15s; }
+.delay-4  { animation-delay: 0.20s; }
+.delay-5  { animation-delay: 0.25s; }
+.delay-6  { animation-delay: 0.30s; }
+.delay-7  { animation-delay: 0.35s; }
+.delay-8  { animation-delay: 0.40s; }
+.delay-9  { animation-delay: 0.45s; }
+.delay-10 { animation-delay: 0.50s; }
+.delay-11 { animation-delay: 0.55s; }
+.delay-12 { animation-delay: 0.60s; }
+.delay-13 { animation-delay: 0.65s; }
+.delay-14 { animation-delay: 0.70s; }
+.delay-15 { animation-delay: 0.75s; }
+
 @keyframes equalizerBar {
   0% { height: 4px; }
   50% { height: 20px; }

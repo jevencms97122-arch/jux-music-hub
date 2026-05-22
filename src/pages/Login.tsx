@@ -32,55 +32,64 @@ export default function Login() {
       <div className="flex w-full items-center justify-center px-6 py-12">
         <div className="w-full max-w-md space-y-8">
           <div className="text-center">
-            <img src={juxLogo} alt="Jux" className="mx-auto mb-8 h-20 w-auto" />
-            <h1 className="text-3xl font-bold text-foreground">Bienvenue sur Jux</h1>
-            <p className="mt-2 text-muted-foreground">Connecte-toi pour découvrir de nouvelles musiques</p>
+            <img
+              src={juxLogo} alt="Jux" className="mx-auto mb-8 h-20 w-auto"
+              style={{ animation: 'fadeSlideUp 0.6s cubic-bezier(0.16,1,0.3,1) both' }}
+            />
+            <h1 className="text-3xl font-bold text-foreground" style={{ animation: 'fadeSlideUp 0.6s cubic-bezier(0.16,1,0.3,1) both', animationDelay: '0.1s' }}>
+              Bienvenue sur Jux
+            </h1>
+            <p className="mt-2 text-muted-foreground" style={{ animation: 'fadeSlideUp 0.6s cubic-bezier(0.16,1,0.3,1) both', animationDelay: '0.18s' }}>
+              Connecte-toi pour découvrir de nouvelles musiques
+            </p>
           </div>
 
-          <Tabs value={mode} onValueChange={(v) => { setMode(v as any); setError(''); }} className="w-full">
-            <TabsList className="grid w-full grid-cols-2 bg-secondary">
-              <TabsTrigger value="signin" className="text-sm">Connexion</TabsTrigger>
-              <TabsTrigger value="signup" className="text-sm">Inscription</TabsTrigger>
-            </TabsList>
+          <div style={{ animation: 'fadeSlideUp 0.6s cubic-bezier(0.16,1,0.3,1) both', animationDelay: '0.28s' }}>
+            <Tabs value={mode} onValueChange={(v) => { setMode(v as any); setError(''); }} className="w-full">
+              <TabsList className="grid w-full grid-cols-2 bg-secondary">
+                <TabsTrigger value="signin" className="text-sm">Connexion</TabsTrigger>
+                <TabsTrigger value="signup" className="text-sm">Inscription</TabsTrigger>
+              </TabsList>
 
-            <TabsContent value={mode} className="mt-6">
-              <form onSubmit={handleSubmit} className="space-y-4">
-                <div className="space-y-2">
-                  <label className="text-sm font-medium text-foreground">Email</label>
-                  <Input
-                    type="email"
-                    placeholder="ton@email.com"
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                    required
-                    autoComplete="email"
-                    className="h-12"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <label className="text-sm font-medium text-foreground">Mot de passe</label>
-                  <Input
-                    type="password"
-                    placeholder="Mot de passe"
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    required
-                    minLength={6}
-                    autoComplete={mode === 'signin' ? 'current-password' : 'new-password'}
-                    className="h-12"
-                  />
-                </div>
-                {error && (
-                  <div className="rounded-lg border border-destructive/20 bg-destructive/10 p-3">
-                    <p className="text-sm text-destructive">{error}</p>
+              <TabsContent value={mode} className="mt-6">
+                <form onSubmit={handleSubmit} className="space-y-4">
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium text-foreground">Email</label>
+                    <Input
+                      type="email"
+                      placeholder="ton@email.com"
+                      value={email}
+                      onChange={(e) => setEmail(e.target.value)}
+                      required
+                      autoComplete="email"
+                      className="h-12"
+                    />
                   </div>
-                )}
-                <Button type="submit" className="h-12 w-full bg-gradient-primary text-primary-foreground hover:opacity-90" disabled={loading || !email || !password}>
-                  {loading ? 'Chargement...' : mode === 'signin' ? 'Se connecter' : "S'inscrire"}
-                </Button>
-              </form>
-            </TabsContent>
-          </Tabs>
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium text-foreground">Mot de passe</label>
+                    <Input
+                      type="password"
+                      placeholder="Mot de passe"
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
+                      required
+                      minLength={6}
+                      autoComplete={mode === 'signin' ? 'current-password' : 'new-password'}
+                      className="h-12"
+                    />
+                  </div>
+                  {error && (
+                    <div className="rounded-lg border border-destructive/20 bg-destructive/10 p-3">
+                      <p className="text-sm text-destructive">{error}</p>
+                    </div>
+                  )}
+                  <Button type="submit" className="h-12 w-full bg-gradient-primary text-primary-foreground hover:opacity-90" disabled={loading || !email || !password}>
+                    {loading ? 'Chargement...' : mode === 'signin' ? 'Se connecter' : "S'inscrire"}
+                  </Button>
+                </form>
+              </TabsContent>
+            </Tabs>
+          </div>
         </div>
       </div>
     </div>

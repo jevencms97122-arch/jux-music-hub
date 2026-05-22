@@ -1,9 +1,10 @@
 import React, { createContext, useContext, useState, useRef, useEffect, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
-import { songAudioUrl } from '@/lib/storage';
+import { songAudioUrl, songCoverUrl } from '@/lib/storage';
+import { extractDominantHsl, applyAccentHsl } from '@/lib/dominantColor';
 import { updateStreak } from '@/lib/streaks';
-import { setMediaSessionMetadata, setMediaSessionHandlers, setMediaSessionPosition, clearMediaSession } from '@/lib/notifications';
+import { setMediaSessionMetadata, setMediaSessionHandlers, setMediaSessionPosition, setMediaSessionPlaybackState, clearMediaSession } from '@/lib/notifications';
 import { toast } from 'sonner';
 import type { Song } from '@/types/music';
 
@@ -57,6 +58,8 @@ interface PlayerContextType {
   setCrossfadeSeconds: (s: number) => void;
   addToQueue: (song: Song) => void;
   startRadio: (seed: Song) => Promise<void>;
+  // Video synchronisation
+  signalVideoReady: () => void;
 }
 
 const PlayerContext = createContext<PlayerContextType | null>(null);
@@ -69,6 +72,8 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
   const audioBRef = useRef<HTMLAudioElement | null>(null);
   const activeRef = useRef<'A' | 'B'>('A');
   const crossfadingRef = useRef(false);
+  const crossfadeIntervalRef = useRef<number | null>(null);
+
 
   const [currentSong, setCurrentSong] = useState<Song | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
@@ -87,6 +92,14 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
     return isNaN(v) ? 3 : Math.max(0, Math.min(12, v));
   });
 
+  // === Video synchronisation ===
+  // Not used for audio control anymore – audio plays immediately in loadAndPlay.
+  // Kept only as a flag for SynchronizedVideoPlayer to know when to re-sync.
+  const videoReadyRef = useRef(false);
+  const signalVideoReady = useCallback(() => {
+    videoReadyRef.current = true;
+  }, []);
+
   // === Session ===
   const [activeSession, setActiveSessionState] = useState<ListenSessionRow | null>(null);
   const sessionRef = useRef<ListenSessionRow | null>(null);
@@ -101,15 +114,113 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
   const getInactive = () => (activeRef.current === 'A' ? audioBRef.current! : audioARef.current!);
 
   const nextRef = useRef<() => void>(() => {});
-  const triggerCrossfadeRef = useRef<() => void>(() => {});
   const crossfadeSecondsRef = useRef(crossfadeSeconds);
   const repeatModeRef = useRef(repeatMode);
   const isSessionGuestRef = useRef(isSessionGuest);
+  const queueRef = useRef(queue);
+  const queueIndexRef = useRef(queueIndex);
+  const isShuffledRef = useRef(isShuffled);
+  const volumeRef = useRef(volume);
+  const playbackRateRef = useRef(playbackRate);
   const pendingSessionAutoplayRef = useRef(false);
   const sessionGuestRecordedRef = useRef<string | null>(null);
   useEffect(() => { crossfadeSecondsRef.current = crossfadeSeconds; }, [crossfadeSeconds]);
   useEffect(() => { repeatModeRef.current = repeatMode; }, [repeatMode]);
   useEffect(() => { isSessionGuestRef.current = isSessionGuest; }, [isSessionGuest]);
+  useEffect(() => { queueRef.current = queue; }, [queue]);
+  useEffect(() => { queueIndexRef.current = queueIndex; }, [queueIndex]);
+  useEffect(() => { isShuffledRef.current = isShuffled; }, [isShuffled]);
+  useEffect(() => { volumeRef.current = volume; }, [volume]);
+  useEffect(() => { playbackRateRef.current = playbackRate; }, [playbackRate]);
+
+  const recordPlayRef = useRef<(s: Song) => void>(() => {});
+  const broadcastSongRef = useRef<(s: Song) => void>(() => {});
+
+  const triggerCrossfadeRef = useRef<() => void>(() => {
+    if (crossfadingRef.current) return;
+    const fadeSec = crossfadeSecondsRef.current;
+    if (fadeSec <= 0) return;
+    if (isSessionGuestRef.current) return;
+
+    // Determine next song
+    const q = queueRef.current;
+    const idx = queueIndexRef.current;
+    if (q.length === 0) return;
+
+    let nextIdx: number;
+    if (repeatModeRef.current === 'one') {
+      // No crossfade for repeat one — let onEnd handle restart
+      return;
+    } else if (isShuffledRef.current) {
+      nextIdx = Math.floor(Math.random() * q.length);
+    } else {
+      nextIdx = idx + 1;
+    }
+    if (nextIdx >= q.length) {
+      if (repeatModeRef.current === 'all') nextIdx = 0;
+      else return; // No next, let normal flow handle
+    }
+
+    const nextSong = q[nextIdx];
+    if (!nextSong) return;
+
+    crossfadingRef.current = true;
+    const active = getActive();
+    const inactive = getInactive();
+
+    inactive.src = songAudioUrl(nextSong);
+    inactive.volume = 0;
+    inactive.playbackRate = playbackRateRef.current;
+    inactive.currentTime = 0;
+
+    const startFade = () => {
+      const startTs = performance.now();
+      const fadeMs = fadeSec * 1000;
+      const startVol = active.volume;
+      const targetVol = volumeRef.current;
+
+      if (crossfadeIntervalRef.current) {
+        clearInterval(crossfadeIntervalRef.current);
+      }
+      crossfadeIntervalRef.current = window.setInterval(() => {
+        const p = Math.min(1, (performance.now() - startTs) / fadeMs);
+        active.volume = Math.max(0, startVol * (1 - p));
+        inactive.volume = Math.min(1, targetVol * p);
+        if (p >= 1) {
+          if (crossfadeIntervalRef.current) {
+            clearInterval(crossfadeIntervalRef.current);
+            crossfadeIntervalRef.current = null;
+          }
+          try { active.pause(); active.currentTime = 0; active.removeAttribute('src'); active.load(); } catch {}
+          activeRef.current = activeRef.current === 'A' ? 'B' : 'A';
+          inactive.volume = targetVol;
+          // Mettre à jour la durée et le temps avec ceux du NOUVEAU son actif
+          setDuration(inactive.duration || 0);
+          setCurrentTime(inactive.currentTime || 0);
+          setQueueIndex(nextIdx);
+          setCurrentSong(nextSong);
+          setPlayedSongIds(prev => new Set([...prev, nextSong.id]));
+          setIsPlaying(true);
+          recordPlayRef.current(nextSong);
+          if (sessionRef.current && authUser && sessionRef.current.host_id === authUser.id) {
+            broadcastSongRef.current(nextSong);
+          }
+          crossfadingRef.current = false;
+        }
+      }, 50) as unknown as number;
+    };
+
+    const onReady = () => {
+      inactive.removeEventListener('canplay', onReady);
+      inactive.play().then(startFade).catch((e) => {
+        console.error('Crossfade play failed', e);
+        crossfadingRef.current = false;
+      });
+    };
+    inactive.addEventListener('canplay', onReady);
+    inactive.load();
+  });
+
 
   // Init audio elements
   useEffect(() => {
@@ -125,28 +236,45 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
     audioARef.current = create();
     audioBRef.current = create();
 
-    const onTime = () => {
+    const onTime = (e: Event) => {
       const a = getActive();
+      // Only react to active audio's timeupdate
+      if (e.target !== a) return;
       setCurrentTime(a.currentTime);
-      const cf = crossfadeSecondsRef.current;
-      // Pas de crossfade en mode session guest (sync gère)
+
+      const dur = a.duration;
+      if (!isFinite(dur) || dur <= 0) return;
+
+      const fadeDuration = crossfadeSecondsRef.current;
+      const remaining = dur - a.currentTime;
+
       if (
-        cf > 0 && !crossfadingRef.current && a.duration &&
-        a.duration - a.currentTime <= cf &&
-        repeatModeRef.current !== 'one' &&
-        !sessionRef.current
+        fadeDuration > 0 &&
+        remaining <= fadeDuration &&
+        remaining > 0.1 &&
+        !crossfadingRef.current &&
+        !isSessionGuestRef.current &&
+        repeatModeRef.current !== 'one'
       ) {
         triggerCrossfadeRef.current();
       }
     };
-    const onDur = () => setDuration(getActive().duration || 0);
-    const onEnd = () => {
+
+    const onDur = (e: Event) => {
+      if (e.target === getActive()) setDuration(getActive().duration || 0);
+    };
+    const onEnd = (e: Event) => {
+      if (e.target !== getActive()) return;
       if (crossfadingRef.current) return;
-      if (isSessionGuestRef.current) return; // l'host décide
+      if (isSessionGuestRef.current) return;
       nextRef.current();
     };
-    const onPlay = () => setIsPlaying(true);
-    const onPause = () => { if (!crossfadingRef.current) setIsPlaying(false); };
+
+    const onPlay = (e: Event) => { if (e.target === getActive()) setIsPlaying(true); };
+    const onPause = (e: Event) => {
+      if (e.target !== getActive()) return;
+      if (!crossfadingRef.current) setIsPlaying(false);
+    };
 
     [audioARef.current, audioBRef.current].forEach((a) => {
       a.addEventListener('timeupdate', onTime);
@@ -157,6 +285,11 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
     });
 
     return () => {
+      if (crossfadeIntervalRef.current) {
+        clearInterval(crossfadeIntervalRef.current);
+        crossfadeIntervalRef.current = null;
+      }
+      crossfadingRef.current = false;
       [audioARef.current, audioBRef.current].forEach((a) => {
         if (!a) return;
         a.pause();
@@ -168,17 +301,31 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
       });
       clearMediaSession();
     };
+
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
-    [audioARef.current, audioBRef.current].forEach((a) => { if (a) a.volume = volume; });
+    const a = getActive();
+    if (a) a.volume = volume;
+    // Don't touch inactive audio during crossfade
   }, [volume]);
   useEffect(() => {
     [audioARef.current, audioBRef.current].forEach((a) => { if (a) a.playbackRate = playbackRate; });
   }, [playbackRate]);
 
   useEffect(() => { setMediaSessionMetadata(currentSong); }, [currentSong]);
+  useEffect(() => { setMediaSessionPlaybackState(currentSong ? (isPlaying ? 'playing' : 'paused') : 'none'); }, [isPlaying, currentSong]);
+
+  // Adapter l'accent de couleur à la cover du morceau en cours
+  useEffect(() => {
+    if (!currentSong) { applyAccentHsl(null); return; }
+    let cancelled = false;
+    extractDominantHsl(songCoverUrl(currentSong)).then((hsl) => {
+      if (!cancelled) applyAccentHsl(hsl);
+    });
+    return () => { cancelled = true; };
+  }, [currentSong]);
   useEffect(() => {
     setMediaSessionHandlers({
       play: () => getActive()?.play(),
@@ -194,10 +341,12 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
   }, [duration, currentTime, playbackRate]);
 
   const setCrossfadeSeconds = useCallback((s: number) => {
-    const v = Math.max(0, Math.min(12, s));
+    const v = s <= 0 ? 0 : Math.max(1, Math.min(12, s));
     setCrossfadeSecondsState(v);
     localStorage.setItem(CROSSFADE_KEY, String(v));
+    crossfadeSecondsRef.current = v;
   }, []);
+
 
   const refreshSongStats = useCallback(async (songId: string) => {
     const { data } = await supabase
@@ -210,9 +359,14 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
     setQueue((q) => q.map((s) => s.id === songId ? { ...s, ...data } : s));
   }, []);
 
+  const countedWeeklyRef = useRef<Set<string>>(new Set());
+  const weeklyListenStartRef = useRef<Map<string, number>>(new Map());
+
   const recordPlay = useCallback((song: Song) => {
     if (!authUser) return;
     supabase.from('listen_history').insert({ user_id: authUser.id, song_id: song.id }).then(() => {});
+    updateStreak(authUser.id);
+    // Incrémente le play_count immédiatement au lancement
     supabase.rpc('increment_song_play', { _song_id: song.id }).then(({ data }) => {
       if (typeof data === 'number') {
         const stats = { play_count: data };
@@ -222,8 +376,34 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
         refreshSongStats(song.id);
       }
     });
-    updateStreak(authUser.id);
+    // Reset le compteur weekly pour cette session d'écoute
+    weeklyListenStartRef.current.set(song.id, 0);
+    countedWeeklyRef.current.delete(song.id);
   }, [authUser, refreshSongStats]);
+  useEffect(() => { recordPlayRef.current = recordPlay; }, [recordPlay]);
+
+  // Incrémente le weekly_play_count seulement après 30s d'écoute cumulée
+  useEffect(() => {
+    if (!currentSong || !authUser) return;
+    const songId = currentSong.id;
+    if (countedWeeklyRef.current.has(songId)) return;
+    const prev = weeklyListenStartRef.current.get(songId) ?? 0;
+    const reached = Math.max(prev, currentTime);
+    weeklyListenStartRef.current.set(songId, reached);
+    if (reached >= 30) {
+      countedWeeklyRef.current.add(songId);
+      supabase.rpc('increment_song_weekly_play', { _song_id: songId }).then(({ data }) => {
+        if (typeof data === 'number') {
+          const stats = { weekly_play_count: data };
+          setCurrentSong((cur) => cur?.id === songId ? { ...cur, ...stats } : cur);
+          setQueue((q) => q.map((s) => s.id === songId ? { ...s, ...stats } : s));
+        } else {
+          refreshSongStats(songId);
+        }
+      });
+    }
+  }, [currentTime, currentSong, authUser, refreshSongStats]);
+
 
   const stopAudio = useCallback(() => {
     [audioARef.current, audioBRef.current].forEach((a) => {
@@ -234,9 +414,19 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const loadAndPlay = useCallback(async (song: Song, autoPlay = true) => {
+    // Cancel any ongoing crossfade
+    if (crossfadeIntervalRef.current) {
+      clearInterval(crossfadeIntervalRef.current);
+      crossfadeIntervalRef.current = null;
+    }
+    crossfadingRef.current = false;
+    // Stop the inactive audio if it was preloading a crossfade
+    const inactive = getInactive();
+    if (inactive) {
+      try { inactive.pause(); inactive.volume = 0; inactive.removeAttribute('src'); inactive.load(); } catch {}
+    }
     const a = getActive();
     if (!a) return;
-    crossfadingRef.current = false;
     a.src = songAudioUrl(song);
     a.volume = volume;
     // Force playbackRate après changement de src (certains navigateurs reset à 1)
@@ -251,6 +441,8 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
       a.load();
       return;
     }
+    // Jouer l'audio immédiatement, même avec vidéo YouTube
+    // La vidéo se synchronisera via currentTime et isPlaying
     try {
       await a.play();
       a.playbackRate = playbackRate;
@@ -260,51 +452,8 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
     }
   }, [playbackRate, volume, recordPlay, authUser]);
 
-  const triggerCrossfade = useCallback(() => {
-    if (queue.length === 0) return;
-    const nextIdx = isShuffled ? Math.floor(Math.random() * queue.length) : queueIndex + 1;
-    if (nextIdx >= queue.length) {
-      if (repeatMode !== 'all') return;
-    }
-    const realNextIdx = nextIdx >= queue.length ? 0 : nextIdx;
-    const nextSong = queue[realNextIdx];
-    if (!nextSong) return;
+    // Crossfade removed - simple next
 
-    crossfadingRef.current = true;
-    const fromAudio = getActive();
-    const toAudio = getInactive();
-    toAudio.src = songAudioUrl(nextSong);
-    toAudio.volume = 0;
-    const setRate = () => { toAudio.playbackRate = playbackRate; };
-    setRate();
-    toAudio.addEventListener('loadedmetadata', setRate, { once: true });
-    toAudio.addEventListener('playing', setRate, { once: true });
-    toAudio.play().then(setRate).catch(console.error);
-
-    const dur = Math.max(500, crossfadeSeconds * 1000);
-    const steps = 30;
-    const stepTime = dur / steps;
-    let i = 0;
-    const interval = setInterval(() => {
-      i++;
-      const ratio = i / steps;
-      fromAudio.volume = Math.max(0, volume * (1 - ratio));
-      toAudio.volume = Math.min(volume, volume * ratio);
-      if (i >= steps) {
-        clearInterval(interval);
-        fromAudio.pause();
-        fromAudio.currentTime = 0;
-        fromAudio.volume = volume;
-        activeRef.current = activeRef.current === 'A' ? 'B' : 'A';
-        toAudio.playbackRate = playbackRate;
-        setCurrentSong(nextSong);
-        setQueueIndex(realNextIdx);
-        setPlayedSongIds((p) => new Set([...p, nextSong.id]));
-        recordPlay(nextSong);
-        crossfadingRef.current = false;
-      }
-    }, stepTime);
-  }, [queue, queueIndex, repeatMode, isShuffled, crossfadeSeconds, playbackRate, volume, recordPlay]);
 
   // === Broadcast helper (host) ===
   const broadcastSong = useCallback(async (song: Song) => {
@@ -318,6 +467,8 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
       updated_at: new Date().toISOString(),
     }).eq('id', s.id);
   }, [authUser]);
+  useEffect(() => { broadcastSongRef.current = broadcastSong; }, [broadcastSong]);
+
 
   const playSong = useCallback((song: Song) => {
     // Invité : ne peut pas changer
@@ -329,6 +480,7 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
     setQueue([song]);
     setQueueIndex(0);
     setPlayedSongIds(new Set([song.id]));
+    setIsPlayerOpen(true);
     loadAndPlay(song);
 
     // Si host de session → broadcast auto
@@ -368,6 +520,7 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
     setQueueIndex(idx);
     setCurrentSong(song);
     setPlayedSongIds(new Set([song.id]));
+    setIsPlayerOpen(true);
     loadAndPlay(song);
     if (sessionRef.current && authUser && sessionRef.current.host_id === authUser.id) {
       broadcastSong(song);
@@ -463,7 +616,7 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
   }, [queueIndex, playAtIndex]);
 
   useEffect(() => { nextRef.current = next; }, [next]);
-  useEffect(() => { triggerCrossfadeRef.current = triggerCrossfade; }, [triggerCrossfade]);
+
 
   const seek = useCallback((t: number) => {
     const a = getActive(); if (a) a.currentTime = t;
@@ -633,7 +786,7 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
         refreshSession, setActiveSession, stopAudio, refreshSongStats,
         playSong, playSongFromList, togglePlay, next, previous, seek, setVolume,
         toggleShuffle, cycleRepeat, openPlayer, closePlayer, setPlaybackRate,
-        setCrossfadeSeconds, addToQueue, startRadio,
+        setCrossfadeSeconds, addToQueue, startRadio, signalVideoReady,
       }}
     >
       {children}

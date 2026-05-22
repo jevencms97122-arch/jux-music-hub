@@ -53,12 +53,18 @@ export default function ProfileEdit({ onBack }: Props) {
 
   return (
     <div className="min-h-screen px-6 py-6">
-      <button onClick={onBack} className="mb-4 flex items-center gap-2 text-muted-foreground">
+      <button
+        onClick={onBack}
+        className="mb-4 flex items-center gap-2 text-muted-foreground"
+        style={{ animation: 'fadeSlideUp 0.6s cubic-bezier(0.16,1,0.3,1) both' }}
+      >
         <ArrowLeft className="h-5 w-5" /> Retour
       </button>
-      <h1 className="mb-6 text-2xl font-bold">Modifier le profil</h1>
+      <h1 className="mb-6 text-2xl font-bold" style={{ animation: 'fadeSlideUp 0.6s cubic-bezier(0.16,1,0.3,1) both', animationDelay: '0.08s' }}>
+        Modifier le profil
+      </h1>
 
-      <form onSubmit={handleSubmit} className="space-y-4">
+      <form onSubmit={handleSubmit} className="space-y-4" style={{ animation: 'fadeSlideUp 0.6s cubic-bezier(0.16,1,0.3,1) both', animationDelay: '0.16s' }}>
         <div>
           <Label htmlFor="pseudo">Pseudo</Label>
           <Input id="pseudo" value={pseudo} onChange={(e) => setPseudo(e.target.value)} required />

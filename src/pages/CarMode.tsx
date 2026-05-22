@@ -45,26 +45,28 @@ export default function CarMode() {
   return (
     <div className="fixed inset-0 z-[60] flex flex-col bg-background">
       <div className="absolute inset-0 bg-gradient-hero opacity-40" />
-      <div className="relative flex items-center justify-between p-6">
+      <div className="relative flex items-center justify-between p-6" style={{ animation: 'fadeSlideUp 0.6s cubic-bezier(0.16,1,0.3,1) both' }}>
         <span className="text-2xl font-bold uppercase tracking-wider text-foreground">Mode Voiture</span>
         <button
           onClick={() => navigate(-1)}
           aria-label="Quitter le mode voiture"
           className="flex h-16 w-16 items-center justify-center rounded-full bg-secondary hover:bg-secondary/80"
+          style={{ animation: 'fadeSlideUp 0.5s cubic-bezier(0.16,1,0.3,1) both', animationDelay: '0.1s' }}
         >
           <X className="h-8 w-8" />
         </button>
       </div>
 
-      <div className="relative flex flex-1 flex-col items-center justify-center gap-8 px-6">
+      <div className="relative flex flex-1 flex-col items-center justify-center gap-8 px-6" style={{ animation: 'fadeIn 0.6s ease-out both', animationDelay: '0.2s' }}>
         {currentSong ? (
           <>
             <img
               src={songCoverUrl(currentSong)}
               alt={currentSong.title}
               className="h-64 w-64 rounded-3xl object-cover shadow-elegant"
+              style={{ animation: 'scaleIn 0.6s cubic-bezier(0.16,1,0.3,1) both', animationDelay: '0.3s' }}
             />
-            <div className="text-center">
+            <div className="text-center" style={{ animation: 'fadeSlideUp 0.5s cubic-bezier(0.16,1,0.3,1) both', animationDelay: '0.45s' }}>
               <h1 className="text-4xl font-bold text-foreground">{currentSong.title}</h1>
               <p className="mt-2 text-2xl text-muted-foreground">{currentSong.author}</p>
             </div>
@@ -74,7 +76,7 @@ export default function CarMode() {
         )}
       </div>
 
-      <div className="relative grid grid-cols-3 items-center gap-4 p-8">
+      <div className="relative grid grid-cols-3 items-center gap-4 p-8" style={{ animation: 'fadeSlideUp 0.6s cubic-bezier(0.16,1,0.3,1) both', animationDelay: '0.5s' }}>
         <button
           onClick={previous}
           aria-label="Précédent"
@@ -98,7 +100,7 @@ export default function CarMode() {
         </button>
       </div>
 
-      <div className="relative grid grid-cols-2 gap-4 px-8 pb-12">
+      <div className="relative grid grid-cols-2 gap-4 px-8 pb-12" style={{ animation: 'fadeSlideUp 0.6s cubic-bezier(0.16,1,0.3,1) both', animationDelay: '0.6s' }}>
         <button
           onClick={toggleLike}
           disabled={!currentSong}

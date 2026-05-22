@@ -91,55 +91,55 @@ export default function Wrapped() {
 
   return (
     <div className="min-h-screen pb-32">
-      <header className="flex items-center gap-2 p-4">
+      <header className="flex items-center gap-2 p-4" style={{ animation: 'fadeSlideUp 0.6s cubic-bezier(0.16,1,0.3,1) both' }}>
         <Button variant="ghost" size="icon" onClick={() => navigate(-1)}><ArrowLeft className="h-5 w-5" /></Button>
         <h1 className="flex-1 text-xl font-bold capitalize">Wrapped — {monthLabel}</h1>
         <Button variant="ghost" size="icon" onClick={share}><Share2 className="h-5 w-5" /></Button>
       </header>
 
       {loading ? (
-        <p className="px-6 text-sm text-muted-foreground">Chargement...</p>
+        <p className="px-6 text-sm text-muted-foreground" style={{ animation: 'fadeIn 0.5s ease-out both', animationDelay: '0.1s' }}>Chargement...</p>
       ) : !data || data.totalListens === 0 ? (
-        <div className="px-6 py-12 text-center">
+        <div className="px-6 py-12 text-center" style={{ animation: 'fadeSlideUp 0.6s cubic-bezier(0.16,1,0.3,1) both', animationDelay: '0.1s' }}>
           <Sparkles className="mx-auto mb-3 h-12 w-12 text-muted-foreground" />
           <p className="text-sm text-muted-foreground">Aucune écoute ce mois-ci. Lance une musique pour commencer !</p>
         </div>
       ) : (
         <div className="space-y-4 px-4">
-          <div className="rounded-3xl bg-gradient-primary p-6 text-primary-foreground shadow-elegant">
+          <div className="rounded-3xl bg-gradient-primary p-6 text-primary-foreground shadow-elegant" style={{ animation: 'fadeSlideUp 0.6s cubic-bezier(0.16,1,0.3,1) both', animationDelay: '0.1s' }}>
             <Sparkles className="h-8 w-8" />
             <p className="mt-4 text-xs font-semibold uppercase tracking-wider opacity-80">{profile?.pseudo} — {monthLabel}</p>
             <h2 className="mt-1 text-3xl font-black">Ton mois en musique</h2>
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-2 gap-3" style={{ animation: 'fadeIn 0.6s ease-out both', animationDelay: '0.2s' }}>
             <StatCard icon={<Headphones />} value={data.totalListens} label="écoutes" />
             <StatCard icon={<Music />} value={data.uniqueSongs} label="titres uniques" />
           </div>
 
           {data.topArtist && (
-            <div className="rounded-2xl border border-border bg-card p-5">
+            <div className="rounded-2xl border border-border bg-card p-5" style={{ animation: 'fadeSlideUp 0.5s cubic-bezier(0.16,1,0.3,1) both', animationDelay: '0.3s' }}>
               <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Top artiste</p>
               <p className="mt-2 text-2xl font-bold">{data.topArtist}</p>
             </div>
           )}
 
           {data.topGenre && (
-            <div className="rounded-2xl border border-border bg-card p-5">
+            <div className="rounded-2xl border border-border bg-card p-5" style={{ animation: 'fadeSlideUp 0.5s cubic-bezier(0.16,1,0.3,1) both', animationDelay: '0.35s' }}>
               <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Genre préféré</p>
               <p className="mt-2 text-2xl font-bold">{data.topGenre}</p>
             </div>
           )}
 
           {data.topSongs.length > 0 && (
-            <div className="rounded-2xl border border-border bg-card p-5">
+            <div className="rounded-2xl border border-border bg-card p-5" style={{ animation: 'fadeSlideUp 0.5s cubic-bezier(0.16,1,0.3,1) both', animationDelay: '0.4s' }}>
               <div className="mb-3 flex items-center gap-2">
                 <Trophy className="h-5 w-5 text-primary" />
                 <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Top 5 titres</p>
               </div>
               <div className="space-y-2">
                 {data.topSongs.map((t, i) => (
-                  <div key={t.song.id} className="flex items-center gap-3">
+                  <div key={t.song.id} className="flex items-center gap-3" style={{ animation: 'fadeSlideUp 0.4s cubic-bezier(0.16,1,0.3,1) both', animationDelay: `${0.5 + i * 0.05}s` }}>
                     <span className="w-6 text-center text-lg font-bold text-primary">{i + 1}</span>
                     <img src={songCoverUrl(t.song)} alt="" className="h-10 w-10 rounded object-cover" />
                     <div className="min-w-0 flex-1">
@@ -153,7 +153,7 @@ export default function Wrapped() {
             </div>
           )}
 
-          <Button onClick={share} className="w-full">
+          <Button onClick={share} className="w-full" style={{ animation: 'fadeIn 0.6s ease-out both', animationDelay: '0.6s' }}>
             <Share2 className="mr-2 h-4 w-4" /> Partager mon Wrapped
           </Button>
         </div>

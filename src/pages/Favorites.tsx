@@ -28,15 +28,17 @@ export default function Favorites() {
 
   return (
     <div className="min-h-screen px-4 py-6 pb-40">
-      <h1 className="mb-4 text-xl font-bold">Titres likés</h1>
+      <h1 className="mb-4 text-xl font-bold" style={{ animation: 'fadeSlideUp 0.6s cubic-bezier(0.16,1,0.3,1) both' }}>Titres likés</h1>
       {loading ? (
-        <p className="text-sm text-muted-foreground">Chargement...</p>
+        <p className="text-sm text-muted-foreground" style={{ animation: 'fadeIn 0.5s ease-out both', animationDelay: '0.1s' }}>Chargement...</p>
       ) : songs.length === 0 ? (
-        <p className="text-sm text-muted-foreground">Aucun titre liké pour l'instant.</p>
+        <p className="text-sm text-muted-foreground" style={{ animation: 'fadeIn 0.5s ease-out both', animationDelay: '0.1s' }}>Aucun titre liké pour l'instant.</p>
       ) : (
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4">
-          {songs.map((s) => (
-            <SongCard key={s.id} song={s} onPlay={() => playSongFromList(s, songs)} />
+          {songs.map((s, i) => (
+            <div key={s.id} style={{ animation: 'scaleIn 0.5s cubic-bezier(0.16,1,0.3,1) both', animationDelay: `${0.1 + i * 0.04}s` }}>
+              <SongCard song={s} onPlay={() => playSongFromList(s, songs)} />
+            </div>
           ))}
         </div>
       )}

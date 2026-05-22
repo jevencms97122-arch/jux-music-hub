@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/button';
 import { useNavigate } from 'react-router-dom';
 import { Search as SearchIcon, Bell, Heart, Flame, TrendingUp, Sparkles, Car, Play } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
+import TrendingSection from '@/components/TrendingSection';
 import { generateDailyMix } from '@/lib/dailyMix';
 import type { Song } from '@/types/music';
 import juxLogo from '@/assets/jux-logo.png';
@@ -26,7 +27,7 @@ export default function Home() {
     (async () => {
       const [{ data: recent }, { data: top }] = await Promise.all([
         supabase.from('songs').select('*').order('created_at', { ascending: false }).limit(50),
-        supabase.from('songs').select('*').order('play_count', { ascending: false }).limit(10),
+        supabase.from('songs').select('*').order('weekly_play_count', { ascending: false }).limit(10),
       ]);
       setSongs((recent ?? []) as Song[]);
       setTrending((top ?? []) as Song[]);
@@ -53,34 +54,64 @@ export default function Home() {
     <div className="relative min-h-screen pb-40">
       <div className="pointer-events-none absolute inset-x-0 top-0 h-96 bg-gradient-hero" />
 
-      <header className="relative flex items-center justify-between p-4">
+      {/* ── Header & logo ── */}
+      <header
+        className="relative flex items-center justify-between p-4"
+        style={{ animation: 'fadeSlideUp 0.6s cubic-bezier(0.16,1,0.3,1) both' }}
+      >
         <img src={juxLogo} alt="Jux" className="h-8" />
         <div className="flex items-center gap-1">
-          <Button variant="ghost" size="icon" onClick={() => navigate('/car')} aria-label="Mode voiture">
+          <Button
+            variant="ghost" size="icon" onClick={() => navigate('/car')}
+            aria-label="Mode voiture"
+            style={{ animation: 'fadeSlideUp 0.5s cubic-bezier(0.16,1,0.3,1) both', animationDelay: '0.08s' }}
+          >
             <Car className="h-5 w-5" />
           </Button>
-          <Button variant="ghost" size="icon" onClick={() => navigate('/search')}>
+          <Button
+            variant="ghost" size="icon" onClick={() => navigate('/search')}
+            style={{ animation: 'fadeSlideUp 0.5s cubic-bezier(0.16,1,0.3,1) both', animationDelay: '0.14s' }}
+          >
             <SearchIcon className="h-5 w-5" />
           </Button>
-          <Button variant="ghost" size="icon" onClick={() => navigate('/favorites')}>
+          <Button
+            variant="ghost" size="icon" onClick={() => navigate('/favorites')}
+            style={{ animation: 'fadeSlideUp 0.5s cubic-bezier(0.16,1,0.3,1) both', animationDelay: '0.20s' }}
+          >
             <Heart className="h-5 w-5" />
           </Button>
-          <Button variant="ghost" size="icon" className="relative" onClick={() => navigate('/notifications')}>
+          <Button
+            variant="ghost" size="icon"
+            className="relative"
+            onClick={() => navigate('/notifications')}
+            style={{ animation: 'fadeSlideUp 0.5s cubic-bezier(0.16,1,0.3,1) both', animationDelay: '0.26s' }}
+          >
             <Bell className="h-5 w-5" />
             {unread > 0 && <span className="absolute right-1.5 top-1.5 h-2 w-2 rounded-full bg-primary shadow-elegant" />}
           </Button>
         </div>
       </header>
 
-      <div className="relative px-4 pb-6">
+      {/* ── Greeting ── */}
+      <div
+        className="relative px-4 pb-6"
+        style={{ animation: 'fadeSlideUp 0.6s cubic-bezier(0.16,1,0.3,1) both', animationDelay: '0.15s' }}
+      >
         <h1 className="text-3xl font-bold text-foreground">Bonjour !</h1>
         <p className="text-muted-foreground">Découvrez de nouvelles musiques</p>
       </div>
 
-      <StoryCircles />
+      {/* ── Story circles ── */}
+      <div style={{ animation: 'fadeIn 0.5s ease-out both', animationDelay: '0.30s' }}>
+        <StoryCircles />
+      </div>
 
+      {/* ── Daily Mix ── */}
       {dailyMix.length > 0 && (
-        <section className="relative mb-8 px-4">
+        <section
+          className="relative mb-8 px-4"
+          style={{ animation: 'fadeSlideUp 0.6s cubic-bezier(0.16,1,0.3,1) both', animationDelay: '0.45s' }}
+        >
           <div className="mb-4 flex items-center gap-2">
             <Sparkles className="h-6 w-6 text-primary" />
             <h2 className="text-xl font-bold text-foreground">Daily Mix</h2>
@@ -106,40 +137,16 @@ export default function Home() {
         </section>
       )}
 
+      {/* ── Trending ── */}
       {trending.length > 0 && (
-        <section className="relative mb-8 px-4">
-          <div className="mb-4 flex items-center gap-2">
-            <Flame className="h-6 w-6 text-primary" />
-            <h2 className="text-xl font-bold text-foreground">Tendances</h2>
-          </div>
-          <div className="-mx-4 flex gap-4 overflow-x-auto scrollbar-hide px-4 pb-2">
-            {trending.slice(0, 5).map((s, i) => (
-              <button
-                key={s.id}
-                onClick={() => playSongFromList(s, trending)}
-                className="group relative flex w-48 flex-shrink-0 flex-col gap-3 text-left"
-              >
-                <div className="relative aspect-square w-full overflow-hidden rounded-xl shadow-card transition-transform group-hover:scale-105">
-                  <img src={songCoverUrl(s)} alt={s.title} loading="lazy"
-                    className="h-full w-full object-cover" />
-                  <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent" />
-                  <div className="absolute bottom-3 left-3 right-3">
-                    <div className="flex h-8 w-8 items-center justify-center rounded-full bg-primary text-sm font-bold text-primary-foreground shadow-elegant">
-                      {i + 1}
-                    </div>
-                  </div>
-                </div>
-                <div>
-                  <p className="truncate text-sm font-semibold text-foreground">{s.title}</p>
-                  <p className="truncate text-xs text-muted-foreground">{s.author}</p>
-                </div>
-              </button>
-            ))}
-          </div>
-        </section>
+        <TrendingSection trending={trending} />
       )}
 
-      <section className="relative px-4">
+      {/* ── Discover ── */}
+      <section
+        className="relative px-4"
+        style={{ animation: 'fadeSlideUp 0.6s cubic-bezier(0.16,1,0.3,1) both', animationDelay: '0.75s' }}
+      >
         <div className="mb-3 flex items-center gap-2">
           <TrendingUp className="h-5 w-5 text-primary" />
           <h2 className="text-lg font-bold text-foreground">Découvre</h2>
@@ -147,19 +154,31 @@ export default function Home() {
         {loading ? (
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4">
             {Array.from({ length: 8 }).map((_, i) => (
-              <div key={i} className="aspect-square animate-pulse rounded-xl bg-secondary" />
+              <div
+                key={i}
+                className="aspect-square animate-pulse rounded-xl bg-secondary"
+                style={{ animation: 'fadeIn 0.4s ease-out both', animationDelay: `${0.80 + i * 0.05}s` }}
+              />
             ))}
           </div>
         ) : songs.length === 0 ? (
-          <div className="rounded-xl border border-border bg-card p-8 text-center">
+          <div
+            className="rounded-xl border border-border bg-card p-8 text-center"
+            style={{ animation: 'scaleIn 0.5s cubic-bezier(0.16,1,0.3,1) both', animationDelay: '0.80s' }}
+          >
             <p className="text-sm text-muted-foreground">
               Aucune musique pour l'instant. Sois le premier à uploader !
             </p>
           </div>
         ) : (
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4">
-            {songs.map((s) => (
-              <SongCard key={s.id} song={s} onPlay={() => playSongFromList(s, songs)} />
+            {songs.map((s, i) => (
+              <div
+                key={s.id}
+                style={{ animation: 'scaleIn 0.5s cubic-bezier(0.16,1,0.3,1) both', animationDelay: `${0.80 + i * 0.04}s` }}
+              >
+                <SongCard song={s} onPlay={() => playSongFromList(s, songs)} />
+              </div>
             ))}
           </div>
         )}

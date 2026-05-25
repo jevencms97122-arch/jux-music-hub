@@ -170,6 +170,26 @@ export interface AppNotification {
   created_at: string;
 }
 
+export interface Collaboration {
+  id: string;
+  pseudo: string;
+  display_name: string | null;
+  avatar_url: string | null;
+  banner_url: string | null;
+  bio: string | null;
+  twitch_url: string | null;
+  youtube_url: string | null;
+  discord_url: string | null;
+  instagram_url: string | null;
+  twitter_url: string | null;
+  tiktok_url: string | null;
+  user_id: string | null;
+  active: boolean;
+  sort_order: number;
+  created_at: string;
+  updated_at: string;
+}
+
 export const MUSIC_GENRES = [
   "Afrobeat", "Alternative", "Ambient", "Blues", "Bossa Nova",
   "Classique", "Country", "Dance", "Disco", "Drill",

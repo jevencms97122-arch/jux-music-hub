@@ -11,6 +11,8 @@ import { useAuth } from '@/contexts/AuthContext';
 import TrendingSection from '@/components/TrendingSection';
 import { generateDailyMix } from '@/lib/dailyMix';
 import type { Song } from '@/types/music';
+import CollabCard from '@/components/CollabCard';
+import { collaborations } from '@/data/collaborations';
 import juxLogo from '@/assets/jux-logo.png';
 
 export default function Home() {
@@ -134,6 +136,30 @@ export default function Home() {
               <Play className="h-5 w-5 fill-current" />
             </div>
           </button>
+        </section>
+      )}
+
+      {/* ── Collaborations ── */}
+      {collaborations.length > 0 && (
+        <section
+          className="relative mb-8 px-4"
+          style={{ animation: 'fadeSlideUp 0.6s cubic-bezier(0.16,1,0.3,1) both', animationDelay: '0.55s' }}
+        >
+          <div className="mb-3 flex items-center gap-2">
+            <Flame className="h-5 w-5 text-primary" />
+            <h2 className="text-lg font-bold text-foreground">Collabs</h2>
+          </div>
+          <div className="flex gap-3 overflow-x-auto pb-2 scrollbar-hide">
+            {collaborations.map((collab, i) => (
+              <div
+                key={collab.id}
+                className="flex-shrink-0"
+                style={{ animation: 'scaleIn 0.4s cubic-bezier(0.16,1,0.3,1) both', animationDelay: `${0.6 + i * 0.08}s` }}
+              >
+                <CollabCard collab={collab} />
+              </div>
+            ))}
+          </div>
         </section>
       )}
 

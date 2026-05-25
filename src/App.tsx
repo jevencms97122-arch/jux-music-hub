@@ -21,6 +21,7 @@ import Notifications from '@/pages/Notifications';
 import CarMode from '@/pages/CarMode';
 import ListenTogether from '@/pages/ListenTogether';
 import Wrapped from '@/pages/Wrapped';
+import CollabDetail from '@/pages/CollabDetail';
 import MiniPlayer from '@/components/MiniPlayer';
 import PlayerPage from '@/components/PlayerPage';
 import BottomNav from '@/components/BottomNav';
@@ -131,6 +132,7 @@ function AppContent() {
             <Route path="/favorites" element={guard(<Favorites />)} />
             <Route path="/notifications" element={guard(<Notifications />)} />
             <Route path="/car" element={guard(<CarMode />)} />
+            <Route path="/collab/:username" element={guard(<CollabDetail />)} />
             <Route path="/wrapped" element={guard(<Wrapped />)} />
             <Route path="/profile" element={guard(<ProfilePage />)} />
             <Route path="/profile-edit" element={guard(<ProfileEdit onBack={() => navigate('/profile')} />)} />

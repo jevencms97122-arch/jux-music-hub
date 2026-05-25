@@ -2,9 +2,10 @@ import { usePlayer } from '@/contexts/PlayerContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
 import { songCoverUrl, avatarUrl } from '@/lib/storage';
-import { ChevronDown, Play, Pause, SkipBack, SkipForward, Shuffle, Repeat, Repeat1, MoreHorizontal, Heart, ListPlus, Sparkles, Headphones, Radio, MessageCircle, Download, Trash2, Loader2, AlertCircle } from 'lucide-react';
+import { ChevronDown, Play, Pause, SkipBack, SkipForward, Shuffle, Repeat, Repeat1, MoreHorizontal, Heart, ListPlus, Sparkles, Headphones, Radio, MessageCircle, Download, Trash2, Loader2, AlertCircle, Volume2 } from 'lucide-react';
 import CommentsModal from './CommentsModal';
 import DownloadAppModal from './DownloadAppModal';
+import VolumeControl from '@/components/VolumeControl';
 import SynchronizedVideoPlayer from './SynchronizedVideoPlayer';
 import { detectPlatform, requestNativeDownload, isSongDownloaded, deleteDownloadedSong, onDownloadProgress, type DownloadStatus } from '@/lib/platform';
 import { songAudioUrl } from '@/lib/storage';
@@ -44,6 +45,7 @@ export default function PlayerPage() {
   const [showComments, setShowComments] = useState(false);
   const [showDownloadApp, setShowDownloadApp] = useState(false);
   const [commentsCount, setCommentsCount] = useState(0);
+  const [volumeOpen, setVolumeOpen] = useState(false);
 
   const [downloadStatus, setDownloadStatus] = useState<DownloadStatus>('idle');
   const [downloadProgress, setDownloadProgress] = useState(0);
@@ -191,6 +193,10 @@ export default function PlayerPage() {
                 <MoreHorizontal className="h-4 w-4" /> Options
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end" className="w-64">
+                <DropdownMenuItem onClick={() => setVolumeOpen(true)}>
+                  <Volume2 className="mr-2 h-4 w-4" /> Volume
+                </DropdownMenuItem>
+                <div className="my-1 border-t border-border" />
                 <DropdownMenuItem onClick={() => setShowPlaylist(true)}>Ajouter à la playlist</DropdownMenuItem>
                 <DropdownMenuItem onClick={() => setShowStory(true)}>Ajouter à la story</DropdownMenuItem>
                 {isDownloaded ? (
@@ -390,6 +396,7 @@ export default function PlayerPage() {
       <CreateStoryModal open={showStory} onOpenChange={setShowStory} />
       <CommentsModal open={showComments} onOpenChange={setShowComments} songId={currentSong.id} onCountChange={setCommentsCount} />
       <DownloadAppModal open={showDownloadApp} onOpenChange={setShowDownloadApp} />
+      <VolumeControl open={volumeOpen} onClose={() => setVolumeOpen(false)} />
     </>
   );
 }

@@ -6,13 +6,14 @@ import SongCard from '@/components/SongCard';
 import StoryCircles from '@/components/StoryCircles';
 import { Button } from '@/components/ui/button';
 import { useNavigate } from 'react-router-dom';
-import { Search as SearchIcon, Bell, Heart, Flame, TrendingUp, Sparkles, Car, Play } from 'lucide-react';
+import { Search as SearchIcon, Bell, Heart, Flame, TrendingUp, Sparkles, Car, Play, HelpCircle, ListMusic, Globe, ArrowRight, Music2 } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import TrendingSection from '@/components/TrendingSection';
 import { generateDailyMix } from '@/lib/dailyMix';
-import type { Song } from '@/types/music';
+import type { Song, Playlist } from '@/types/music';
 import CollabCard from '@/components/CollabCard';
 import { collaborations } from '@/data/collaborations';
+import TutorialModal from '@/components/TutorialModal';
 import juxLogo from '@/assets/jux-logo.png';
 
 export default function Home() {
@@ -24,6 +25,9 @@ export default function Home() {
   const [dailyMix, setDailyMix] = useState<Song[]>([]);
   const [loading, setLoading] = useState(true);
   const [unread, setUnread] = useState(0);
+  const [tutorialOpen, setTutorialOpen] = useState(false);
+  const [publicPlaylists, setPublicPlaylists] = useState<Playlist[]>([]);
+  const [playlistsLoading, setPlaylistsLoading] = useState(true);
 
   useEffect(() => {
     (async () => {
@@ -36,6 +40,20 @@ export default function Home() {
       setLoading(false);
     })();
   }, []);
+
+  useEffect(() => {
+    (async () => {
+      const { data } = await supabase
+        .from('playlists').select('*')
+        .eq('is_public', true)
+        .order('likes_count', { ascending: false }).limit(30);
+      const all = (data ?? []) as Playlist[];
+      // pick 10 random
+      const shuffled = [...all].sort(() => Math.random() - 0.5);
+      setPublicPlaylists(shuffled.slice(0, 10));
+      setPlaylistsLoading(false);
+    })();
+  }, [authUser]);
 
   useEffect(() => {
     if (!authUser) return;
@@ -63,6 +81,13 @@ export default function Home() {
       >
         <img src={juxLogo} alt="Jux" className="h-8" />
         <div className="flex items-center gap-1">
+          <Button
+            variant="ghost" size="icon" onClick={() => setTutorialOpen(true)}
+            aria-label="Tutoriel"
+            style={{ animation: 'fadeSlideUp 0.5s cubic-bezier(0.16,1,0.3,1) both', animationDelay: '0.04s' }}
+          >
+            <HelpCircle className="h-5 w-5" />
+          </Button>
           <Button
             variant="ghost" size="icon" onClick={() => navigate('/car')}
             aria-label="Mode voiture"
@@ -145,11 +170,16 @@ export default function Home() {
           className="relative mb-8 px-4"
           style={{ animation: 'fadeSlideUp 0.6s cubic-bezier(0.16,1,0.3,1) both', animationDelay: '0.55s' }}
         >
-          <div className="mb-3 flex items-center gap-2">
-            <Flame className="h-5 w-5 text-primary" />
-            <h2 className="text-lg font-bold text-foreground">Collabs</h2>
+          <div className="mb-4 flex items-center gap-2">
+            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-primary shadow-elegant-sm">
+              <Music2 className="h-4 w-4 text-primary-foreground" />
+            </div>
+            <div>
+              <h2 className="text-lg font-bold text-foreground">Collaborations</h2>
+              <p className="text-xs text-muted-foreground">Créateurs & artistes</p>
+            </div>
           </div>
-          <div className="flex gap-3 overflow-x-auto pb-2 scrollbar-hide">
+          <div className="flex gap-4 overflow-x-auto pb-2 scrollbar-hide">
             {collaborations.map((collab, i) => (
               <div
                 key={collab.id}
@@ -168,10 +198,69 @@ export default function Home() {
         <TrendingSection trending={trending} />
       )}
 
+      {/* ── Playlists Publiques ── */}
+      <section
+        className="relative mb-8 px-4"
+        style={{ animation: 'fadeSlideUp 0.6s cubic-bezier(0.16,1,0.3,1) both', animationDelay: '0.65s' }}
+      >
+        <div className="mb-3 flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <Globe className="h-5 w-5 text-primary" />
+            <h2 className="text-lg font-bold text-foreground">Playlists Publiques</h2>
+          </div>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="gap-1 text-xs text-muted-foreground"
+            onClick={() => navigate('/playlists')}
+          >
+            Voir tout <ArrowRight className="h-3.5 w-3.5" />
+          </Button>
+        </div>
+        {playlistsLoading ? (
+          <div className="flex gap-3 overflow-x-auto pb-2 scrollbar-hide">
+            {Array.from({ length: 5 }).map((_, i) => (
+              <div
+                key={i}
+                className="h-[72px] w-48 flex-shrink-0 animate-pulse rounded-xl bg-secondary"
+              />
+            ))}
+          </div>
+        ) : publicPlaylists.length === 0 ? (
+          <div className="rounded-xl border border-border bg-card p-6 text-center">
+            <p className="text-sm text-muted-foreground">
+              Pas encore de playlists publiques.
+            </p>
+          </div>
+        ) : (
+          <div className="flex gap-3 overflow-x-auto pb-2 scrollbar-hide">
+            {publicPlaylists.map((p, i) => (
+              <button
+                key={p.id}
+                onClick={() => navigate(`/playlist/${p.id}`)}
+                className="group flex w-48 flex-shrink-0 items-center gap-3 rounded-xl border border-transparent bg-card/50 p-2.5 text-left transition-all hover:border-border hover:bg-card hover:shadow-card"
+                style={{ animation: 'scaleIn 0.4s cubic-bezier(0.16,1,0.3,1) both', animationDelay: `${0.7 + i * 0.04}s` }}
+              >
+                <div className="flex h-14 w-14 flex-shrink-0 items-center justify-center rounded-lg bg-gradient-primary shadow-card">
+                  <ListMusic className="h-6 w-6 text-primary-foreground" />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-sm font-semibold text-foreground">{p.title}</p>
+                  <p className="flex items-center gap-1 text-xs text-muted-foreground">
+                    <Heart className="h-3 w-3" />
+                    {p.likes_count}
+                  </p>
+                </div>
+              </button>
+            ))}
+          </div>
+        )}
+      </section>
+
       {/* ── Discover ── */}
       <section
         className="relative px-4"
-        style={{ animation: 'fadeSlideUp 0.6s cubic-bezier(0.16,1,0.3,1) both', animationDelay: '0.75s' }}
+        style={{ animation: 'fadeSlideUp 0.6s cubic-bezier(0.16,1,0.3,1) both', animationDelay: '0.85s' }}
       >
         <div className="mb-3 flex items-center gap-2">
           <TrendingUp className="h-5 w-5 text-primary" />
@@ -209,6 +298,8 @@ export default function Home() {
           </div>
         )}
       </section>
+      {/* ── Tutoriel Modal ── */}
+      <TutorialModal open={tutorialOpen} onClose={() => setTutorialOpen(false)} />
     </div>
   );
 }

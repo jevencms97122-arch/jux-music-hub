@@ -181,8 +181,19 @@ export default function PlayerPage() {
   return (
     <>
       <div className="fixed inset-0 z-50 flex flex-col overflow-hidden bg-background animate-in slide-in-from-bottom">
-        <div className="pointer-events-none absolute inset-0 bg-gradient-hero" />
-        <div className="relative flex flex-1 flex-col p-6">
+        {/* ── Video background fullscreen ── */}
+        {currentSong.video_url ? (
+          <SynchronizedVideoPlayer
+            song={currentSong}
+            isPlaying={isPlaying}
+            currentTime={currentTime}
+            onReady={signalVideoReady}
+            asBackground
+          />
+        ) : (
+          <div className="pointer-events-none absolute inset-0 bg-gradient-hero" />
+        )}
+        <div className="relative z-20 flex flex-1 flex-col p-6">
           <div className="flex items-center justify-between">
             <button onClick={closePlayer} aria-label="Fermer" className="rounded-full p-2 hover:bg-secondary">
               <ChevronDown className="h-6 w-6" />
@@ -257,12 +268,35 @@ export default function PlayerPage() {
           <div className="flex min-h-0 flex-1 items-center justify-center py-4 sm:py-8">
             <div className="relative flex w-full items-center justify-center px-4 sm:max-w-sm">
               {currentSong.video_url ? (
-                <SynchronizedVideoPlayer
-                  song={currentSong}
-                  isPlaying={isPlaying}
-                  currentTime={currentTime}
-                  onReady={signalVideoReady}
-                />
+                <div className="relative w-full overflow-hidden rounded-2xl shadow-elegant" style={{ aspectRatio: '1 / 1' }}>
+                  <img
+                    src={songCoverUrl(currentSong)}
+                    alt={currentSong.title}
+                    className="h-full w-full rounded-2xl object-cover shadow-elegant"
+                    onDoubleClick={async () => {
+                      const isNowLiked = await toggleLike();
+                      if (isNowLiked) {
+                        setShowLikeAnim(true);
+                        setTimeout(() => setShowLikeAnim(false), 800);
+                      }
+                    }}
+                    onTouchStart={() => {
+                      const now = Date.now();
+                      if (now - lastTap.current < 300) {
+                        toggleLike().then((isNowLiked) => {
+                          if (isNowLiked) {
+                            setShowLikeAnim(true);
+                            setTimeout(() => setShowLikeAnim(false), 800);
+                          }
+                        });
+                        lastTap.current = 0;
+                      } else lastTap.current = now;
+                    }}
+                  />
+                  <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
+                    <Heart className={`h-24 w-24 transition-all duration-300 ${showLikeAnim ? 'scale-100 opacity-100 text-primary' : 'scale-0 opacity-0 text-white'}`} />
+                  </div>
+                </div>
               ) : (
                 <>
                   <img

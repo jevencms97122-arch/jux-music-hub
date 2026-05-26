@@ -7,6 +7,8 @@ interface SynchronizedVideoPlayerProps {
   isPlaying: boolean;
   currentTime: number;
   onReady?: () => void;
+  /** If true, renders as a full-background video behind content */
+  asBackground?: boolean;
 }
 
 const TIMEOUT_MS = 4000; // 4 secondes max pour charger la vidéo
@@ -16,6 +18,7 @@ export default function SynchronizedVideoPlayer({
   isPlaying,
   currentTime,
   onReady,
+  asBackground = false,
 }: SynchronizedVideoPlayerProps) {
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const videoUrl = song.video_url || null;
@@ -75,20 +78,67 @@ export default function SynchronizedVideoPlayer({
     }
   }, [isPlaying, youtubeId, timedOut]);
 
-  if (!youtubeId) return null;
+  if (!youtubeId) {
+    // Fallback cover si background mode
+    if (asBackground) {
+      return (
+        <div className="absolute inset-0">
+          <img
+            src={songCoverUrl(song)}
+            alt=""
+            className="h-full w-full object-cover"
+          />
+          <div className="absolute inset-0 bg-black/70" />
+        </div>
+      );
+    }
+    return null;
+  }
 
   // Si timeout : afficher la cover à la place
   if (timedOut) {
-    return (
+    const fallback = (
       <img
         src={songCoverUrl(song)}
         alt={song.title}
         className="max-h-[calc(100dvh-480px)] w-full rounded-2xl object-contain shadow-elegant sm:aspect-square sm:object-cover"
       />
     );
+    if (asBackground) {
+      return (
+        <div className="absolute inset-0">
+          <img
+            src={songCoverUrl(song)}
+            alt=""
+            className="h-full w-full object-cover"
+          />
+          <div className="absolute inset-0 bg-black/70" />
+        </div>
+      );
+    }
+    return fallback;
   }
 
   const embedUrl = `https://www.youtube.com/embed/${youtubeId}?enablejsapi=1&autoplay=0&controls=0&modestbranding=1&rel=0&showinfo=0&iv_load_policy=3&mute=1&playsinline=1&disablekb=1&fs=0&cc_load_policy=0`;
+
+  // Background mode: fullscreen cover video with dark overlay
+  if (asBackground) {
+    return (
+      <div className="absolute inset-0 overflow-hidden">
+        <iframe
+          ref={iframeRef}
+          src={embedUrl}
+          title="YouTube video player"
+          className="absolute left-1/2 top-1/2 min-h-[130%] min-w-[130%] -translate-x-1/2 -translate-y-1/2 scale-[1.3]"
+          onLoad={handleLoad}
+          allow="autoplay; encrypted-media; gyroscope; picture-in-picture"
+          referrerPolicy="strict-origin-when-cross-origin"
+          style={{ pointerEvents: 'none', opacity: 0.35 }}
+        />
+        <div className="absolute inset-0 bg-black/70" />
+      </div>
+    );
+  }
 
   return (
     <div className="relative w-full overflow-hidden rounded-2xl shadow-elegant" style={{ aspectRatio: '16 / 9' }}>

@@ -101,7 +101,7 @@ function AppContent() {
 
   const profileCompleted = profile?.profile_completed ?? false;
 
-  const pathToActive: Record<string, 'home' | 'social' | 'playlists' | 'profile'> = {
+  const pathToActive: Record<string, 'home' | 'social' | 'playlists' | 'profile' | 'collabs'> = {
     '/jux': 'home',
     '/social': 'social',
     '/playlists': 'playlists',
@@ -109,6 +109,7 @@ function AppContent() {
     '/profile-edit': 'profile',
     '/upload': 'profile',
     '/wrapped': 'profile',
+    '/collab': 'collabs',
   };
   const active = pathToActive[location.pathname] || 'home';
 
@@ -144,7 +145,13 @@ function AppContent() {
         {profileCompleted && (
           <BottomNav
             active={active}
-            onNavigate={(page) => navigate(page === 'home' ? '/jux' : `/${page}`)}
+            onNavigate={(page) => {
+              if (page === 'home' || page === 'collabs') {
+                navigate('/jux');
+              } else {
+                navigate(`/${page}`);
+              }
+            }}
           />
         )}
         <Toaster />

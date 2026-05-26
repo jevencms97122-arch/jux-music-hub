@@ -52,6 +52,15 @@ export default function PlayerPage() {
   const [downloadError, setDownloadError] = useState<string | null>(null);
   const [isDownloaded, setIsDownloaded] = useState(false);
 
+  // Détection mobile
+  const [isMobile, setIsMobile] = useState(window.innerWidth < 640);
+
+  useEffect(() => {
+    const onResize = () => setIsMobile(window.innerWidth < 640);
+    window.addEventListener('resize', onResize);
+    return () => window.removeEventListener('resize', onResize);
+  }, []);
+
   // Vérifie si le morceau est déjà téléchargé hors connexion
   useEffect(() => {
     if (!currentSong) { setIsDownloaded(false); setDownloadStatus('idle'); setDownloadProgress(0); return; }
@@ -114,9 +123,23 @@ export default function PlayerPage() {
       toast.error('Impossible de supprimer ce titre');
     }
   };
+  const [uploaderProfile, setUploaderProfile] = useState<{ pseudo: string | null; avatar_url: string | null } | null>(null);
   const [showLikeAnim, setShowLikeAnim] = useState(false);
   const [friendLikers, setFriendLikers] = useState<Array<{ user_id: string; pseudo: string | null; avatar_url: string | null }>>([]);
   const lastTap = useRef<number>(0);
+
+  // Récupère le profil de l'uploader de la musique
+  useEffect(() => {
+    if (!currentSong) { setUploaderProfile(null); return; }
+    (async () => {
+      const { data } = await supabase
+        .from('profiles')
+        .select('pseudo, avatar_url')
+        .eq('user_id', currentSong.uploaded_by)
+        .maybeSingle();
+      setUploaderProfile(data as { pseudo: string | null; avatar_url: string | null } | null);
+    })();
+  }, [currentSong]);
 
   useEffect(() => {
     if (!currentSong) { setCommentsCount(0); return; }
@@ -193,15 +216,18 @@ export default function PlayerPage() {
         ) : (
           <div className="pointer-events-none absolute inset-0 bg-gradient-hero" />
         )}
-        <div className="relative z-20 flex flex-1 flex-col p-6">
-          <div className="flex items-center justify-between">
-            <button onClick={closePlayer} aria-label="Fermer" className="rounded-full p-2 hover:bg-secondary">
-              <ChevronDown className="h-6 w-6" />
+
+        {/* ── Mobile layout ── */}
+        <div className={`relative z-20 flex flex-1 flex-col ${isMobile ? 'px-2 py-1.5 pb-0.5' : 'p-6 pb-2'} overflow-y-auto`}>
+          {/* Header */}
+          <div className={`flex items-center justify-between ${isMobile ? 'mb-0.5' : ''}`}>
+            <button onClick={closePlayer} aria-label="Fermer" className="rounded-full p-1 hover:bg-secondary">
+              <ChevronDown className={isMobile ? 'h-4 w-4' : 'h-6 w-6'} />
             </button>
-            <span className="text-xs font-medium uppercase tracking-wider text-muted-foreground">En cours</span>
+            <span className={`font-medium uppercase tracking-wider text-muted-foreground ${isMobile ? 'text-[9px]' : 'text-xs'}`}>En cours</span>
             <DropdownMenu>
-              <DropdownMenuTrigger className="flex items-center gap-1 rounded-full bg-secondary/60 px-3 py-1.5 text-xs font-medium backdrop-blur hover:bg-secondary">
-                <MoreHorizontal className="h-4 w-4" /> Options
+              <DropdownMenuTrigger className="flex items-center gap-1 rounded-full bg-secondary/60 px-2 py-1 text-[10px] font-medium backdrop-blur hover:bg-secondary">
+                <MoreHorizontal className="h-3.5 w-3.5" /> Options
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end" className="w-64">
                 <DropdownMenuItem onClick={() => setVolumeOpen(true)}>
@@ -265,8 +291,9 @@ export default function PlayerPage() {
             </DropdownMenu>
           </div>
 
-          <div className="flex min-h-0 flex-1 items-center justify-center py-4 sm:py-8">
-            <div className="relative flex w-full items-center justify-center px-4 sm:max-w-sm">
+          {/* Cover image - compact on mobile */}
+          <div className={`flex items-center justify-center ${isMobile ? 'flex-[0.5] py-0.5' : 'flex-1 py-4 sm:py-8'}`}>
+            <div className={`relative flex w-full items-center justify-center ${isMobile ? 'px-0' : 'px-4 sm:max-w-sm'}`}>
               {currentSong.video_url ? (
                 <div className="relative w-full overflow-hidden rounded-2xl shadow-elegant" style={{ aspectRatio: '1 / 1' }}>
                   <img
@@ -302,7 +329,8 @@ export default function PlayerPage() {
                   <img
                     src={songCoverUrl(currentSong)}
                     alt={currentSong.title}
-                    className="max-h-[calc(100dvh-480px)] w-full rounded-2xl object-contain shadow-elegant sm:aspect-square sm:object-cover"
+                    className="w-full rounded-2xl object-contain shadow-elegant sm:aspect-square sm:object-cover"
+                    style={isMobile ? { maxHeight: '25vh' } : {}}
                     onDoubleClick={async () => {
                       const isNowLiked = await toggleLike();
                       if (isNowLiked) {
@@ -331,42 +359,52 @@ export default function PlayerPage() {
             </div>
           </div>
 
-          <div className="mb-3 flex items-center justify-between gap-3">
-            <div className="min-w-0 flex-1">
-              <h2 className="truncate text-2xl font-bold text-foreground">{currentSong.title}</h2>
-              <p className="truncate text-sm text-muted-foreground">{currentSong.author}</p>
-              <div className="mt-1 flex items-center gap-3 text-xs text-muted-foreground">
-                <span className="flex items-center gap-1"><Headphones className="h-3 w-3" /> {(currentSong.play_count ?? 0).toLocaleString()}</span>
-                <button
-                  onClick={toggleLike}
-                  className={`flex items-center gap-1 rounded-full px-2 py-0.5 transition-colors hover:bg-secondary ${liked ? 'text-red-500 hover:text-red-500' : ''}`}
-                  aria-label={liked ? 'Retirer le like' : 'Ajouter un like'}
-                >
-                  <Heart className={`h-3 w-3 ${liked ? 'fill-current' : ''}`} /> {(currentSong.likes_count ?? 0).toLocaleString()}
-                </button>
-                <button
-                  onClick={() => setShowComments(true)}
-                  className="flex items-center gap-1 rounded-full px-2 py-0.5 transition-colors hover:bg-secondary hover:text-foreground"
-                  aria-label="Commentaires"
-                >
-                  <MessageCircle className="h-3 w-3" /> {commentsCount.toLocaleString()}
-                </button>
-              </div>
+          {/* Song info + stats */}
+          <div className={isMobile ? 'mb-0.5' : 'mb-3'}>
+            <h2 className={`truncate font-bold text-foreground ${isMobile ? 'text-sm leading-tight' : 'text-2xl'}`}>{currentSong.title}</h2>
+            <p className={`truncate text-muted-foreground ${isMobile ? 'text-[11px]' : 'text-sm'}`}>{currentSong.author}</p>
+            <div className={`flex flex-wrap items-center gap-1 text-muted-foreground ${isMobile ? 'mt-0.5' : 'mt-1'}`}>
+              <span className={`flex items-center gap-1 ${isMobile ? 'text-[9px]' : 'text-xs'}`}>
+                <Headphones className={`${isMobile ? 'h-2 w-2' : 'h-3 w-3'}`} /> {(currentSong.play_count ?? 0).toLocaleString()}
+              </span>
+              <button
+                onClick={toggleLike}
+                className={`flex items-center gap-1 rounded-full px-1.5 py-0.5 transition-colors hover:bg-secondary ${liked ? 'text-red-500 hover:text-red-500' : ''} ${isMobile ? 'text-[9px]' : 'text-xs'}`}
+                aria-label={liked ? 'Retirer le like' : 'Ajouter un like'}
+              >
+                <Heart className={`${isMobile ? 'h-2 w-2' : 'h-3 w-3'} ${liked ? 'fill-current' : ''}`} /> {(currentSong.likes_count ?? 0).toLocaleString()}
+              </button>
+              <button
+                onClick={() => setShowComments(true)}
+                className={`flex items-center gap-1 rounded-full px-1.5 py-0.5 transition-colors hover:bg-secondary hover:text-foreground ${isMobile ? 'text-[9px]' : 'text-xs'}`}
+                aria-label="Commentaires"
+              >
+                <MessageCircle className={`${isMobile ? 'h-2 w-2' : 'h-3 w-3'}`} /> {commentsCount.toLocaleString()}
+              </button>
+              {uploaderProfile && (
+                <div className={`flex items-center gap-1 rounded-full px-1.5 py-0.5 ${isMobile ? 'text-[9px]' : 'text-xs'}`}>
+                  <Avatar className={`border border-background ${isMobile ? 'h-3.5 w-3.5' : 'h-5 w-5'}`}>
+                    <AvatarImage src={avatarUrl({ avatar_url: uploaderProfile.avatar_url })} />
+                    <AvatarFallback className="text-[6px]">{(uploaderProfile.pseudo ?? '?').slice(0, 2).toUpperCase()}</AvatarFallback>
+                  </Avatar>
+                  <span className="truncate text-muted-foreground">{uploaderProfile.pseudo ?? 'Anonyme'}</span>
+                </div>
+              )}
             </div>
           </div>
 
-
+          {/* Friend likers */}
           {friendLikers.length > 0 && (
-            <div className="mb-2 flex items-center gap-2 rounded-full bg-secondary/40 px-3 py-1.5 backdrop-blur">
-              <div className="flex -space-x-2">
+            <div className={`flex items-center gap-2 rounded-full bg-secondary/40 px-2 py-1 backdrop-blur ${isMobile ? 'mb-0.5' : 'mb-2'}`}>
+              <div className="flex -space-x-1.5">
                 {friendLikers.slice(0, 3).map((f) => (
-                  <Avatar key={f.user_id} className="h-6 w-6 border-2 border-background">
+                  <Avatar key={f.user_id} className={`border-2 border-background ${isMobile ? 'h-4 w-4' : 'h-6 w-6'}`}>
                     <AvatarImage src={avatarUrl({ avatar_url: f.avatar_url })} />
-                    <AvatarFallback className="text-[10px]">{(f.pseudo ?? '?').slice(0, 2).toUpperCase()}</AvatarFallback>
+                    <AvatarFallback className="text-[7px]">{(f.pseudo ?? '?').slice(0, 2).toUpperCase()}</AvatarFallback>
                   </Avatar>
                 ))}
               </div>
-              <span className="truncate text-xs text-muted-foreground">
+              <span className={`truncate text-muted-foreground ${isMobile ? 'text-[9px]' : 'text-xs'}`}>
                 {friendLikers.length === 1
                   ? <><span className="font-medium text-foreground">{friendLikers[0].pseudo ?? 'Un ami'}</span> a aimé ce titre</>
                   : <><span className="font-medium text-foreground">{friendLikers[0].pseudo ?? 'Un ami'}</span> et {friendLikers.length - 1} autre{friendLikers.length - 1 > 1 ? 's' : ''} ont aimé ce titre</>}
@@ -374,27 +412,31 @@ export default function PlayerPage() {
             </div>
           )}
 
-          <div className="mb-3 flex items-center justify-center gap-3 rounded-full bg-secondary/40 px-4 py-2 backdrop-blur">
-            <button
-              onClick={() => setPlaybackRate(Math.max(0.5, Math.round((playbackRate - 0.01) * 100) / 100))}
-              aria-label="Diminuer la vitesse"
-              className="rounded-full p-1.5 hover:bg-secondary"
-            >
-              <Minus className="h-4 w-4" />
-            </button>
-            <span className="min-w-[110px] text-center text-sm font-medium">
-              Musique à {Math.round(playbackRate * 100)}%
-            </span>
-            <button
-              onClick={() => setPlaybackRate(Math.min(2, Math.round((playbackRate + 0.01) * 100) / 100))}
-              aria-label="Augmenter la vitesse"
-              className="rounded-full p-1.5 hover:bg-secondary"
-            >
-              <Plus className="h-4 w-4" />
-            </button>
-          </div>
+          {/* Playback rate - desktop only */}
+          {!isMobile && (
+            <div className="mb-3 flex items-center justify-center gap-3 rounded-full bg-secondary/40 px-4 py-2 backdrop-blur">
+              <button
+                onClick={() => setPlaybackRate(Math.max(0.5, Math.round((playbackRate - 0.01) * 100) / 100))}
+                aria-label="Diminuer la vitesse"
+                className="rounded-full p-1.5 hover:bg-secondary"
+              >
+                <Minus className="h-4 w-4" />
+              </button>
+              <span className="min-w-[110px] text-center text-sm font-medium">
+                Musique à {Math.round(playbackRate * 100)}%
+              </span>
+              <button
+                onClick={() => setPlaybackRate(Math.min(2, Math.round((playbackRate + 0.01) * 100) / 100))}
+                aria-label="Augmenter la vitesse"
+                className="rounded-full p-1.5 hover:bg-secondary"
+              >
+                <Plus className="h-4 w-4" />
+              </button>
+            </div>
+          )}
 
-          <div className="mb-2">
+          {/* Seek bar */}
+          <div className={isMobile ? 'mb-0.5' : 'mb-2'}>
             <Slider
               value={[value]}
               max={duration || 1}
@@ -402,27 +444,30 @@ export default function PlayerPage() {
               onValueChange={(v) => setSeeking(v[0])}
               onValueCommit={(v) => { seek(v[0]); setSeeking(null); }}
             />
-            <div className="mt-1 flex justify-between text-xs text-muted-foreground">
+            <div className={`mt-0.5 flex justify-between ${isMobile ? 'text-[9px]' : 'text-xs'} text-muted-foreground`}>
               <span>{formatTime(value)}</span>
               <span>{formatTime(duration)}</span>
             </div>
           </div>
 
-          <div className="flex items-center justify-around py-4">
-            <button onClick={toggleShuffle} className={`rounded-full p-2 transition-colors ${isShuffled ? 'text-primary' : 'text-muted-foreground hover:text-foreground'}`}>
-              <Shuffle className="h-5 w-5" />
+          {/* Controls */}
+          <div className={`flex items-center justify-around ${isMobile ? 'py-1.5' : 'py-4'}`}>
+            <ShuffleButton isShuffled={isShuffled} toggleShuffle={toggleShuffle} isMobile={isMobile} />
+            <button onClick={previous} aria-label="Précédent" className="rounded-full p-1.5 hover:bg-secondary">
+              <SkipBack className={`fill-current ${isMobile ? 'h-5 w-5' : 'h-7 w-7'}`} />
             </button>
-            <button onClick={previous} aria-label="Précédent" className="rounded-full p-2 hover:bg-secondary"><SkipBack className="h-7 w-7 fill-current" /></button>
             <button
               onClick={togglePlay}
-              className="flex h-16 w-16 items-center justify-center rounded-full bg-gradient-primary text-primary-foreground shadow-elegant transition-transform hover:scale-105 active:scale-95"
+              className={`flex items-center justify-center rounded-full bg-gradient-primary text-primary-foreground shadow-elegant transition-transform hover:scale-105 active:scale-95 ${
+                isMobile ? 'h-12 w-12' : 'h-16 w-16'
+              }`}
             >
-              {isPlaying ? <Pause className="h-7 w-7 fill-current" /> : <Play className="h-7 w-7 fill-current" />}
+              {isPlaying ? <Pause className={`fill-current ${isMobile ? 'h-5 w-5' : 'h-7 w-7'}`} /> : <Play className={`fill-current ${isMobile ? 'h-5 w-5' : 'h-7 w-7'}`} />}
             </button>
-            <button onClick={next} aria-label="Suivant" className="rounded-full p-2 hover:bg-secondary"><SkipForward className="h-7 w-7 fill-current" /></button>
-            <button onClick={cycleRepeat} className={`rounded-full p-2 transition-colors ${repeatMode !== 'off' ? 'text-primary' : 'text-muted-foreground hover:text-foreground'}`}>
-              {repeatMode === 'one' ? <Repeat1 className="h-5 w-5" /> : <Repeat className="h-5 w-5" />}
+            <button onClick={next} aria-label="Suivant" className="rounded-full p-1.5 hover:bg-secondary">
+              <SkipForward className={`fill-current ${isMobile ? 'h-5 w-5' : 'h-7 w-7'}`} />
             </button>
+            <RepeatButton repeatMode={repeatMode} cycleRepeat={cycleRepeat} isMobile={isMobile} />
           </div>
         </div>
       </div>
@@ -432,5 +477,21 @@ export default function PlayerPage() {
       <DownloadAppModal open={showDownloadApp} onOpenChange={setShowDownloadApp} />
       <VolumeControl open={volumeOpen} onClose={() => setVolumeOpen(false)} />
     </>
+  );
+}
+
+function ShuffleButton({ isShuffled, toggleShuffle, isMobile }: { isShuffled: boolean; toggleShuffle: () => void; isMobile: boolean }) {
+  return (
+    <button onClick={toggleShuffle} className={`rounded-full p-2 transition-colors ${isShuffled ? 'text-primary' : 'text-muted-foreground hover:text-foreground'}`}>
+      <Shuffle className={isMobile ? 'h-4 w-4' : 'h-5 w-5'} />
+    </button>
+  );
+}
+
+function RepeatButton({ repeatMode, cycleRepeat, isMobile }: { repeatMode: 'off' | 'all' | 'one'; cycleRepeat: () => void; isMobile: boolean }) {
+  return (
+    <button onClick={cycleRepeat} className={`rounded-full p-2 transition-colors ${repeatMode !== 'off' ? 'text-primary' : 'text-muted-foreground hover:text-foreground'}`}>
+      {repeatMode === 'one' ? <Repeat1 className={isMobile ? 'h-4 w-4' : 'h-5 w-5'} /> : <Repeat className={isMobile ? 'h-4 w-4' : 'h-5 w-5'} />}
+    </button>
   );
 }

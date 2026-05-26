@@ -1,8 +1,9 @@
 import { useRef, useState, useEffect } from 'react';
-import { Flame, ChevronLeft, ChevronRight, Video } from 'lucide-react';
+import { Flame, ChevronLeft, ChevronRight, Video, User } from 'lucide-react';
 import { usePlayer } from '@/contexts/PlayerContext';
-import { songCoverUrl } from '@/lib/storage';
-import type { Song } from '@/types/music';
+import { songCoverUrl, avatarUrl } from '@/lib/storage';
+import { supabase } from '@/integrations/supabase/client';
+import type { Song, Profile } from '@/types/music';
 
 interface Props {
   trending: Song[];
@@ -13,6 +14,21 @@ export default function TrendingSection({ trending }: Props) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const [canScrollLeft, setCanScrollLeft] = useState(false);
   const [canScrollRight, setCanScrollRight] = useState(true);
+  const [profilesMap, setProfilesMap] = useState<Record<string, Profile>>({});
+
+  useEffect(() => {
+    if (trending.length === 0) return;
+    const userIds = [...new Set(trending.map((s) => s.uploaded_by))];
+    (async () => {
+      const { data } = await supabase
+        .from('profiles')
+        .select('*')
+        .in('user_id', userIds);
+      const map: Record<string, Profile> = {};
+      (data ?? []).forEach((p: any) => { map[p.user_id] = p as Profile; });
+      setProfilesMap(map);
+    })();
+  }, [trending]);
 
   const updateScrollButtons = () => {
     const el = scrollRef.current;
@@ -97,6 +113,24 @@ export default function TrendingSection({ trending }: Props) {
               <div>
                 <p className="truncate text-sm font-semibold text-foreground">{s.title}</p>
                 <p className="truncate text-xs text-muted-foreground">{s.author}</p>
+                {profilesMap[s.uploaded_by] && (
+                  <div className="mt-1.5 flex items-center gap-1.5">
+                    <div className="h-5 w-5 flex-shrink-0 overflow-hidden rounded-full bg-muted">
+                      {avatarUrl(profilesMap[s.uploaded_by]) ? (
+                        <img
+                          src={avatarUrl(profilesMap[s.uploaded_by])}
+                          alt=""
+                          className="h-full w-full object-cover"
+                        />
+                      ) : (
+                        <User className="h-3 w-3 p-0.5 text-muted-foreground" />
+                      )}
+                    </div>
+                    <span className="truncate text-[11px] text-muted-foreground">
+                      {profilesMap[s.uploaded_by].pseudo ?? 'Anonyme'}
+                    </span>
+                  </div>
+                )}
               </div>
             </button>
           ))}

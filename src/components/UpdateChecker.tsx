@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef } from 'react';
+import { useEffect, useState } from 'react';
 import { getDesktopAppVersion, LATEST_DESKTOP_VERSION, isRunningInDesktopApp } from '@/lib/versionCheck';
 import UpdateModal from './UpdateModal';
 
@@ -8,7 +8,7 @@ export default function UpdateChecker() {
   const [state, setState] = useState<CheckState>('spinning');
   const [latestVersion] = useState(LATEST_DESKTOP_VERSION);
   const [modalOpen, setModalOpen] = useState(false);
-  const visibleRef = useRef(true);
+  const [visible, setVisible] = useState(true);
 
   useEffect(() => {
     let cancelled = false;
@@ -28,7 +28,7 @@ export default function UpdateChecker() {
       // Vérifier si on est sur l'app PC
       if (!isRunningInDesktopApp()) {
         // Pas sur l'app PC → on cache tout
-        visibleRef.current = false;
+        setVisible(false);
         return;
       }
 
@@ -44,7 +44,7 @@ export default function UpdateChecker() {
 
       if (result === 'timeout') {
         // Le scan n'a rien renvoyé après 5 secondes → on ferme tout
-        visibleRef.current = false;
+        setVisible(false);
         return;
       }
 
@@ -71,7 +71,7 @@ export default function UpdateChecker() {
           if (!cancelled) {
             setState('fading-out');
             setTimeout(() => {
-              if (!cancelled) visibleRef.current = false;
+              if (!cancelled) setVisible(false);
             }, 300);
           }
         }, 2000);
@@ -92,8 +92,8 @@ export default function UpdateChecker() {
     };
   }, []);
 
-  // Si pas sur l'app PC, ne rien afficher
-  if (!visibleRef.current) return null;
+  // Si pas sur l'app PC ou timeout, ne rien afficher
+  if (!visible) return null;
 
   // Animations
   const containerAnimClass =

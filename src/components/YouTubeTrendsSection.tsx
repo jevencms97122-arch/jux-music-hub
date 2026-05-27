@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { Video, TrendingUp, AlertTriangle } from 'lucide-react';
 import { usePlayer } from '@/contexts/PlayerContext';
 
-const DEFAULT_PIPED_BASE = 'https://pipedapi.kavin.rocks';
+const DEFAULT_PIPED_BASE = 'https://api.piped.yt';
 
 type TrendingItem = {
   videoId: string;

@@ -11,6 +11,7 @@ export default function UpdateChecker() {
   const visibleRef = useRef(true);
   const updateTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const fadeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const scanTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -23,6 +24,21 @@ export default function UpdateChecker() {
       // Étape 2 : scan de la version
       setState('scanning');
 
+      // Timeout de 5 secondes max pour le scan
+      // Si le scan prend plus de 5 sec → on force "Mise à jour disponible"
+      scanTimeoutRef.current = setTimeout(() => {
+        if (!cancelled) {
+          setState('update-available');
+
+          // 1 seconde après, ouvrir la modal
+          updateTimerRef.current = setTimeout(() => {
+            if (!cancelled) {
+              setModalOpen(true);
+            }
+          }, 1000);
+        }
+      }, 5000);
+
       // Petite pause pour que l'utilisateur voie le spinner qui tourne
       await new Promise((resolve) => setTimeout(resolve, 400));
       if (cancelled) return;
@@ -30,6 +46,7 @@ export default function UpdateChecker() {
       // Vérifier si on est sur l'app PC
       const isDesktop = isRunningInDesktopApp();
       if (!isDesktop) {
+        if (scanTimeoutRef.current) clearTimeout(scanTimeoutRef.current);
         setState('up-to-date');
         return;
       }
@@ -38,6 +55,9 @@ export default function UpdateChecker() {
       const currentVersion = await getDesktopAppVersion();
 
       if (cancelled) return;
+
+      // Annuler le timeout de 5 sec car le scan a répondu
+      if (scanTimeoutRef.current) clearTimeout(scanTimeoutRef.current);
 
       if (currentVersion === null) {
         // Pas sur l'app PC → on cache tout
@@ -73,6 +93,8 @@ export default function UpdateChecker() {
     return () => {
       cancelled = true;
       if (updateTimerRef.current) clearTimeout(updateTimerRef.current);
+      if (fadeTimerRef.current) clearTimeout(fadeTimerRef.current);
+      if (scanTimeoutRef.current) clearTimeout(scanTimeoutRef.current);
     };
   }, []);
 

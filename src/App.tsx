@@ -1,6 +1,7 @@
 import { useEffect } from 'react';
 import { AuthProvider, useAuth } from '@/contexts/AuthContext';
 import { PlayerProvider } from '@/contexts/PlayerContext';
+import { ThemeProvider, useTheme } from '@/contexts/ThemeContext';
 import { BrowserRouter, Routes, Route, Navigate, useNavigate, useLocation } from 'react-router-dom';
 import { AnimatePresence, motion } from 'framer-motion';
 import { supabase } from '@/integrations/supabase/client';
@@ -162,12 +163,24 @@ function AppContent() {
   );
 }
 
+function AppWithTheme() {
+  const { currentTheme } = useTheme();
+
+  return (
+    <div style={{ background: currentTheme.background, minHeight: '100vh' }}>
+      <AppContent />
+    </div>
+  );
+}
+
 export default function App() {
   return (
     <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
-      <AuthProvider>
-        <AppContent />
-      </AuthProvider>
+      <ThemeProvider>
+        <AuthProvider>
+          <AppWithTheme />
+        </AuthProvider>
+      </ThemeProvider>
     </BrowserRouter>
   );
 }

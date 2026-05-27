@@ -1,6 +1,6 @@
 import type { Collaboration } from '@/types/music';
 import collabAvatar from '@/assets/859d02cc14248320a24a21e13939ed73.jpg';
-import juxAvatar from '@/assets/Jux pdp.webp';
+import juxAvatar from '@/assets/Jux-pdp.webp';
 
 export const collaborations: Collaboration[] = [
   {
@@ -13,7 +13,7 @@ export const collaborations: Collaboration[] = [
     twitch_url: null,
     youtube_url: null,
     discord_url: null,
-    instagram_url: 'https://www.instagram.com/jux_154',
+    instagram_url: 'https://www.instagram.com/jux_1544',
     twitter_url: null,
     tiktok_url: null,
     user_id: null,

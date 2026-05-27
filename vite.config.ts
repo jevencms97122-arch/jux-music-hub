@@ -12,6 +12,24 @@ export default defineConfig(({ mode }) => ({
       overlay: false,
       clientPort: 8080,
     },
+    /**
+     * Proxy Piped pour éviter les problèmes CORS en navigateur.
+     * On expose une API "same-origin" via /api/piped/*.
+     */
+    proxy: {
+      '/api/piped/trending': {
+        target: 'https://api.piped.yt',
+        changeOrigin: true,
+        secure: true,
+        rewrite: (path) => path.replace(/^\/api\/piped\/trending/, '/trending'),
+      },
+      '/api/piped/streams': {
+        target: 'https://api.piped.yt',
+        changeOrigin: true,
+        secure: true,
+        rewrite: (path) => path.replace(/^\/api\/piped\/streams/, '/streams'),
+      },
+    },
   },
   plugins: [
     react(),

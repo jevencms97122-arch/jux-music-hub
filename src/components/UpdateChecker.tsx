@@ -32,15 +32,26 @@ export default function UpdateChecker() {
         return;
       }
 
-      // Tentative de récupération de la version
-      const currentVersion = await getDesktopAppVersion();
+      // Lancer la récupération de version avec un timeout de 5 secondes
+      const scanPromise = getDesktopAppVersion();
+      const timeoutPromise = new Promise<'timeout'>((resolve) => {
+        setTimeout(() => resolve('timeout' as const), 5000);
+      });
+
+      const result = await Promise.race([scanPromise, timeoutPromise]);
 
       if (cancelled) return;
 
-      // Si currentVersion est null, c'est que la fonction getAppVersion()
-      // n'existe pas dans le bridge → version 1.0.0 ou plus ancienne
-      // → on force la mise à jour
+      if (result === 'timeout') {
+        // Le scan n'a rien renvoyé après 5 secondes → on ferme tout
+        visibleRef.current = false;
+        return;
+      }
+
+      const currentVersion = result as string | null;
+
       if (currentVersion === null) {
+        // Pas d'API getAppVersion dispo → version obsolète → mise à jour
         setState('update-available');
 
         // 1 seconde après, ouvrir la modal

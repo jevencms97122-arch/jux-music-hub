@@ -9,12 +9,17 @@ export default function UpdateChecker() {
   const [latestVersion] = useState(LATEST_DESKTOP_VERSION);
   const [modalOpen, setModalOpen] = useState(false);
   const visibleRef = useRef(true);
-  const updateTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const modalTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const fadeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const scanTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     let cancelled = false;
+
+    // Nettoie tous les timers
+    const clearAllTimers = () => {
+      if (modalTimerRef.current) clearTimeout(modalTimerRef.current);
+      if (fadeTimerRef.current) clearTimeout(fadeTimerRef.current);
+    };
 
     (async () => {
       // Étape 1 : 1 seconde de spinner sans rien faire
@@ -24,21 +29,6 @@ export default function UpdateChecker() {
       // Étape 2 : scan de la version
       setState('scanning');
 
-      // Timeout de 5 secondes max pour le scan
-      // Si le scan prend plus de 5 sec → on force "Mise à jour disponible"
-      scanTimeoutRef.current = setTimeout(() => {
-        if (!cancelled) {
-          setState('update-available');
-
-          // 1 seconde après, ouvrir la modal
-          updateTimerRef.current = setTimeout(() => {
-            if (!cancelled) {
-              setModalOpen(true);
-            }
-          }, 1000);
-        }
-      }, 5000);
-
       // Petite pause pour que l'utilisateur voie le spinner qui tourne
       await new Promise((resolve) => setTimeout(resolve, 400));
       if (cancelled) return;
@@ -46,18 +36,38 @@ export default function UpdateChecker() {
       // Vérifier si on est sur l'app PC
       const isDesktop = isRunningInDesktopApp();
       if (!isDesktop) {
-        if (scanTimeoutRef.current) clearTimeout(scanTimeoutRef.current);
         setState('up-to-date');
         return;
       }
 
-      // Récupérer la version
-      const currentVersion = await getDesktopAppVersion();
+      // Lancer le scan avec un timeout de 5 secondes max
+      // On utilise Promise.race pour que le premier qui arrive gagne
+      const scanResult = await Promise.race([
+        getDesktopAppVersion(),
+        new Promise<'timeout'>((resolve) => {
+          const id = setTimeout(() => resolve('timeout' as const), 5000);
+          // On stocke le ref pour cleanup
+          modalTimerRef.current = id;
+        }),
+      ]);
 
       if (cancelled) return;
 
-      // Annuler le timeout de 5 sec car le scan a répondu
-      if (scanTimeoutRef.current) clearTimeout(scanTimeoutRef.current);
+      if (scanResult === 'timeout') {
+        // Le scan a pris plus de 5 secondes → on force la mise à jour
+        setState('update-available');
+
+        // 1 seconde après, ouvrir la modal
+        modalTimerRef.current = setTimeout(() => {
+          if (!cancelled) {
+            setModalOpen(true);
+          }
+        }, 1000);
+        return;
+      }
+
+      // Le scan a répondu avant 5 secondes
+      const currentVersion = scanResult as string | null;
 
       if (currentVersion === null) {
         // Pas sur l'app PC → on cache tout
@@ -72,7 +82,6 @@ export default function UpdateChecker() {
         fadeTimerRef.current = setTimeout(() => {
           if (!cancelled) {
             setState('fading-out');
-            // Après l'animation de fade (300ms), masquer complètement
             setTimeout(() => {
               if (!cancelled) visibleRef.current = false;
             }, 300);
@@ -81,8 +90,8 @@ export default function UpdateChecker() {
       } else {
         setState('update-available');
 
-        // Étape 3 : 1 seconde après, ouvrir la modal
-        updateTimerRef.current = setTimeout(() => {
+        // 1 seconde après, ouvrir la modal
+        modalTimerRef.current = setTimeout(() => {
           if (!cancelled) {
             setModalOpen(true);
           }
@@ -92,9 +101,7 @@ export default function UpdateChecker() {
 
     return () => {
       cancelled = true;
-      if (updateTimerRef.current) clearTimeout(updateTimerRef.current);
-      if (fadeTimerRef.current) clearTimeout(fadeTimerRef.current);
-      if (scanTimeoutRef.current) clearTimeout(scanTimeoutRef.current);
+      clearAllTimers();
     };
   }, []);
 

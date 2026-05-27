@@ -12,6 +12,14 @@ const FALLBACK_PIPED_BASE = 'https://api.piped.yt';
 // Proxy CORS public (évite le blocage navigateur si l'instance Piped n'autorise pas ton domaine)
 const ALL_ORIGINS_RAW = 'https://api.allorigins.win/raw?url=';
 
+// Liste d’instances Piped à essayer (quand le proxy Vite ne marche pas ou ne cible pas une instance correcte)
+const PIPED_INSTANCES: string[] = [
+  DEFAULT_PIPED_BASE, // same-origin proxy route
+  'https://api.piped.yt',
+  'https://piped-api.garudalinux.org',
+  'https://pipedapi.oxytw.net',
+];
+
 type TrendingItem = {
   videoId: string;
   title: string;
@@ -112,15 +120,26 @@ export default function YouTubeTrendsSection(): JSX.Element {
       setErrorMsg(null);
 
       try {
-        // 1) Essayer le proxy (même-origin) si jamais il marche sur ton host
-        const primaryUrl = `${endpointBase}/trending?region=FR`;
+        const lastErrors: string[] = [];
 
-        const json = await fetchJsonSafe<any>(primaryUrl)
-          .catch(async () => {
-            // 2) Retry via allorigins (résout le CORS côté navigateur)
-            const directFallbackUrl = `${FALLBACK_PIPED_BASE}/trending?region=FR`;
-            return fetchJsonViaAllOrigins<any>(directFallbackUrl);
-          });
+        const json = await (async () => {
+          for (const base of PIPED_INSTANCES) {
+            const url = `${base}/trending?region=FR`;
+            try {
+              return await fetchJsonSafe<any>(url);
+            } catch (err: any) {
+              lastErrors.push(err?.message ? String(err.message) : 'fetch failed');
+              // If base is an external Piped, try allorigins as a last resort for that base only
+              try {
+                const directFallback = `${base}/trending?region=FR`;
+                return await fetchJsonViaAllOrigins<any>(directFallback);
+              } catch {
+                // continue
+              }
+            }
+          }
+          throw new Error(lastErrors.slice(0, 2).join(' | ') || 'Aucune instance Piped n’a répondu');
+        })();
 
         const parsed = extractTrendingItems(json);
         if (!cancelled) setItems(parsed.slice(0, 12));
@@ -134,7 +153,7 @@ export default function YouTubeTrendsSection(): JSX.Element {
     return () => {
       cancelled = true;
     };
-  }, [endpointBase]);
+  }, []);
 
   const fetchJsonSafe = async <T,>(url: string) => {
     const res = await fetch(url, { headers: { Accept: 'application/json' } });
@@ -158,12 +177,25 @@ export default function YouTubeTrendsSection(): JSX.Element {
     try {
       setErrorMsg(null);
 
-      const primaryUrl = `${endpointBase}/streams/${it.videoId}`;
-      const json = await fetchJsonSafe<StreamsResponse>(primaryUrl).catch(async () => {
-        // Retry CORS-safe via allorigins
-        const directFallbackUrl = `${FALLBACK_PIPED_BASE}/streams/${it.videoId}`;
-        return fetchJsonViaAllOrigins<StreamsResponse>(directFallbackUrl);
-      });
+      const lastErrors: string[] = [];
+
+      const json = await (async () => {
+        for (const base of PIPED_INSTANCES) {
+          const url = `${base}/streams/${it.videoId}`;
+          try {
+            return await fetchJsonSafe<StreamsResponse>(url);
+          } catch (err: any) {
+            lastErrors.push(err?.message ? String(err.message) : 'fetch failed');
+            // try allorigins as last resort for that base
+            try {
+              return await fetchJsonViaAllOrigins<StreamsResponse>(url);
+            } catch {
+              // continue
+            }
+          }
+        }
+        throw new Error(lastErrors.slice(0, 2).join(' | ') || 'Aucune instance Piped n’a répondu');
+      })();
 
       const best = pickBestAudioStream(json);
 

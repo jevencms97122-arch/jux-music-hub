@@ -1,6 +1,8 @@
 import type { Collaboration } from '@/types/music';
 import collabAvatar from '@/assets/859d02cc14248320a24a21e13939ed73.jpg';
+import kyxAvatar from '@/assets/Kyxmi_fps pdp.webp';
 import juxAvatar from '@/assets/Jux-pdp.webp';
+
 
 export const collaborations: Collaboration[] = [
   {
@@ -26,7 +28,8 @@ export const collaborations: Collaboration[] = [
     id: '1',
     pseudo: 'Kyxmi_fps',
     display_name: 'Kyxmi_fps',
-    avatar_url: collabAvatar,
+    avatar_url: kyxAvatar,
+
     banner_url: null,
     bio: 'Créateur, Admin et Développeur de Jux-Music',
     twitch_url: 'https://www.twitch.tv/kyxmi_fps',

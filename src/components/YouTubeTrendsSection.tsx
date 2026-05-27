@@ -2,7 +2,12 @@ import { useEffect, useMemo, useState } from 'react';
 import { Video, TrendingUp, AlertTriangle } from 'lucide-react';
 import { usePlayer } from '@/contexts/PlayerContext';
 
+/**
+ * On tente d'abord via le proxy Vite (same-origin) pour éviter les CORS.
+ * En cas de réponse HTML (fallback Vite), on fait un retry direct sur une instance permissive (debug fallback).
+ */
 const DEFAULT_PIPED_BASE = '/api/piped';
+const FALLBACK_PIPED_BASE = 'https://api.piped.yt';
 
 type TrendingItem = {
   videoId: string;
@@ -104,14 +109,13 @@ export default function YouTubeTrendsSection(): JSX.Element {
       setErrorMsg(null);
 
       try {
-        const res = await fetch(`${endpointBase}/trending?region=FR`, {
-          headers: { Accept: 'application/json' },
+        const primaryUrl = `${endpointBase}/trending?region=FR`;
+        const json = await fetchJsonSafe<any>(primaryUrl).catch(async () => {
+          const fallbackUrl = `${FALLBACK_PIPED_BASE}/trending?region=FR`;
+          return fetchJsonSafe<any>(fallbackUrl);
         });
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
 
-        const json = await res.json();
         const parsed = extractTrendingItems(json);
-
         if (!cancelled) setItems(parsed.slice(0, 12));
       } catch (e: any) {
         if (!cancelled) setErrorMsg(e?.message ? String(e.message) : 'Erreur de chargement');
@@ -125,16 +129,30 @@ export default function YouTubeTrendsSection(): JSX.Element {
     };
   }, [endpointBase]);
 
+  const fetchJsonSafe = async <T,>(url: string) => {
+    const res = await fetch(url, { headers: { Accept: 'application/json' } });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const text = await res.text();
+
+    // Si Vite renvoie une page HTML (index.html) au lieu du JSON, on détecte ça.
+    if (text.trimStart().startsWith('<')) {
+      throw new Error('Réponse inattendue (HTML) depuis l’API. Proxy/CORS probablement en échec.');
+    }
+
+    return JSON.parse(text) as T;
+  };
+
   const onClickItem = async (it: TrendingItem) => {
     try {
       setErrorMsg(null);
 
-      const res = await fetch(`${endpointBase}/streams/${it.videoId}`, {
-        headers: { Accept: 'application/json' },
+      const primaryUrl = `${endpointBase}/streams/${it.videoId}`;
+      const json = await fetchJsonSafe<StreamsResponse>(primaryUrl).catch(async (err) => {
+        // Fallback direct (debug) si le proxy ne répond pas correctement
+        const fallbackUrl = `${FALLBACK_PIPED_BASE}/streams/${it.videoId}`;
+        return fetchJsonSafe<StreamsResponse>(fallbackUrl);
       });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
 
-      const json = (await res.json()) as StreamsResponse;
       const best = pickBestAudioStream(json);
 
       if (!best?.url) throw new Error('Aucun flux audio trouvé');

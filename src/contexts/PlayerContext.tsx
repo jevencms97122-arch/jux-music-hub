@@ -45,6 +45,17 @@ interface PlayerContextType {
 
   playSong: (song: Song) => void;
   playSongFromList: (song: Song, list: Song[]) => void;
+  /**
+   * Lecture d'un audio "externe" (hors Supabase), sans incrémenter play_count/weekly stats.
+   * Utilisé par la section YouTube Trends / Piped.
+   */
+  playExternalAudio: (payload: {
+    videoId: string;
+    title: string;
+    author: string;
+    coverUrl: string;
+    audioUrl: string;
+  }) => void;
   togglePlay: () => void;
   next: () => void;
   previous: () => void;
@@ -452,6 +463,77 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
     }
   }, [playbackRate, volume, recordPlay, authUser]);
 
+  const loadAndPlayExternalAudio = useCallback(async (payload: {
+    videoId: string;
+    title: string;
+    author: string;
+    coverUrl: string;
+    audioUrl: string;
+    autoPlay?: boolean;
+  }) => {
+    // Cancel any ongoing crossfade
+    if (crossfadeIntervalRef.current) {
+      clearInterval(crossfadeIntervalRef.current);
+      crossfadeIntervalRef.current = null;
+    }
+    crossfadingRef.current = false;
+
+    const inactive = getInactive();
+    if (inactive) {
+      try { inactive.pause(); inactive.volume = 0; inactive.removeAttribute('src'); inactive.load(); } catch {}
+    }
+
+    const a = getActive();
+    if (!a) return;
+
+    // Build a Song-compatible object so the UI (current title/cover) keeps working.
+    // IMPORTANT: we do NOT rely on audio_url from Supabase.
+    const externalSong: Song = {
+      id: `external:${payload.videoId}`,
+      title: payload.title,
+      author: payload.author,
+      audio_url: '',
+      cover_url: payload.coverUrl ?? null,
+      video_url: payload.videoId ? `external-video:${payload.videoId}` : null,
+      genre: null,
+      uploaded_by: authUser?.id ?? 'external',
+      play_count: 0,
+      weekly_play_count: 0,
+      likes_count: 0,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    };
+
+    setCurrentSong(externalSong);
+    setQueue([externalSong]);
+    setQueueIndex(0);
+
+    a.src = payload.audioUrl;
+    a.volume = volume;
+
+    const applyRate = () => { a.playbackRate = playbackRate; };
+    applyRate();
+    a.addEventListener('loadedmetadata', applyRate, { once: true });
+    a.addEventListener('playing', applyRate, { once: true });
+
+    const inSessionAsHost = !!(sessionRef.current && authUser && sessionRef.current.host_id === authUser.id);
+    const shouldAutoPlay = payload.autoPlay ?? true;
+
+    if (!shouldAutoPlay || inSessionAsHost) {
+      pendingSessionAutoplayRef.current = !!inSessionAsHost;
+      a.load();
+      return;
+    }
+
+    try {
+      await a.play();
+      a.playbackRate = playbackRate;
+      // No recordPlay(): external items should not increment stats (play_count / weekly_play_count).
+    } catch (e) {
+      console.error('External audio play failed', e);
+    }
+  }, [playbackRate, volume, authUser]);
+
     // Crossfade removed - simple next
 
 
@@ -776,6 +858,28 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
     }
   }, [isSessionHost, allParticipantsReady, activeSession, currentSong, recordPlay]);
 
+  const playExternalAudio = useCallback((payload: {
+    videoId: string;
+    title: string;
+    author: string;
+    coverUrl: string;
+    audioUrl: string;
+  }) => {
+    if (!payload?.audioUrl) return;
+
+    if (isSessionGuestRef.current) {
+      toast.info("Seul l'hôte peut changer la musique de la session");
+      return;
+    }
+
+    // For external items, we only play locally (no broadcast/song_id update on Supabase).
+    // This matches "lecture uniquement UI" request.
+    loadAndPlayExternalAudio({
+      ...payload,
+      autoPlay: true,
+    });
+  }, [loadAndPlayExternalAudio]);
+
   return (
     <PlayerContext.Provider
       value={{
@@ -784,7 +888,8 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
         crossfadeSeconds,
         activeSession, isSessionHost, isSessionGuest, allParticipantsReady,
         refreshSession, setActiveSession, stopAudio, refreshSongStats,
-        playSong, playSongFromList, togglePlay, next, previous, seek, setVolume,
+        playSong, playSongFromList, playExternalAudio,
+        togglePlay, next, previous, seek, setVolume,
         toggleShuffle, cycleRepeat, openPlayer, closePlayer, setPlaybackRate,
         setCrossfadeSeconds, addToQueue, startRadio, signalVideoReady,
       }}

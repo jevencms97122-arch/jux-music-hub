@@ -135,7 +135,7 @@ export default function SynchronizedVideoPlayer({
           referrerPolicy="strict-origin-when-cross-origin"
           style={{ pointerEvents: 'none', opacity: 0.35 }}
         />
-        <div className="absolute inset-0 bg-black/70" />
+          <div className="absolute inset-0 bg-black/35" />
       </div>
     );
   }

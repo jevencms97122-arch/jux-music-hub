@@ -9,6 +9,9 @@ import { usePlayer } from '@/contexts/PlayerContext';
 const DEFAULT_PIPED_BASE = '/api/piped';
 const FALLBACK_PIPED_BASE = 'https://api.piped.yt';
 
+// Proxy CORS public (évite le blocage navigateur si l'instance Piped n'autorise pas ton domaine)
+const ALL_ORIGINS_RAW = 'https://api.allorigins.win/raw?url=';
+
 type TrendingItem = {
   videoId: string;
   title: string;
@@ -109,11 +112,15 @@ export default function YouTubeTrendsSection(): JSX.Element {
       setErrorMsg(null);
 
       try {
+        // 1) Essayer le proxy (même-origin) si jamais il marche sur ton host
         const primaryUrl = `${endpointBase}/trending?region=FR`;
-        const json = await fetchJsonSafe<any>(primaryUrl).catch(async () => {
-          const fallbackUrl = `${FALLBACK_PIPED_BASE}/trending?region=FR`;
-          return fetchJsonSafe<any>(fallbackUrl);
-        });
+
+        const json = await fetchJsonSafe<any>(primaryUrl)
+          .catch(async () => {
+            // 2) Retry via allorigins (résout le CORS côté navigateur)
+            const directFallbackUrl = `${FALLBACK_PIPED_BASE}/trending?region=FR`;
+            return fetchJsonViaAllOrigins<any>(directFallbackUrl);
+          });
 
         const parsed = extractTrendingItems(json);
         if (!cancelled) setItems(parsed.slice(0, 12));
@@ -142,15 +149,20 @@ export default function YouTubeTrendsSection(): JSX.Element {
     return JSON.parse(text) as T;
   };
 
+  const fetchJsonViaAllOrigins = async <T,>(url: string) => {
+    // allorigins renvoie du texte brut, donc on parse pareil
+    return fetchJsonSafe<T>(`${ALL_ORIGINS_RAW}${encodeURIComponent(url)}`);
+  };
+
   const onClickItem = async (it: TrendingItem) => {
     try {
       setErrorMsg(null);
 
       const primaryUrl = `${endpointBase}/streams/${it.videoId}`;
-      const json = await fetchJsonSafe<StreamsResponse>(primaryUrl).catch(async (err) => {
-        // Fallback direct (debug) si le proxy ne répond pas correctement
-        const fallbackUrl = `${FALLBACK_PIPED_BASE}/streams/${it.videoId}`;
-        return fetchJsonSafe<StreamsResponse>(fallbackUrl);
+      const json = await fetchJsonSafe<StreamsResponse>(primaryUrl).catch(async () => {
+        // Retry CORS-safe via allorigins
+        const directFallbackUrl = `${FALLBACK_PIPED_BASE}/streams/${it.videoId}`;
+        return fetchJsonViaAllOrigins<StreamsResponse>(directFallbackUrl);
       });
 
       const best = pickBestAudioStream(json);

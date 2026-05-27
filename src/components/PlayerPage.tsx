@@ -218,9 +218,9 @@ export default function PlayerPage() {
         )}
 
         {/* ── Mobile layout ── */}
-        <div className={`relative z-20 flex flex-1 flex-col ${isMobile ? 'px-2 py-1.5 pb-0.5' : 'p-6 pb-2'} overflow-y-auto`}>
+        <div className={`relative z-20 flex flex-1 flex-col ${isMobile ? 'px-3 pt-1.5 pb-2' : 'p-6 pb-2'} h-full`}>
           {/* Header */}
-          <div className={`flex items-center justify-between ${isMobile ? 'mb-0.5' : ''}`}>
+          <div className={`flex items-center justify-between ${isMobile ? 'mb-0.5' : 'mb-2'}`}>
             <button onClick={closePlayer} aria-label="Fermer" className="rounded-full p-1 hover:bg-secondary">
               <ChevronDown className={isMobile ? 'h-4 w-4' : 'h-6 w-6'} />
             </button>
@@ -291,9 +291,9 @@ export default function PlayerPage() {
             </DropdownMenu>
           </div>
 
-          {/* Cover image - compact on mobile */}
-          <div className={`flex items-center justify-center ${isMobile ? 'flex-[0.5] py-0.5' : 'flex-1 py-4 sm:py-8'}`}>
-            <div className={`relative flex w-full items-center justify-center ${isMobile ? 'px-0' : 'px-4 sm:max-w-sm'}`}>
+          {/* Cover image */}
+          <div className={`flex items-center justify-center ${isMobile ? 'flex-[0.9] py-0.5' : 'flex-1 py-4 sm:py-8'}`}>
+            <div className={`relative flex w-full items-center justify-center ${isMobile ? 'px-0 max-w-[50vw]' : 'px-4 sm:max-w-sm'}`}>
               {currentSong.video_url ? (
                 <div className="relative w-full overflow-hidden rounded-2xl shadow-elegant" style={{ aspectRatio: '1 / 1' }}>
                   <img
@@ -330,7 +330,7 @@ export default function PlayerPage() {
                     src={songCoverUrl(currentSong)}
                     alt={currentSong.title}
                     className="w-full rounded-2xl object-contain shadow-elegant sm:aspect-square sm:object-cover"
-                    style={isMobile ? { maxHeight: '25vh' } : {}}
+                    style={isMobile ? { maxHeight: '40vh' } : {}}
                     onDoubleClick={async () => {
                       const isNowLiked = await toggleLike();
                       if (isNowLiked) {

@@ -175,8 +175,8 @@ export default function Home() {
               <Music2 className="h-4 w-4 text-primary-foreground" />
             </div>
             <div>
-              <h2 className="text-lg font-bold text-foreground">Collaborations</h2>
-              <p className="text-xs text-muted-foreground">Créateurs & artistes</p>
+              <h2 className="text-lg font-bold text-foreground">Créateurs de l'application</h2>
+              <p className="text-xs text-muted-foreground">Administrateurs de Jux-Music &amp; Dev de l'app</p>
             </div>
           </div>
           <div className="flex gap-4 overflow-x-auto pb-2 scrollbar-hide">

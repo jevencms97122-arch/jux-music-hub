@@ -2,7 +2,7 @@ import { useEffect, useState, useRef } from 'react';
 import { isRunningInDesktopApp, getDesktopAppVersion, LATEST_DESKTOP_VERSION } from '@/lib/versionCheck';
 import UpdateModal from './UpdateModal';
 
-type CheckState = 'spinning' | 'scanning' | 'up-to-date' | 'update-available';
+type CheckState = 'spinning' | 'scanning' | 'up-to-date' | 'update-available' | 'fading-out';
 
 export default function UpdateChecker() {
   const [state, setState] = useState<CheckState>('spinning');
@@ -10,6 +10,7 @@ export default function UpdateChecker() {
   const [modalOpen, setModalOpen] = useState(false);
   const visibleRef = useRef(true);
   const updateTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const fadeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -46,6 +47,17 @@ export default function UpdateChecker() {
 
       if (currentVersion === LATEST_DESKTOP_VERSION) {
         setState('up-to-date');
+
+        // Disparaître après 2 secondes
+        fadeTimerRef.current = setTimeout(() => {
+          if (!cancelled) {
+            setState('fading-out');
+            // Après l'animation de fade (300ms), masquer complètement
+            setTimeout(() => {
+              if (!cancelled) visibleRef.current = false;
+            }, 300);
+          }
+        }, 2000);
       } else {
         setState('update-available');
 
@@ -67,10 +79,16 @@ export default function UpdateChecker() {
   // Si pas sur l'app PC, ne rien afficher
   if (!visibleRef.current) return null;
 
+  // Animations
+  const containerAnimClass =
+    state === 'fading-out'
+      ? 'animate-fade-out'
+      : 'animate-fade-in';
+
   return (
     <>
       {/* Indicateur en bas au centre */}
-      <div className="fixed bottom-28 left-1/2 z-40 -translate-x-1/2">
+      <div className={`fixed bottom-28 left-1/2 z-40 -translate-x-1/2 ${containerAnimClass}`}>
         <div className="flex items-center gap-2 rounded-full bg-background/80 backdrop-blur-md border border-border/50 px-4 py-2 shadow-elegant">
           {state === 'spinning' && (
             <>

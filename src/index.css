@@ -128,6 +128,10 @@
   animation: scaleIn 0.5s cubic-bezier(0.16, 1, 0.3, 1) both;
 }
 
+.animate-fade-out {
+  animation: fadeOut 0.3s ease-out both;
+}
+
 /* Utility: apply animation via a custom property so we can reuse without repeating the cubic-bezier */
 @keyframes _fadeSlideUp { from { opacity: 0; transform: translateY(24px); } to { opacity: 1; transform: translateY(0); } }
 @keyframes _fadeIn { from { opacity: 0; } to { opacity: 1; } }

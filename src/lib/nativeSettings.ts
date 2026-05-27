@@ -3,25 +3,10 @@
  * L'app expose getAppPreferences()/setAppPreference(key,value).
  * Les nouveaux paramètres ajoutés côté natif apparaissent automatiquement
  * dans l'UI Web sans avoir à mettre à jour le site.
+ *
+ * NOTE : Les types JuxAndroid/JuxDesktop sont déclarés dans platform.ts
+ * et partagés globalement. On importe ici le type de helper pour le bridge.
  */
-
-declare global {
-  interface Window {
-    Android?: {
-      getAppPreferences?: () => string;
-      setAppPreference?: (key: string, value: unknown) => void;
-    };
-    JuxAndroid?: {
-      getAppPreferences?: () => string;
-      setAppPreference?: (key: string, value: unknown) => void;
-    };
-    JuxDesktop?: {
-      getAppPreferences?: () => string | Promise<string>;
-      setAppPreference?: (key: string, value: unknown) => void | Promise<void>;
-    };
-  }
-}
-
 export type NativePrefValue = boolean | string | number;
 
 export interface NativePrefMeta {

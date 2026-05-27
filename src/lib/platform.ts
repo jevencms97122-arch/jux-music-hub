@@ -17,12 +17,19 @@ export interface DownloadProgressEvent {
 
 declare global {
   interface Window {
+    /** Bridge natif Android (legacy, sans les téléchargements) */
+    Android?: {
+      getAppPreferences?: () => string;
+      setAppPreference?: (key: string, value: unknown) => void;
+    };
     JuxAndroid?: {
       downloadSong: (payload: string) => void;
       isAvailable?: () => boolean;
       isDownloaded?: (songId: string) => boolean | string;
       deleteDownload?: (songId: string) => boolean | string;
       listDownloads?: () => string;
+      getAppPreferences?: () => string;
+      setAppPreference?: (key: string, value: unknown) => void;
     };
     JuxDesktop?: {
       downloadSong: (payload: unknown) => void | Promise<void>;
@@ -31,7 +38,15 @@ declare global {
       listDownloads?: () => string[] | Promise<string[]>;
       onDownloadProgress?: (cb: (e: DownloadProgressEvent) => void) => void;
       platform?: string;
+      /** Retourne la version de l'app PC (ex: "1.0.1") */
+      getAppVersion?: () => string | Promise<string>;
+      getAppPreferences?: () => string | Promise<string>;
+      setAppPreference?: (key: string, value: unknown) => void | Promise<void>;
     };
+    /** Version de l'app PC exposée par le bridge natif (fallback synchrone) */
+    __JUX_APP_VERSION?: string;
+    /** Fonction utilitaire exposée par le bridge natif */
+    getJuxAppVersion?: () => string | Promise<string>;
     /** Le bridge natif appelle cette fonction pour notifier la WebView */
     juxOnDownloadProgress?: (e: DownloadProgressEvent) => void;
   }

@@ -25,6 +25,7 @@ import CollabDetail from '@/pages/CollabDetail';
 import MiniPlayer from '@/components/MiniPlayer';
 import PlayerPage from '@/components/PlayerPage';
 import BottomNav from '@/components/BottomNav';
+import UpdateChecker from '@/components/UpdateChecker';
 import { Toaster } from '@/components/ui/sonner';
 
 const pageVariants = {
@@ -117,6 +118,8 @@ function AppContent() {
   return (
     <PlayerProvider>
       <div className="min-h-screen">
+        {/* Vérification de mise à jour de l'app PC -- visible uniquement sur Jux Desktop */}
+        {profileCompleted && <UpdateChecker />}
         <AnimatePresence mode="wait" initial={false}>
           <Routes location={location} key={location.pathname}>
             <Route path="/" element={<Navigate to="/jux" replace />} />

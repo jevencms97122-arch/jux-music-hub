@@ -12,12 +12,14 @@ const FALLBACK_PIPED_BASE = 'https://api.piped.yt';
 // Proxy CORS public (évite le blocage navigateur si l'instance Piped n'autorise pas ton domaine)
 const ALL_ORIGINS_RAW = 'https://api.allorigins.win/raw?url=';
 
-// Liste d’instances Piped à essayer (quand le proxy Vite ne marche pas ou ne cible pas une instance correcte)
+/**
+ * Instances Piped à essayer (les précédentes ont été signalées comme mortes/indisponibles => ERR_NAME_NOT_RESOLVED).
+ * On privilégie une instance “privacydev” supposée active, puis quelques alternatives.
+ */
 const PIPED_INSTANCES: string[] = [
-  DEFAULT_PIPED_BASE, // same-origin proxy route
-  'https://api.piped.yt',
-  'https://piped-api.garudalinux.org',
-  'https://pipedapi.oxytw.net',
+  DEFAULT_PIPED_BASE, // same-origin proxy route (si fonctionnel sur ton host)
+  'https://piped-api.privacydev.net',
+  'https://pipedapi.tokhmi.xyz',
 ];
 
 type TrendingItem = {

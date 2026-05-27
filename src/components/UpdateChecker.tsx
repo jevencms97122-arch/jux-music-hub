@@ -1,5 +1,5 @@
 import { useEffect, useState, useRef } from 'react';
-import { isRunningInDesktopApp, getDesktopAppVersion, LATEST_DESKTOP_VERSION } from '@/lib/versionCheck';
+import { getDesktopAppVersion, LATEST_DESKTOP_VERSION, isRunningInDesktopApp } from '@/lib/versionCheck';
 import UpdateModal from './UpdateModal';
 
 type CheckState = 'spinning' | 'scanning' | 'up-to-date' | 'update-available' | 'fading-out';
@@ -9,17 +9,9 @@ export default function UpdateChecker() {
   const [latestVersion] = useState(LATEST_DESKTOP_VERSION);
   const [modalOpen, setModalOpen] = useState(false);
   const visibleRef = useRef(true);
-  const modalTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const fadeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     let cancelled = false;
-
-    // Nettoie tous les timers
-    const clearAllTimers = () => {
-      if (modalTimerRef.current) clearTimeout(modalTimerRef.current);
-      if (fadeTimerRef.current) clearTimeout(fadeTimerRef.current);
-    };
 
     (async () => {
       // Étape 1 : 1 seconde de spinner sans rien faire
@@ -34,31 +26,25 @@ export default function UpdateChecker() {
       if (cancelled) return;
 
       // Vérifier si on est sur l'app PC
-      const isDesktop = isRunningInDesktopApp();
-      if (!isDesktop) {
-        setState('up-to-date');
+      if (!isRunningInDesktopApp()) {
+        // Pas sur l'app PC → on cache tout
+        visibleRef.current = false;
         return;
       }
 
-      // Lancer le scan avec un timeout de 5 secondes max
-      // On utilise Promise.race pour que le premier qui arrive gagne
-      const scanResult = await Promise.race([
-        getDesktopAppVersion(),
-        new Promise<'timeout'>((resolve) => {
-          const id = setTimeout(() => resolve('timeout' as const), 5000);
-          // On stocke le ref pour cleanup
-          modalTimerRef.current = id;
-        }),
-      ]);
+      // Tentative de récupération de la version
+      const currentVersion = await getDesktopAppVersion();
 
       if (cancelled) return;
 
-      if (scanResult === 'timeout') {
-        // Le scan a pris plus de 5 secondes → on force la mise à jour
+      // Si currentVersion est null, c'est que la fonction getAppVersion()
+      // n'existe pas dans le bridge → version 1.0.0 ou plus ancienne
+      // → on force la mise à jour
+      if (currentVersion === null) {
         setState('update-available');
 
         // 1 seconde après, ouvrir la modal
-        modalTimerRef.current = setTimeout(() => {
+        setTimeout(() => {
           if (!cancelled) {
             setModalOpen(true);
           }
@@ -66,20 +52,11 @@ export default function UpdateChecker() {
         return;
       }
 
-      // Le scan a répondu avant 5 secondes
-      const currentVersion = scanResult as string | null;
-
-      if (currentVersion === null) {
-        // Pas sur l'app PC → on cache tout
-        visibleRef.current = false;
-        return;
-      }
-
       if (currentVersion === LATEST_DESKTOP_VERSION) {
         setState('up-to-date');
 
         // Disparaître après 2 secondes
-        fadeTimerRef.current = setTimeout(() => {
+        setTimeout(() => {
           if (!cancelled) {
             setState('fading-out');
             setTimeout(() => {
@@ -91,7 +68,7 @@ export default function UpdateChecker() {
         setState('update-available');
 
         // 1 seconde après, ouvrir la modal
-        modalTimerRef.current = setTimeout(() => {
+        setTimeout(() => {
           if (!cancelled) {
             setModalOpen(true);
           }
@@ -101,7 +78,6 @@ export default function UpdateChecker() {
 
     return () => {
       cancelled = true;
-      clearAllTimers();
     };
   }, []);
 

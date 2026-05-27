@@ -14,7 +14,6 @@ import type { Song, Playlist } from '@/types/music';
 import CollabCard from '@/components/CollabCard';
 import { collaborations } from '@/data/collaborations';
 import TutorialModal from '@/components/TutorialModal';
-import YouTubeTrendsSection from '@/components/YouTubeTrendsSection';
 import juxLogo from '@/assets/jux-logo.png';
 
 export default function Home() {
@@ -299,11 +298,6 @@ export default function Home() {
           </div>
         )}
       </section>
-
-      {/* ── YouTube Trends (Piped) ── */}
-      <div style={{ animation: 'fadeSlideUp 0.6s cubic-bezier(0.16,1,0.3,1) both', animationDelay: '0.95s' }}>
-        <YouTubeTrendsSection />
-      </div>
 
       {/* ── Tutoriel Modal ── */}
       <TutorialModal open={tutorialOpen} onClose={() => setTutorialOpen(false)} />

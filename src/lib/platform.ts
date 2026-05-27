@@ -30,6 +30,8 @@ declare global {
       listDownloads?: () => string;
       getAppPreferences?: () => string;
       setAppPreference?: (key: string, value: unknown) => void;
+      /** Retourne la version de l'app Android (ex: "1.0.1") */
+      getAppVersion?: () => string;
     };
     JuxDesktop?: {
       downloadSong: (payload: unknown) => void | Promise<void>;

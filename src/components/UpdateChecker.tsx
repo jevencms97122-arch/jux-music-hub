@@ -1,12 +1,12 @@
 import { useEffect, useState } from 'react';
-import { getDesktopAppVersion, LATEST_DESKTOP_VERSION, isRunningInDesktopApp } from '@/lib/versionCheck';
+import { getNativeAppVersion, LATEST_APP_VERSION, isRunningInNativeApp, getDownloadUrl } from '@/lib/versionCheck';
 import UpdateModal from './UpdateModal';
 
 type CheckState = 'spinning' | 'scanning' | 'up-to-date' | 'update-available' | 'fading-out';
 
 export default function UpdateChecker() {
   const [state, setState] = useState<CheckState>('spinning');
-  const [latestVersion] = useState(LATEST_DESKTOP_VERSION);
+  const [latestVersion] = useState(LATEST_APP_VERSION);
   const [modalOpen, setModalOpen] = useState(false);
   const [visible, setVisible] = useState(true);
 
@@ -25,15 +25,15 @@ export default function UpdateChecker() {
       await new Promise((resolve) => setTimeout(resolve, 400));
       if (cancelled) return;
 
-      // Vérifier si on est sur l'app PC
-      if (!isRunningInDesktopApp()) {
-        // Pas sur l'app PC → on cache tout
+      // Vérifier si on est sur l'app native (PC ou Android)
+      if (!isRunningInNativeApp()) {
+        // Pas sur l'app native → on cache tout
         setVisible(false);
         return;
       }
 
       // Lancer la récupération de version avec un timeout de 5 secondes
-      const scanPromise = getDesktopAppVersion();
+      const scanPromise = getNativeAppVersion();
       const timeoutPromise = new Promise<'timeout'>((resolve) => {
         setTimeout(() => resolve('timeout' as const), 5000);
       });
@@ -63,7 +63,7 @@ export default function UpdateChecker() {
         return;
       }
 
-      if (currentVersion === LATEST_DESKTOP_VERSION) {
+      if (currentVersion === LATEST_APP_VERSION) {
         setState('up-to-date');
 
         // Disparaître après 2 secondes
@@ -92,7 +92,7 @@ export default function UpdateChecker() {
     };
   }, []);
 
-  // Si pas sur l'app PC ou timeout, ne rien afficher
+  // Si pas sur l'app native ou timeout, ne rien afficher
   if (!visible) return null;
 
   // Animations

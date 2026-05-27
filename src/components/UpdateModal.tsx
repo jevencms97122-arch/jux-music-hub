@@ -1,13 +1,12 @@
 import { X, Download } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { getDownloadUrl } from '@/lib/versionCheck';
 
 interface UpdateModalProps {
   open: boolean;
   onClose: () => void;
   latestVersion: string;
 }
-
-const JUX_STORE_URL = "https://juxstore.lovable.app/app/4e44fb8c-839e-494d-b0a9-cf92d9c4fafb?q=";
 
 export default function UpdateModal({ open, onClose, latestVersion }: UpdateModalProps) {
   if (!open) return null;
@@ -66,7 +65,7 @@ export default function UpdateModal({ open, onClose, latestVersion }: UpdateModa
           asChild
         >
           <a
-            href={JUX_STORE_URL}
+            href={getDownloadUrl()}
             target="_blank"
             rel="noopener noreferrer"
           >

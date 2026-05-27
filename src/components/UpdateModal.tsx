@@ -1,6 +1,6 @@
 import { X, Download } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { getDownloadUrl } from '@/lib/versionCheck';
+import { getDownloadUrl, getReleaseNotes } from '@/lib/versionCheck';
 
 interface UpdateModalProps {
   open: boolean;
@@ -54,7 +54,7 @@ export default function UpdateModal({ open, onClose, latestVersion }: UpdateModa
         {/* Description */}
         <div className="mb-6 rounded-xl bg-secondary/50 p-4">
           <p className="text-sm text-muted-foreground leading-relaxed">
-            Les changements sont que la barre de scroll est maintenant cordée avec le décors du site.
+            {getReleaseNotes()}
           </p>
         </div>
 

@@ -112,15 +112,33 @@ export function isRunningInNativeApp(): boolean {
 }
 
 /**
+ * Retourne la plateforme détectée.
+ */
+export function getDetectedPlatform(): JuxPlatform {
+  if (typeof window === "undefined") return 'web';
+  const ua = (navigator.userAgent || "").toLowerCase();
+  if (window.JuxAndroid || ua.includes("jux_music") || ua.includes("com.example.jux_music")) return 'android-app';
+  if (window.JuxDesktop || ua.includes("jux-music-pc-app") || ua.includes("electron")) return 'windows-app';
+  return 'web';
+}
+
+/**
  * Retourne l'URL de téléchargement selon la plateforme détectée.
  */
 export function getDownloadUrl(): string {
-  const ua = (navigator.userAgent || "").toLowerCase();
-  const isAndroid = !!(
-    window.JuxAndroid ||
-    ua.includes("jux_music") ||
-    ua.includes("com.example.jux_music")
-  );
-  if (isAndroid) return DOWNLOAD_URLS['android-app'];
+  const platform = getDetectedPlatform();
+  if (platform === 'android-app') return DOWNLOAD_URLS['android-app'];
   return DOWNLOAD_URLS['windows-app'];
+}
+
+/**
+ * Retourne les notes de mise à jour selon la plateforme détectée.
+ */
+export function getReleaseNotes(): string {
+  const platform = getDetectedPlatform();
+  if (platform === 'android-app') {
+    return "Les liens externes sont maintenant redirigés soit par l'application demandée ou le navigateur par défaut.";
+  }
+  // PC Desktop
+  return "Les changements sont que la barre de scroll est maintenant cordée avec le décors du site.";
 }

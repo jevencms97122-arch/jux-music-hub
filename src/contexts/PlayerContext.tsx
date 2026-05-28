@@ -6,6 +6,7 @@ import { extractDominantHsl, applyAccentHsl } from '@/lib/dominantColor';
 import { updateStreak } from '@/lib/streaks';
 import { setMediaSessionMetadata, setMediaSessionHandlers, setMediaSessionPosition, setMediaSessionPlaybackState, clearMediaSession } from '@/lib/notifications';
 import { toast } from 'sonner';
+import { useTheme } from '@/contexts/ThemeContext';
 import type { Song } from '@/types/music';
 
 export interface ListenSessionRow {
@@ -329,14 +330,17 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => { setMediaSessionPlaybackState(currentSong ? (isPlaying ? 'playing' : 'paused') : 'none'); }, [isPlaying, currentSong]);
 
   // Adapter l'accent de couleur à la cover du morceau en cours
+  // Ne s'applique que si dynamicColorEnabled est true (depuis ThemeContext)
+  const { dynamicColorEnabled } = useTheme();
   useEffect(() => {
     if (!currentSong) { applyAccentHsl(null); return; }
+    if (!dynamicColorEnabled) { applyAccentHsl(null); return; }
     let cancelled = false;
     extractDominantHsl(songCoverUrl(currentSong)).then((hsl) => {
       if (!cancelled) applyAccentHsl(hsl);
     });
     return () => { cancelled = true; };
-  }, [currentSong]);
+  }, [currentSong, dynamicColorEnabled]);
   useEffect(() => {
     setMediaSessionHandlers({
       play: () => getActive()?.play(),

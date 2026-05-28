@@ -128,13 +128,13 @@ export default function ProfilePage() {
             <UploadIcon className="mr-2 h-4 w-4" /> Publier
           </Button>
 
-          <Button
-            variant="secondary"
-            size="sm"
-            onClick={() => navigate('/wrapped')}
-          >
-            <Sparkles className="mr-2 h-4 w-4" /> Wrapped
-          </Button>
+          <ThemeSelectorSheet
+            triggerLabel={
+              <Button variant="secondary" size="sm" className="w-full">
+                <Award className="mr-2 h-4 w-4" /> Thèmes
+              </Button>
+            }
+          />
 
           <Dialog>
             <DialogTrigger asChild>
@@ -172,16 +172,12 @@ export default function ProfilePage() {
           </Dialog>
         </div>
 
-        {/* Paramètres (à gauche) + Déconnexion */}
-        <div className="mt-2 flex gap-2">
-          <div className="flex-1">
-            <ThemeSelectorSheet triggerLabel="Paramètres" />
-          </div>
-
+        {/* Déconnexion */}
+        <div className="mt-2">
           <Button
             variant="ghost"
             size="sm"
-            className="flex-1 text-destructive hover:text-destructive"
+            className="w-full text-destructive hover:text-destructive"
             onClick={logout}
           >
             <LogOut className="mr-2 h-4 w-4" /> Se déconnecter

@@ -1,5 +1,6 @@
 import { useMemo } from 'react';
-import { Lock } from 'lucide-react';
+import { Switch } from '@/components/ui/switch';
+import { Palette } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
   Sheet,
@@ -16,49 +17,48 @@ const PREVIEW_SIZE_CLASS = 'h-10 w-10 sm:h-11 sm:w-11';
 
 export default function ThemeSelectorSheet({
   triggerLabel,
+  triggerClassName,
 }: {
   triggerLabel: React.ReactNode;
+  triggerClassName?: string;
 }) {
-  const { themes, currentTheme, setTheme } = useTheme();
+  const { themes, currentTheme, setTheme, dynamicColorEnabled, setDynamicColorEnabled } = useTheme();
+
+  const hasAnimation = currentTheme.backgroundAnimation != null;
 
   const themeButtons = useMemo(() => {
-    return themes.map((t, idx) => {
+    return themes.map((t) => {
       const isActive = t.id === currentTheme.id;
-
-      // Optionnel : certains thèmes "lockés" pour effet premium (simple rule)
-      const locked = idx % 3 === 2; // 0-1 unlocked, 2 locked, etc.
 
       return (
         <button
           key={t.id}
           type="button"
-          onClick={() => {
-            if (locked) return;
-            setTheme(t.id);
-          }}
+          onClick={() => setTheme(t.id)}
           aria-label={`Theme ${t.name}`}
+          title={t.name}
           className={cn(
             'relative inline-flex items-center justify-center rounded-xl border p-[2px] transition-transform',
             'hover:scale-[1.03]',
             isActive ? 'border-white/90' : 'border-transparent',
-            locked ? 'opacity-70 grayscale' : 'opacity-100 grayscale-0',
           )}
         >
           <span
             className={cn(
               PREVIEW_SIZE_CLASS,
-              'rounded-[9px] bg-cover bg-center'
+              'rounded-[9px]'
             )}
-            style={{ backgroundImage: t.background.includes('gradient') ? t.background : undefined, background: t.background }}
+            style={{
+              background: t.background,
+              backgroundSize: t.backgroundAnimation ? '200% 200%' : undefined,
+            }}
           />
-          {locked && (
-            <span className="pointer-events-none absolute inset-0 flex items-center justify-center">
-              <span className="grid h-8 w-8 place-items-center rounded-full bg-black/40 backdrop-blur">
-                <Lock className="h-4 w-4 text-white" />
-              </span>
+          {t.backgroundAnimation && (
+            <span className="pointer-events-none absolute -right-1 -top-1 rounded-full bg-gradient-to-br from-purple-400 to-pink-500 px-1 text-[8px] font-bold text-white leading-none py-[1px]">
+              ✦
             </span>
           )}
-          {!locked && isActive && (
+          {!t.backgroundAnimation && isActive && (
             <span className="pointer-events-none absolute -right-1 -top-1 rounded-full bg-white p-1">
               <span className="block h-2.5 w-2.5 rounded-full bg-black/80" />
             </span>
@@ -71,22 +71,33 @@ export default function ThemeSelectorSheet({
   return (
     <Sheet>
       <SheetTrigger asChild>
-        <Button variant="secondary" size="sm">
-          {triggerLabel}
-        </Button>
+        {typeof triggerLabel === 'string' ? (
+          <Button variant="secondary" size="sm" className={triggerClassName}>
+            {triggerLabel}
+          </Button>
+        ) : (
+          triggerLabel
+        )}
       </SheetTrigger>
 
       <SheetContent side="left" className="w-full sm:max-w-md">
         <SheetHeader>
           <SheetTitle>Thème de l’application</SheetTitle>
-          <SheetDescription>Choisis une ambiance type Nitro (unies + fondus).</SheetDescription>
+          <SheetDescription>
+            Choisis une ambiance type Nitro (unies + fondus).
+            {hasAnimation && (
+              <span className="mt-1 block text-xs text-purple-400">
+                ✦ Animé • se met en pause au focus perdu
+              </span>
+            )}
+          </SheetDescription>
         </SheetHeader>
 
         <div className="mt-4">
           <div className="mb-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
             Aperçus
           </div>
-          <div className="flex gap-3 overflow-x-auto pb-2">
+          <div className="flex flex-wrap gap-3">
             {themeButtons}
           </div>
 
@@ -96,7 +107,28 @@ export default function ThemeSelectorSheet({
 
             <div
               className="mt-3 h-16 w-full rounded-lg border"
-              style={{ background: currentTheme.background }}
+              style={{
+                background: currentTheme.background,
+                backgroundSize: currentTheme.backgroundAnimation ? '200% 200%' : undefined,
+                animation: currentTheme.backgroundAnimation ?? undefined,
+              }}
+            />
+          </div>
+
+          {/* Option : couleur dynamique depuis la cover de la musique */}
+          <div className="mt-4 flex items-center justify-between rounded-xl border bg-secondary/40 p-4">
+            <div className="flex items-center gap-3">
+              <Palette className="h-5 w-5 text-muted-foreground" />
+              <div>
+                <div className="text-sm font-semibold">Couleur dynamique</div>
+                <div className="text-xs text-muted-foreground">
+                  Adapte les couleurs à la cover de la musique
+                </div>
+              </div>
+            </div>
+            <Switch
+              checked={dynamicColorEnabled}
+              onCheckedChange={setDynamicColorEnabled}
             />
           </div>
         </div>

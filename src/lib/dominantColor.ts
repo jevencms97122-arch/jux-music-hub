@@ -65,16 +65,60 @@ export async function extractDominantHsl(imageUrl: string): Promise<string | nul
   });
 }
 
+/**
+ * Applique une couleur d'accent (dominante) ou restaure les couleurs du thème
+ * si `hsl` est null. Pour cela, on stocke les valeurs du thème via `storeThemeAccents()`
+ * et on les restaure via `restoreThemeAccents()`.
+ */
+
+let _savedTheme: {
+  primary: string;
+  primaryGlow: string;
+  accent: string;
+  ring: string;
+  gradientPrimary: string;
+  gradientHero: string;
+  shadowElegant: string;
+} | null = null;
+
+/** Sauvegarde les valeurs d'accent provenant du thème actif */
+export function storeThemeAccents(theme: {
+  primary: string;
+  primaryGlow?: string;
+  accent: string;
+  ring: string;
+}) {
+  const prim = theme.primary;
+  const glow = theme.primaryGlow ?? prim;
+  _savedTheme = {
+    primary: prim,
+    primaryGlow: glow,
+    accent: theme.accent,
+    ring: theme.ring,
+    gradientPrimary: `linear-gradient(135deg, hsl(${prim}), hsl(${glow}))`,
+    gradientHero: `radial-gradient(ellipse at top, hsl(${prim} / 0.18), transparent 60%)`,
+    shadowElegant: `0 10px 40px -10px hsl(${prim} / 0.35)`,
+  };
+}
+
+/** Restaure les couleurs d'accent du thème */
+export function restoreThemeAccents() {
+  const root = document.documentElement;
+  if (!_savedTheme) return;
+  const t = _savedTheme;
+  root.style.setProperty('--primary', t.primary);
+  root.style.setProperty('--primary-glow', t.primaryGlow);
+  root.style.setProperty('--accent', t.accent);
+  root.style.setProperty('--ring', t.ring);
+  root.style.setProperty('--gradient-primary', t.gradientPrimary);
+  root.style.setProperty('--gradient-hero', t.gradientHero);
+  root.style.setProperty('--shadow-elegant', t.shadowElegant);
+}
+
 export function applyAccentHsl(hsl: string | null) {
   const root = document.documentElement;
   if (!hsl) {
-    root.style.removeProperty('--primary');
-    root.style.removeProperty('--primary-glow');
-    root.style.removeProperty('--accent');
-    root.style.removeProperty('--ring');
-    root.style.removeProperty('--gradient-primary');
-    root.style.removeProperty('--gradient-hero');
-    root.style.removeProperty('--shadow-elegant');
+    restoreThemeAccents();
     return;
   }
   // Glow = même teinte un peu plus claire

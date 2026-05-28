@@ -84,7 +84,7 @@ export default function ThemeSelectorSheet({
         <SheetHeader>
           <SheetTitle>Thème de l’application</SheetTitle>
           <SheetDescription>
-            Choisis une ambiance type Nitro (unies + fondus).
+            Choisis une ambiance (statiques ou animées).
             {hasAnimation && (
               <span className="mt-1 block text-xs text-purple-400">
                 ✦ Animé • se met en pause au focus perdu

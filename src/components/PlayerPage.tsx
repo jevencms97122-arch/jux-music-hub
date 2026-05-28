@@ -6,6 +6,7 @@ import { ChevronDown, Play, Pause, SkipBack, SkipForward, Shuffle, Repeat, Repea
 import CommentsModal from './CommentsModal';
 import DownloadAppModal from './DownloadAppModal';
 import VolumeControl from '@/components/VolumeControl';
+import PlaybackRateControl from '@/components/PlaybackRateControl';
 import SynchronizedVideoPlayer from './SynchronizedVideoPlayer';
 import { detectPlatform, requestNativeDownload, isSongDownloaded, deleteDownloadedSong, onDownloadProgress, type DownloadStatus } from '@/lib/platform';
 import { songAudioUrl } from '@/lib/storage';
@@ -46,6 +47,7 @@ export default function PlayerPage() {
   const [showDownloadApp, setShowDownloadApp] = useState(false);
   const [commentsCount, setCommentsCount] = useState(0);
   const [volumeOpen, setVolumeOpen] = useState(false);
+  const [playbackRateOpen, setPlaybackRateOpen] = useState(false);
 
   const [downloadStatus, setDownloadStatus] = useState<DownloadStatus>('idle');
   const [downloadProgress, setDownloadProgress] = useState(0);
@@ -233,6 +235,9 @@ export default function PlayerPage() {
                 <DropdownMenuItem onClick={() => setVolumeOpen(true)}>
                   <Volume2 className="mr-2 h-4 w-4" /> Volume
                 </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => setPlaybackRateOpen(true)}>
+                  Musique à {Math.round(playbackRate * 100)}%
+                </DropdownMenuItem>
                 <div className="my-1 border-t border-border" />
                 <DropdownMenuItem onClick={() => setShowPlaylist(true)}>Ajouter à la playlist</DropdownMenuItem>
                 <DropdownMenuItem onClick={() => setShowStory(true)}>Ajouter à la story</DropdownMenuItem>
@@ -412,29 +417,6 @@ export default function PlayerPage() {
             </div>
           )}
 
-          {/* Playback rate - desktop only */}
-          {!isMobile && (
-            <div className="mb-3 flex items-center justify-center gap-3 rounded-full bg-secondary/40 px-4 py-2 backdrop-blur">
-              <button
-                onClick={() => setPlaybackRate(Math.max(0.5, Math.round((playbackRate - 0.01) * 100) / 100))}
-                aria-label="Diminuer la vitesse"
-                className="rounded-full p-1.5 hover:bg-secondary"
-              >
-                <Minus className="h-4 w-4" />
-              </button>
-              <span className="min-w-[110px] text-center text-sm font-medium">
-                Musique à {Math.round(playbackRate * 100)}%
-              </span>
-              <button
-                onClick={() => setPlaybackRate(Math.min(2, Math.round((playbackRate + 0.01) * 100) / 100))}
-                aria-label="Augmenter la vitesse"
-                className="rounded-full p-1.5 hover:bg-secondary"
-              >
-                <Plus className="h-4 w-4" />
-              </button>
-            </div>
-          )}
-
           {/* Seek bar */}
           <div className={isMobile ? 'mb-0.5' : 'mb-2'}>
             <Slider
@@ -476,6 +458,7 @@ export default function PlayerPage() {
       <CommentsModal open={showComments} onOpenChange={setShowComments} songId={currentSong.id} onCountChange={setCommentsCount} />
       <DownloadAppModal open={showDownloadApp} onOpenChange={setShowDownloadApp} />
       <VolumeControl open={volumeOpen} onClose={() => setVolumeOpen(false)} />
+      <PlaybackRateControl open={playbackRateOpen} onClose={() => setPlaybackRateOpen(false)} />
     </>
   );
 }

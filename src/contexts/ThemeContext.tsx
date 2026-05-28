@@ -43,10 +43,12 @@ function applyAnimationState(theme: AppTheme) {
   const body = document.body;
   if (theme.backgroundAnimation) {
     body.setAttribute('data-animated-bg', '');
+    body.style.background = theme.background;
     body.style.backgroundSize = '200% 200%';
     body.style.animation = theme.backgroundAnimation;
   } else {
     body.removeAttribute('data-animated-bg');
+    body.style.background = '';
     body.style.backgroundSize = '';
     body.style.animation = '';
   }
@@ -172,7 +174,7 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
       'Redémarrage recommandé',
       {
         description: 'Un redémarrage de l\'application est recommandé pour appliquer complètement les changements.',
-        duration: 4000,
+        duration: 10000,
       }
     );
   }, []);

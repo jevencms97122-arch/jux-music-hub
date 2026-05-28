@@ -166,8 +166,20 @@ function AppContent() {
 function AppWithTheme() {
   const { currentTheme } = useTheme();
 
+  // Si le thème a une animation, le fond animé est déjà géré via applyAnimationState() sur le body
+  // On évite de mettre un background statique qui écraserait l'animation
+  const isAnimated = currentTheme.backgroundAnimation != null;
+
   return (
-    <div style={{ background: currentTheme.background, minHeight: '100vh' }}>
+    <div
+      style={{
+        background: isAnimated ? 'transparent' : currentTheme.background,
+        backgroundSize: isAnimated ? '200% 200%' : undefined,
+        animation: isAnimated ? currentTheme.backgroundAnimation : undefined,
+        minHeight: '100vh',
+      }}
+      data-animated-bg={isAnimated ? '' : undefined}
+    >
       <AppContent />
     </div>
   );

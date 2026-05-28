@@ -1,12 +1,12 @@
 import { useEffect, useState } from 'react';
-import { getNativeAppVersion, LATEST_APP_VERSION, isRunningInNativeApp, getDownloadUrl } from '@/lib/versionCheck';
+import { checkForUpdate, isRunningInNativeApp } from '@/lib/versionCheck';
 import UpdateModal from './UpdateModal';
 
 type CheckState = 'spinning' | 'scanning' | 'up-to-date' | 'update-available' | 'fading-out';
 
 export default function UpdateChecker() {
   const [state, setState] = useState<CheckState>('spinning');
-  const [latestVersion] = useState(LATEST_APP_VERSION);
+  const [latestVersion, setLatestVersion] = useState('');
   const [modalOpen, setModalOpen] = useState(false);
   const [visible, setVisible] = useState(true);
 
@@ -32,8 +32,8 @@ export default function UpdateChecker() {
         return;
       }
 
-      // Lancer la récupération de version avec un timeout de 5 secondes
-      const scanPromise = getNativeAppVersion();
+      // Lancer la vérification complète avec timeout de 5 secondes
+      const scanPromise = checkForUpdate();
       const timeoutPromise = new Promise<'timeout'>((resolve) => {
         setTimeout(() => resolve('timeout' as const), 5000);
       });
@@ -48,7 +48,10 @@ export default function UpdateChecker() {
         return;
       }
 
-      const currentVersion = result as string | null;
+      const { available, currentVersion, latestVersion: detectedLatest } = result;
+
+      // Stocker la version pour la modale
+      setLatestVersion(detectedLatest);
 
       if (currentVersion === null) {
         // Pas d'API getAppVersion dispo → version obsolète → mise à jour
@@ -63,7 +66,7 @@ export default function UpdateChecker() {
         return;
       }
 
-      if (currentVersion === LATEST_APP_VERSION) {
+      if (!available) {
         setState('up-to-date');
 
         // Disparaître après 2 secondes

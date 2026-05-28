@@ -54,7 +54,7 @@ export default function PlayerPage() {
   const [downloadError, setDownloadError] = useState<string | null>(null);
   const [isDownloaded, setIsDownloaded] = useState(false);
 
-  // Détection mobile
+  // Détection mobile + Android app
   const [isMobile, setIsMobile] = useState(window.innerWidth < 640);
 
   useEffect(() => {
@@ -62,6 +62,10 @@ export default function PlayerPage() {
     window.addEventListener('resize', onResize);
     return () => window.removeEventListener('resize', onResize);
   }, []);
+
+  const platform = detectPlatform();
+  const isAndroidApp = platform === 'android-app';
+  const skipVideoBg = isMobile || isAndroidApp;
 
   // Vérifie si le morceau est déjà téléchargé hors connexion
   useEffect(() => {
@@ -207,7 +211,7 @@ export default function PlayerPage() {
     <>
       <div className="fixed inset-0 z-50 flex flex-col overflow-hidden bg-background animate-in slide-in-from-bottom">
         {/* ── Video background fullscreen ── */}
-        {currentSong.video_url ? (
+        {currentSong.video_url && !skipVideoBg ? (
           <SynchronizedVideoPlayer
             song={currentSong}
             isPlaying={isPlaying}
@@ -215,6 +219,15 @@ export default function PlayerPage() {
             onReady={signalVideoReady}
             asBackground
           />
+        ) : currentSong.video_url && skipVideoBg ? (
+          <div className="pointer-events-none absolute inset-0">
+            <img
+              src={songCoverUrl(currentSong)}
+              alt=""
+              className="h-full w-full object-cover"
+            />
+            <div className="absolute inset-0 bg-black/70" />
+          </div>
         ) : (
           <div className="pointer-events-none absolute inset-0 bg-gradient-hero" />
         )}

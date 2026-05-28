@@ -10,7 +10,7 @@
 import type { JuxPlatform } from './platform';
 
 /** Version actuelle de l'app à laquelle comparer */
-export const LATEST_APP_VERSION = "1.0.1";
+export const LATEST_APP_VERSION = "1.0.2";
 
 /** URLs de téléchargement selon la plateforme */
 export const DOWNLOAD_URLS: Record<Exclude<JuxPlatform, 'web'>, string> = {
@@ -140,5 +140,5 @@ export function getReleaseNotes(): string {
     return "Les liens externes sont maintenant redirigés soit par l'application demandée ou le navigateur par défaut.";
   }
   // PC Desktop
-  return "Les changements sont que la barre de scroll est maintenant cordée avec le décors du site.";
+  return "La présence sur Discord (Discord Rich Presence) a été correctement implémentée.";
 }

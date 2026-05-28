@@ -9,8 +9,11 @@
 
 import type { JuxPlatform } from './platform';
 
-/** Version actuelle de l'app à laquelle comparer */
-export const LATEST_APP_VERSION = "1.0.2";
+/** Version actuelle de l'app Android */
+export const LATEST_ANDROID_VERSION = "1.0.1";
+
+/** Version actuelle de l'app PC */
+export const LATEST_PC_VERSION = "1.0.2";
 
 /** URLs de téléchargement selon la plateforme */
 export const DOWNLOAD_URLS: Record<Exclude<JuxPlatform, 'web'>, string> = {
@@ -71,19 +74,23 @@ export async function getNativeAppVersion(): Promise<string | null> {
 /**
  * Vérifie si une mise à jour est disponible pour l'app native.
  *
- * @returns {Promise<{ available: boolean; currentVersion: string | null; latestVersion: string }>}
+ * @returns {Promise<{ available: boolean; currentVersion: string | null; latestVersion: string; platform: JuxPlatform }>}
  */
 export async function checkForUpdate(): Promise<{
   available: boolean;
   currentVersion: string | null;
   latestVersion: string;
+  platform: JuxPlatform;
 }> {
   const currentVersion = await getNativeAppVersion();
+  const platform = getDetectedPlatform();
+  const latestVersion = platform === 'android-app' ? LATEST_ANDROID_VERSION : LATEST_PC_VERSION;
 
   return {
-    available: currentVersion !== null && currentVersion !== LATEST_APP_VERSION,
+    available: currentVersion !== null && currentVersion !== latestVersion,
     currentVersion,
-    latestVersion: LATEST_APP_VERSION,
+    latestVersion,
+    platform,
   };
 }
 

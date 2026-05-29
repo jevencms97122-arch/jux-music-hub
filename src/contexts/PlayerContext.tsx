@@ -5,6 +5,8 @@ import { songAudioUrl, songCoverUrl } from '@/lib/storage';
 import { extractDominantHsl, applyAccentHsl } from '@/lib/dominantColor';
 import { updateStreak } from '@/lib/streaks';
 import { setMediaSessionMetadata, setMediaSessionHandlers, setMediaSessionPosition, setMediaSessionPlaybackState, clearMediaSession } from '@/lib/notifications';
+import { sendNowPlayingToNative, clearNowPlayingOnNative, onNativeCommand, resolveCoverUrl } from '@/lib/androidMediaBridge';
+import type { NativeCommandEvent } from '@/lib/androidMediaBridge';
 import { toast } from 'sonner';
 import { useTheme } from '@/contexts/ThemeContext';
 import type { Song } from '@/types/music';
@@ -325,6 +327,62 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     [audioARef.current, audioBRef.current].forEach((a) => { if (a) a.playbackRate = playbackRate; });
   }, [playbackRate]);
+
+  // ── Pont Android : envoyer les infos NowPlaying au natif ──────
+  useEffect(() => {
+    if (!currentSong) {
+      clearNowPlayingOnNative();
+      return;
+    }
+
+    const coverUrl = resolveCoverUrl(songCoverUrl(currentSong));
+
+    sendNowPlayingToNative({
+      songId: currentSong.id,
+      title: currentSong.title || 'Sans titre',
+      author: currentSong.author || 'Inconnu',
+      coverUrl,
+      duration,
+      currentTime,
+      isPlaying,
+      playbackRate,
+      volume,
+      repeatMode,
+      isShuffled,
+    });
+  }, [currentSong, isPlaying, currentTime, duration, playbackRate, volume, repeatMode, isShuffled]);
+
+  // ── Pont Android : écouter les commandes venant du natif ──────
+  useEffect(() => {
+    const unsubscribe = onNativeCommand((event: NativeCommandEvent) => {
+      switch (event.command) {
+        case 'play':
+          getActive()?.play().catch(console.error);
+          break;
+        case 'pause':
+          getActive()?.pause();
+          break;
+        case 'togglePlay':
+          togglePlay();
+          break;
+        case 'next':
+          next();
+          break;
+        case 'previous':
+          previous();
+          break;
+        case 'seek':
+          if (event.seekTime != null) seek(event.seekTime);
+          break;
+        case 'stop':
+          stopAudio();
+          break;
+      }
+    });
+
+    return () => unsubscribe();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // volontairement [] : les refs sont utilisées via les fonctions du contexte
 
   useEffect(() => { setMediaSessionMetadata(currentSong); }, [currentSong]);
   useEffect(() => { setMediaSessionPlaybackState(currentSong ? (isPlaying ? 'playing' : 'paused') : 'none'); }, [isPlaying, currentSong]);

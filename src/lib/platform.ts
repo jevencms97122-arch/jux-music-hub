@@ -32,6 +32,10 @@ declare global {
       setAppPreference?: (key: string, value: unknown) => void;
       /** Retourne la version de l'app Android (ex: "1.0.1") */
       getAppVersion?: () => string;
+      /** Met à jour la notification système Now Playing (titre, cover, etc.) */
+      updateNowPlaying?: (json: string) => void;
+      /** Efface la notification système */
+      clearNowPlaying?: () => void;
     };
     JuxDesktop?: {
       downloadSong: (payload: unknown) => void | Promise<void>;

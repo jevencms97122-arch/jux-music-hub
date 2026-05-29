@@ -128,6 +128,10 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
   const getInactive = () => (activeRef.current === 'A' ? audioBRef.current! : audioARef.current!);
 
   const nextRef = useRef<() => void>(() => {});
+  const previousRef = useRef<() => void>(() => {});
+  const togglePlayRef = useRef<() => void>(() => {});
+  const seekRef = useRef<(t: number) => void>(() => {});
+  const stopAudioRef = useRef<() => void>(() => {});
   const crossfadeSecondsRef = useRef(crossfadeSeconds);
   const repeatModeRef = useRef(repeatMode);
   const isSessionGuestRef = useRef(isSessionGuest);
@@ -353,6 +357,7 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
   }, [currentSong, isPlaying, currentTime, duration, playbackRate, volume, repeatMode, isShuffled]);
 
   // ── Pont Android : écouter les commandes venant du natif ──────
+  // Utilise les refs pour toujours avoir les dernières versions des fonctions
   useEffect(() => {
     const unsubscribe = onNativeCommand((event: NativeCommandEvent) => {
       switch (event.command) {
@@ -363,26 +368,28 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
           getActive()?.pause();
           break;
         case 'togglePlay':
-          togglePlay();
+        case 'play_pause':      // envoyé par l'app Android
+          togglePlayRef.current();
           break;
-        case 'next':
-          next();
+        case 'next':            // envoyé par l'app Android
+          nextRef.current();
           break;
         case 'previous':
-          previous();
+        case 'prev':            // envoyé par l'app Android
+          previousRef.current();
           break;
         case 'seek':
-          if (event.seekTime != null) seek(event.seekTime);
+          if (event.seekTime != null) seekRef.current(event.seekTime);
           break;
         case 'stop':
-          stopAudio();
+          stopAudioRef.current();
           break;
       }
     });
 
     return () => unsubscribe();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []); // volontairement [] : les refs sont utilisées via les fonctions du contexte
+  }, []);
 
   useEffect(() => { setMediaSessionMetadata(currentSong); }, [currentSong]);
   useEffect(() => { setMediaSessionPlaybackState(currentSong ? (isPlaying ? 'playing' : 'paused') : 'none'); }, [isPlaying, currentSong]);
@@ -759,9 +766,6 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
     if (prevIdx >= 0) playAtIndex(prevIdx);
   }, [queueIndex, playAtIndex]);
 
-  useEffect(() => { nextRef.current = next; }, [next]);
-
-
   const seek = useCallback((t: number) => {
     const a = getActive(); if (a) a.currentTime = t;
     const s = sessionRef.current;
@@ -776,6 +780,13 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
   const closePlayer = useCallback(() => setIsPlayerOpen(false), []);
   const setPlaybackRate = useCallback((r: number) => setPlaybackRateState(Math.max(0.5, Math.min(2, r))), []);
   const addToQueue = useCallback((song: Song) => setQueue((q) => [...q, song]), []);
+
+  // Synchroniser les refs avec les fonctions réelles pour le pont Android
+  useEffect(() => { nextRef.current = next; }, [next]);
+  useEffect(() => { previousRef.current = previous; }, [previous]);
+  useEffect(() => { togglePlayRef.current = togglePlay; }, [togglePlay]);
+  useEffect(() => { seekRef.current = seek; }, [seek]);
+  useEffect(() => { stopAudioRef.current = stopAudio; }, [stopAudio]);
 
   const startRadio = useCallback(async (seed: Song) => {
     const rec = await findRecommendedSongs(seed);

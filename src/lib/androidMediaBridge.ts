@@ -38,6 +38,8 @@ export type NativeCommand =
   | 'togglePlay'
   | 'next'
   | 'previous'
+  | 'prev'
+  | 'play_pause'
   | 'seek'
   | 'stop';
 

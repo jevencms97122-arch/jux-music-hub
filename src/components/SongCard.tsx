@@ -1,6 +1,7 @@
 import { songCoverUrl } from '@/lib/storage';
 import type { Song } from '@/types/music';
 import { Play, Heart, Headphones, Video } from 'lucide-react';
+import CachedImage from '@/components/CachedImage';
 
 interface Props {
   song: Song;
@@ -20,10 +21,9 @@ export default function SongCard({ song, onPlay }: Props) {
       className="group flex flex-col items-start gap-2 text-left w-full"
     >
       <div className="relative aspect-square w-full overflow-hidden rounded-xl bg-secondary shadow-card">
-        <img
+        <CachedImage
           src={songCoverUrl(song)}
           alt={song.title}
-          loading="lazy"
           className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-110"
         />
         <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/0 to-black/0 opacity-90" />

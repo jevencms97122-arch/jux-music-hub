@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { usePlayer } from '@/contexts/PlayerContext';
 import { songCoverUrl } from '@/lib/storage';
 import { Play, Pause, SkipForward, Volume2 } from 'lucide-react';
+import CachedImage from '@/components/CachedImage';
 import VolumeControl from '@/components/VolumeControl';
 
 export default function MiniPlayer() {
@@ -19,7 +20,7 @@ export default function MiniPlayer() {
         </div>
         <div className="flex items-center gap-3 p-2">
           <button onClick={openPlayer} className="flex flex-1 items-center gap-3 min-w-0">
-            <img
+            <CachedImage
               src={songCoverUrl(currentSong)}
               alt={currentSong.title}
               className="h-11 w-11 rounded-lg object-cover shadow-card"

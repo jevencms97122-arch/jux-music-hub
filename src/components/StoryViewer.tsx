@@ -4,6 +4,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { songAudioUrl, songCoverUrl } from '@/lib/storage';
 import { X, ChevronLeft, ChevronRight } from 'lucide-react';
+import CachedImage from '@/components/CachedImage';
 import type { Story, Profile, Song } from '@/types/music';
 
 interface FullStory extends Story { profile?: Profile; song?: Song }
@@ -90,10 +91,11 @@ export default function StoryViewer({ stories, startIndex, onClose }: Props) {
       >
         {story.song && (
           <div className="flex h-full w-full items-center justify-center">
-            <img
+            <CachedImage
               src={songCoverUrl(story.song)}
               alt=""
               className="h-full w-full object-contain"
+              fallbackSrc=""
               style={{ maxHeight: 'calc(100dvh - 120px)' }}
             />
           </div>

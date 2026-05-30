@@ -3,6 +3,7 @@ import { Flame, ChevronLeft, ChevronRight, Video, User } from 'lucide-react';
 import { usePlayer } from '@/contexts/PlayerContext';
 import { songCoverUrl, avatarUrl } from '@/lib/storage';
 import { supabase } from '@/integrations/supabase/client';
+import CachedImage from '@/components/CachedImage';
 import type { Song, Profile } from '@/types/music';
 
 interface Props {
@@ -101,7 +102,7 @@ export default function TrendingSection({ trending }: Props) {
               style={{ animation: 'fadeSlideUp 0.5s cubic-bezier(0.16,1,0.3,1) both', animationDelay: `${0.60 + i * 0.08}s` }}
             >
               <div className="relative aspect-square w-full overflow-hidden rounded-xl shadow-card transition-transform group-hover:scale-105">
-                <img src={songCoverUrl(s)} alt={s.title} loading="lazy"
+                <CachedImage src={songCoverUrl(s)} alt={s.title}
                   className="h-full w-full object-cover" />
                 <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent" />
                 <div className="absolute bottom-3 left-3 right-3">
@@ -117,7 +118,7 @@ export default function TrendingSection({ trending }: Props) {
                   <div className="mt-1.5 flex items-center gap-1.5">
                     <div className="h-5 w-5 flex-shrink-0 overflow-hidden rounded-full bg-muted">
                       {avatarUrl(profilesMap[s.uploaded_by]) ? (
-                        <img
+                        <CachedImage
                           src={avatarUrl(profilesMap[s.uploaded_by])}
                           alt=""
                           className="h-full w-full object-cover"

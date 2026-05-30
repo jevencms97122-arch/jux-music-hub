@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { songCoverUrl } from '@/lib/storage';
+import CachedImage from '@/components/CachedImage';
 import type { Song } from '@/types/music';
 
 interface SynchronizedVideoPlayerProps {
@@ -83,7 +84,7 @@ export default function SynchronizedVideoPlayer({
     if (asBackground) {
       return (
         <div className="absolute inset-0">
-          <img
+          <CachedImage
             src={songCoverUrl(song)}
             alt=""
             className="h-full w-full object-cover"
@@ -98,7 +99,7 @@ export default function SynchronizedVideoPlayer({
   // Si timeout : afficher la cover à la place
   if (timedOut) {
     const fallback = (
-      <img
+      <CachedImage
         src={songCoverUrl(song)}
         alt={song.title}
         className="max-h-[calc(100dvh-480px)] w-full rounded-2xl object-contain shadow-elegant sm:aspect-square sm:object-cover"
@@ -107,7 +108,7 @@ export default function SynchronizedVideoPlayer({
     if (asBackground) {
       return (
         <div className="absolute inset-0">
-          <img
+          <CachedImage
             src={songCoverUrl(song)}
             alt=""
             className="h-full w-full object-cover"

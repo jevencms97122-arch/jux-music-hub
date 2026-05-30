@@ -10,6 +10,7 @@ import PlaybackRateControl from '@/components/PlaybackRateControl';
 import SynchronizedVideoPlayer from './SynchronizedVideoPlayer';
 import { detectPlatform, requestNativeDownload, isSongDownloaded, deleteDownloadedSong, onDownloadProgress, type DownloadStatus } from '@/lib/platform';
 import { songAudioUrl } from '@/lib/storage';
+import CachedImage from '@/components/CachedImage';
 import { Slider } from '@/components/ui/slider';
 import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
 import { Switch } from '@/components/ui/switch';
@@ -221,7 +222,7 @@ export default function PlayerPage() {
           />
         ) : currentSong.video_url && skipVideoBg ? (
           <div className="pointer-events-none absolute inset-0">
-            <img
+            <CachedImage
               src={songCoverUrl(currentSong)}
               alt=""
               className="h-full w-full object-cover"
@@ -314,7 +315,7 @@ export default function PlayerPage() {
             <div className={`relative flex w-full items-center justify-center ${isMobile ? 'px-0 max-w-[50vw]' : 'px-4 sm:max-w-sm'}`}>
               {currentSong.video_url ? (
                 <div className="relative w-full overflow-hidden rounded-2xl shadow-elegant" style={{ aspectRatio: '1 / 1' }}>
-                  <img
+                  <CachedImage
                     src={songCoverUrl(currentSong)}
                     alt={currentSong.title}
                     className="h-full w-full rounded-2xl object-cover shadow-elegant"
@@ -344,7 +345,7 @@ export default function PlayerPage() {
                 </div>
               ) : (
                 <>
-                  <img
+                  <CachedImage
                     src={songCoverUrl(currentSong)}
                     alt={currentSong.title}
                     className="w-full rounded-2xl object-contain shadow-elegant sm:aspect-square sm:object-cover"

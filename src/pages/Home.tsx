@@ -3,6 +3,8 @@ import { supabase } from '@/integrations/supabase/client';
 import { usePlayer } from '@/contexts/PlayerContext';
 import { songCoverUrl } from '@/lib/storage';
 import SongCard from '@/components/SongCard';
+import CachedImage from '@/components/CachedImage';
+import { preloadImages } from '@/lib/mediaCache';
 import StoryCircles from '@/components/StoryCircles';
 import { Button } from '@/components/ui/button';
 import { useNavigate } from 'react-router-dom';
@@ -149,7 +151,7 @@ export default function Home() {
           >
             <div className="grid h-20 w-20 flex-shrink-0 grid-cols-2 grid-rows-2 gap-0.5 overflow-hidden rounded-xl">
               {dailyMix.slice(0, 4).map((s) => (
-                <img key={s.id} src={songCoverUrl(s)} alt="" className="h-full w-full object-cover" loading="lazy" />
+                <CachedImage key={s.id} src={songCoverUrl(s)} alt="" className="h-full w-full object-cover" />
               ))}
             </div>
             <div className="min-w-0 flex-1">

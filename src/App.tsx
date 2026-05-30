@@ -6,6 +6,7 @@ import { BrowserRouter, Routes, Route, Navigate, useNavigate, useLocation } from
 import { AnimatePresence, motion } from 'framer-motion';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
+import { preloadImages } from '@/lib/mediaCache';
 import Login from '@/pages/Login';
 import Home from '@/pages/Home';
 import Upload from '@/pages/Upload';
@@ -51,6 +52,26 @@ function AppContent() {
   const { user, profile, authUser, loading } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
+
+  // Pré-cache automatique des images visibles au chargement (mobile uniquement)
+  useEffect(() => {
+    if (loading) return;
+    // Le pré-cache démarre après le rendu initial pour ne pas bloquer l'affichage
+    const timer = setTimeout(() => {
+      const images = document.querySelectorAll('img[src]');
+      const urls: string[] = [];
+      images.forEach((img) => {
+        const src = img.getAttribute('src');
+        if (src && src.startsWith('http') && !src.includes('youtube') && !src.includes('ytimg')) {
+          urls.push(src);
+        }
+      });
+      if (urls.length > 0) {
+        preloadImages(urls);
+      }
+    }, 2000);
+    return () => clearTimeout(timer);
+  }, [loading, user]);
 
   useEffect(() => {
     if (!user || loading) return;

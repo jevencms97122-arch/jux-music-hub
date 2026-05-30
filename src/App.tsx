@@ -7,6 +7,7 @@ import { AnimatePresence, motion } from 'framer-motion';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { preloadImages } from '@/lib/mediaCache';
+import { pingPresence } from '@/lib/userPresence';
 import Login from '@/pages/Login';
 import Home from '@/pages/Home';
 import Upload from '@/pages/Upload';
@@ -79,6 +80,17 @@ function AppContent() {
       Notification.requestPermission().catch(console.error);
     }
   }, [user, loading]);
+
+  // Heartbeat : ping présence toutes les 3s tant que l'app est ouverte
+  useEffect(() => {
+    if (!authUser) return;
+    // Ping immédiat au démarrage
+    pingPresence(authUser.id);
+    const interval = setInterval(() => {
+      pingPresence(authUser.id);
+    }, 3000);
+    return () => clearInterval(interval);
+  }, [authUser]);
 
   // Toast notif temps réel
   useEffect(() => {

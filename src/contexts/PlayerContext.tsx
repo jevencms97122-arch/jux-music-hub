@@ -9,6 +9,7 @@ import { sendNowPlayingToNative, clearNowPlayingOnNative, onNativeCommand, resol
 import type { NativeCommandEvent } from '@/lib/androidMediaBridge';
 import { toast } from 'sonner';
 import { useTheme } from '@/contexts/ThemeContext';
+import { updatePresence, clearPresence } from '@/lib/userPresence';
 import type { Song } from '@/types/music';
 
 export interface ListenSessionRow {
@@ -89,6 +90,9 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
   const crossfadeIntervalRef = useRef<number | null>(null);
 
 
+  const userRef = useRef(authUser);
+  const currentSongRef = useRef<Song | null>(null);
+
   const [currentSong, setCurrentSong] = useState<Song | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
@@ -150,6 +154,8 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => { isShuffledRef.current = isShuffled; }, [isShuffled]);
   useEffect(() => { volumeRef.current = volume; }, [volume]);
   useEffect(() => { playbackRateRef.current = playbackRate; }, [playbackRate]);
+  useEffect(() => { userRef.current = authUser; }, [authUser]);
+  useEffect(() => { currentSongRef.current = currentSong; }, [currentSong]);
 
   const recordPlayRef = useRef<(s: Song) => void>(() => {});
   const broadcastSongRef = useRef<(s: Song) => void>(() => {});
@@ -288,10 +294,28 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
       nextRef.current();
     };
 
-    const onPlay = (e: Event) => { if (e.target === getActive()) setIsPlaying(true); };
+    const onPlay = (e: Event) => {
+      if (e.target !== getActive()) return;
+      setIsPlaying(true);
+      // Quand la musique reprend (même après un retour sur l'appli), on met à jour la présence
+      // Utilise les refs pour éviter les stale closures
+      const au = userRef.current;
+      const cs = currentSongRef.current;
+      if (au && cs) {
+        updatePresence({
+          userId: au.id,
+          isListening: true,
+          songId: cs.id,
+          songTitle: cs.title,
+          songAuthor: cs.author,
+        });
+      }
+    };
     const onPause = (e: Event) => {
       if (e.target !== getActive()) return;
-      if (!crossfadingRef.current) setIsPlaying(false);
+      if (!crossfadingRef.current) {
+        setIsPlaying(false);
+      }
     };
 
     [audioARef.current, audioBRef.current].forEach((a) => {
@@ -442,10 +466,24 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
   const countedWeeklyRef = useRef<Set<string>>(new Set());
   const weeklyListenStartRef = useRef<Map<string, number>>(new Map());
 
+  const pauseTimeoutRef = useRef<number | null>(null);
+
   const recordPlay = useCallback((song: Song) => {
     if (!authUser) return;
+    // Si on reprend, on annule le timeout de pause
+    if (pauseTimeoutRef.current) {
+      clearTimeout(pauseTimeoutRef.current);
+      pauseTimeoutRef.current = null;
+    }
     supabase.from('listen_history').insert({ user_id: authUser.id, song_id: song.id }).then(() => {});
     updateStreak(authUser.id);
+    updatePresence({
+      userId: authUser.id,
+      isListening: true,
+      songId: song.id,
+      songTitle: song.title,
+      songAuthor: song.author,
+    });
     // Incrémente le play_count immédiatement au lancement
     supabase.rpc('increment_song_play', { _song_id: song.id }).then(({ data }) => {
       if (typeof data === 'number') {
@@ -491,7 +529,8 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
       try { a.pause(); a.currentTime = 0; } catch {}
     });
     setIsPlaying(false);
-  }, []);
+    if (authUser) clearPresence(authUser.id);
+  }, [authUser]);
 
   const loadAndPlay = useCallback(async (song: Song, autoPlay = true) => {
     // Cancel any ongoing crossfade
@@ -688,8 +727,26 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
     }
     const shouldPlay = a.paused;
     pendingSessionAutoplayRef.current = false;
-    if (shouldPlay) a.play().catch(console.error);
-    else a.pause();
+
+    if (shouldPlay) {
+      a.play().catch(console.error);
+      // Met à jour la présence immédiatement (en écoute)
+      if (authUser) {
+        updatePresence({
+          userId: authUser.id,
+          isListening: true,
+          songId: currentSong.id,
+          songTitle: currentSong.title,
+          songAuthor: currentSong.author,
+        });
+      }
+    } else {
+      a.pause();
+      // Pause → is_listening=false, mais last_seen_at reste à jour via le heartbeat
+      if (authUser) {
+        clearPresence(authUser.id);
+      }
+    }
     // Host : broadcast play/pause
     const s = sessionRef.current;
     if (s && authUser && s.host_id === authUser.id) {

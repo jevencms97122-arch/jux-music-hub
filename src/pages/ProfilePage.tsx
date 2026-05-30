@@ -13,6 +13,7 @@ import {
 import { avatarUrl } from '@/lib/storage';
 import { useEffect, useState } from 'react';
 import { getBadges, type Badge } from '@/lib/badges';
+import { getUserStats } from '@/lib/streaks';
 import { supabase } from '@/integrations/supabase/client';
 import { usePlayer } from '@/contexts/PlayerContext';
 import SongCard from '@/components/SongCard';
@@ -35,11 +36,13 @@ export default function ProfilePage() {
   const [badges, setBadges] = useState<Badge[]>([]);
   const [songs, setSongs] = useState<Song[]>([]);
   const [counts, setCounts] = useState({ followers: 0, following: 0 });
+  const [streak, setStreak] = useState(0);
 
   useEffect(() => {
     if (!authUser) return;
 
     getBadges(authUser.id).then(setBadges);
+    getUserStats(authUser.id).then((s) => setStreak(s?.current_streak ?? 0));
 
     supabase
       .from('songs')
@@ -95,14 +98,23 @@ export default function ProfilePage() {
           </div>
         </div>
 
-        <div className="mt-4">
+        <div className="mt-4 flex items-center gap-3 flex-wrap">
           <h1 className="text-base font-bold">{profile?.pseudo}</h1>
+          {streak >= 3 && (
+            <span
+              className="inline-flex items-center gap-1 text-sm font-semibold text-orange-400"
+              title={`${streak} jours d'écoute consécutifs`}
+            >
+              <span className="text-lg drop-shadow-[0_0_6px_rgba(255,165,0,0.5)]">🔥</span>
+              <span>{streak}</span>
+            </span>
+          )}
           {profile?.first_name || profile?.last_name ? (
-            <p className="text-sm text-muted-foreground">
+            <p className="w-full text-sm text-muted-foreground">
               {profile?.first_name} {profile?.last_name}
             </p>
           ) : null}
-          {profile?.bio && <p className="mt-1 text-sm">{profile.bio}</p>}
+          {profile?.bio && <p className="w-full mt-1 text-sm">{profile.bio}</p>}
         </div>
 
         <div

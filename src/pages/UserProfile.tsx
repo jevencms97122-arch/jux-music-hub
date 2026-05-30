@@ -9,6 +9,7 @@ import SongCard from '@/components/SongCard';
 import { ArrowLeft } from 'lucide-react';
 import { avatarUrl } from '@/lib/storage';
 import { toast } from 'sonner';
+import { getUserStats } from '@/lib/streaks';
 import type { Profile, Song } from '@/types/music';
 
 export default function UserProfile() {
@@ -20,6 +21,7 @@ export default function UserProfile() {
   const [songs, setSongs] = useState<Song[]>([]);
   const [followStatus, setFollowStatus] = useState<'none' | 'pending' | 'accepted'>('none');
   const [counts, setCounts] = useState({ followers: 0, following: 0 });
+  const [streak, setStreak] = useState(0);
 
   const load = async () => {
     if (!userId) return;
@@ -35,6 +37,9 @@ export default function UserProfile() {
       supabase.from('follows').select('*', { count: 'exact', head: true }).eq('follower_id', userId).eq('status', 'accepted'),
     ]);
     setCounts({ followers: fers ?? 0, following: fing ?? 0 });
+
+    const statsData = await getUserStats(userId);
+    setStreak(statsData?.current_streak ?? 0);
 
     if (authUser && authUser.id !== userId) {
       const { data: f } = await supabase
@@ -84,7 +89,18 @@ export default function UserProfile() {
           <AvatarImage src={avatarUrl(profile)} />
           <AvatarFallback>{profile.pseudo?.[0]?.toUpperCase() ?? '?'}</AvatarFallback>
         </Avatar>
-        <h2 className="text-lg font-bold">{profile.pseudo}</h2>
+        <div className="flex items-center gap-3 flex-wrap justify-center">
+          <h2 className="text-lg font-bold">{profile.pseudo}</h2>
+          {streak >= 3 && (
+            <span
+              className="inline-flex items-center gap-1 text-sm font-semibold text-orange-400"
+              title={`${streak} jours d'écoute consécutifs`}
+            >
+              <span className="text-lg drop-shadow-[0_0_6px_rgba(255,165,0,0.5)]">🔥</span>
+              <span>{streak}</span>
+            </span>
+          )}
+        </div>
         {profile.bio && <p className="max-w-md text-center text-sm text-muted-foreground">{profile.bio}</p>}
         <div className="flex gap-6 text-sm">
           <div className="text-center"><p className="font-bold">{counts.followers}</p><p className="text-muted-foreground">Abonnés</p></div>

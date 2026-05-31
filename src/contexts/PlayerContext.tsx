@@ -12,6 +12,8 @@ import { useTheme } from '@/contexts/ThemeContext';
 import { updatePresence, clearPresence } from '@/lib/userPresence';
 import type { Song } from '@/types/music';
 
+export type TransitionMode = 'linear' | 'hardCut' | 'exponential' | 'logarithmic' | 'sine' | 'sCurve' | 'elastic' | 'cubicEaseInOut' | 'quartEaseInOut' | 'tempoShift';
+
 export interface ListenSessionRow {
   id: string;
   code: string | null;
@@ -37,6 +39,7 @@ interface PlayerContextType {
   isPlayerOpen: boolean;
   playbackRate: number;
   crossfadeSeconds: number;
+  transitionMode: TransitionMode;
   // Session
   activeSession: ListenSessionRow | null;
   isSessionHost: boolean;
@@ -71,6 +74,7 @@ interface PlayerContextType {
   closePlayer: () => void;
   setPlaybackRate: (r: number) => void;
   setCrossfadeSeconds: (s: number) => void;
+  setTransitionMode: (mode: TransitionMode) => void;
   addToQueue: (song: Song) => void;
   startRadio: (seed: Song) => Promise<void>;
   // Video synchronisation
@@ -80,6 +84,20 @@ interface PlayerContextType {
 const PlayerContext = createContext<PlayerContextType | null>(null);
 
 const CROSSFADE_KEY = 'jux:crossfade';
+const TRANSITION_MODE_KEY = 'jux:transitionMode';
+
+export const TRANSITION_MODES: { value: TransitionMode; label: string; description: string }[] = [
+  { value: 'linear', label: 'Linear', description: 'Transition linéaire classique' },
+  { value: 'hardCut', label: 'Hard Cut', description: 'Passage instantané (pas de fade)' },
+  { value: 'exponential', label: 'Exponentiel', description: 'Rapide au début, lent à la fin' },
+  { value: 'logarithmic', label: 'Logarithmique', description: 'Lent au début, rapide à la fin' },
+  { value: 'sine', label: 'Sine Wave', description: 'Courbe sinusoïdale très lisse' },
+  { value: 'sCurve', label: 'S-Curve', description: 'Courbe S prononcée' },
+  { value: 'elastic', label: 'Elastic', description: 'Effet élastique avancé' },
+  { value: 'cubicEaseInOut', label: 'Cubic Ease', description: 'Lisse cubique très fluide' },
+  { value: 'quartEaseInOut', label: 'Quart Ease', description: 'Lisse quartique très progressive' },
+  { value: 'tempoShift', label: 'Tempo Shift', description: 'Ralentit puis accélère le tempo' },
+];
 
 export function PlayerProvider({ children }: { children: React.ReactNode }) {
   const { authUser } = useAuth();
@@ -109,6 +127,11 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
     const v = parseFloat(localStorage.getItem(CROSSFADE_KEY) || '3');
     return isNaN(v) ? 3 : Math.max(0, Math.min(12, v));
   });
+  
+  const [transitionMode, setTransitionModeState] = useState<TransitionMode>(() => {
+    const mode = localStorage.getItem(TRANSITION_MODE_KEY) as TransitionMode | null;
+    return (mode && TRANSITION_MODES.some(m => m.value === mode)) ? mode : 'linear';
+  });
 
   // === Video synchronisation ===
   // Not used for audio control anymore – audio plays immediately in loadAndPlay.
@@ -131,12 +154,70 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
   const getActive = () => (activeRef.current === 'A' ? audioARef.current! : audioBRef.current!);
   const getInactive = () => (activeRef.current === 'A' ? audioBRef.current! : audioARef.current!);
 
+  // Fonction pour calculer la courbe de fade selon le mode de transition
+  const calculateFadePosition = useCallback((p: number, mode: TransitionMode): number => {
+    // p va de 0 à 1
+    if (mode === 'hardCut') return p >= 1 ? 1 : 0;
+    if (mode === 'linear') return p;
+    
+    // Exponentiel - rapide au début, lent à la fin (p⁴) — très accentué
+    if (mode === 'exponential') return p * p * p * p;
+    
+    // Logarithmique - lent au début, rapide à la fin (accentué)
+    if (mode === 'logarithmic') return 1 - Math.pow(1 - p, 4);
+    
+    // Sine wave - courbe sinusoïdale avec overshoot au milieu
+    if (mode === 'sine') return Math.pow(Math.sin(p * Math.PI / 2), 2.5);
+    
+    // S-Curve - courbe S très prononcée avec zone centrale abrupte
+    if (mode === 'sCurve') {
+      // S-Curve accentuée : plat au début, raide au milieu, plat à la fin
+      return p < 0.5
+        ? 2 * Math.pow(p, 3)
+        : 1 - 2 * Math.pow(1 - p, 3);
+    }
+    
+    
+    // Elastic - overshoot important + oscillations amorties
+    if (mode === 'elastic') {
+      if (p === 0) return 0;
+      if (p === 1) return 1;
+      const c5 = (2 * Math.PI) / 3.5;
+      return Math.pow(2, -12 * p) * Math.sin((p - 0.1) * c5) + 1;
+    }
+    
+    // Cubic Ease In-Out avec overshoot final
+    if (mode === 'cubicEaseInOut') {
+      const base = p < 0.5 ? 4 * p * p * p : 1 - Math.pow(-2 * p + 2, 3) / 2;
+      // Ajoute un petit overshoot de 10% à la fin pour un effet "dépassement"
+      if (p > 0.7) {
+        const overshoot = Math.sin((p - 0.7) * Math.PI / 0.6) * 0.08;
+        return Math.min(base + overshoot, 1);
+      }
+      return base;
+    }
+    
+    // Quart Ease In-Out avec overshoot double
+    if (mode === 'quartEaseInOut') {
+      const base = p < 0.5 ? 8 * p * p * p * p : 1 - Math.pow(-2 * p + 2, 4) / 2;
+      // Overshoot plus marqué
+      if (p > 0.65) {
+        const overshoot = Math.sin((p - 0.65) * Math.PI / 0.7) * 0.12;
+        return Math.min(base + overshoot, 1);
+      }
+      return base;
+    }
+    
+    return p;
+  }, []);
+
   const nextRef = useRef<() => void>(() => {});
   const previousRef = useRef<() => void>(() => {});
   const togglePlayRef = useRef<() => void>(() => {});
   const seekRef = useRef<(t: number) => void>(() => {});
   const stopAudioRef = useRef<() => void>(() => {});
   const crossfadeSecondsRef = useRef(crossfadeSeconds);
+  const transitionModeRef = useRef(transitionMode);
   const repeatModeRef = useRef(repeatMode);
   const isSessionGuestRef = useRef(isSessionGuest);
   const queueRef = useRef(queue);
@@ -147,6 +228,7 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
   const pendingSessionAutoplayRef = useRef(false);
   const sessionGuestRecordedRef = useRef<string | null>(null);
   useEffect(() => { crossfadeSecondsRef.current = crossfadeSeconds; }, [crossfadeSeconds]);
+  useEffect(() => { transitionModeRef.current = transitionMode; }, [transitionMode]);
   useEffect(() => { repeatModeRef.current = repeatMode; }, [repeatMode]);
   useEffect(() => { isSessionGuestRef.current = isSessionGuest; }, [isSessionGuest]);
   useEffect(() => { queueRef.current = queue; }, [queue]);
@@ -202,14 +284,36 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
       const fadeMs = fadeSec * 1000;
       const startVol = active.volume;
       const targetVol = volumeRef.current;
+      const mode = transitionModeRef.current;
 
       if (crossfadeIntervalRef.current) {
         clearInterval(crossfadeIntervalRef.current);
       }
       crossfadeIntervalRef.current = window.setInterval(() => {
         const p = Math.min(1, (performance.now() - startTs) / fadeMs);
-        active.volume = Math.max(0, startVol * (1 - p));
-        inactive.volume = Math.min(1, targetVol * p);
+        const fadeCurve = calculateFadePosition(p, mode);
+        
+        // Gestion du tempo shift spéciale
+        if (mode === 'tempoShift') {
+          if (p < 0.5) {
+            // Première moitié: ralentir et baisser à 0% la chanson actuelle
+            const slowdownCurve = p * 2; // 0 à 1 pendant la première moitié
+            active.playbackRate = playbackRateRef.current * (1 - slowdownCurve * 0.7); // De 1.0 à 0.3
+            active.volume = Math.max(0, startVol * (1 - slowdownCurve)); // Va jusqu'à 0
+            inactive.volume = 0;
+          } else {
+            // Deuxième moitié: accélérer la chanson suivante
+            const speedupCurve = (p - 0.5) * 2; // 0 à 1 pendant la deuxième moitié
+            inactive.playbackRate = playbackRateRef.current * (0.3 + speedupCurve * 0.7); // De 0.3 à 1.0
+            inactive.volume = Math.min(1, targetVol * speedupCurve * 2);
+            active.volume = 0;
+          }
+        } else {
+          // Modes de transition normaux
+          active.volume = Math.max(0, startVol * (1 - fadeCurve));
+          inactive.volume = Math.min(1, targetVol * fadeCurve);
+        }
+        
         if (p >= 1) {
           if (crossfadeIntervalRef.current) {
             clearInterval(crossfadeIntervalRef.current);
@@ -218,6 +322,7 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
           try { active.pause(); active.currentTime = 0; active.removeAttribute('src'); active.load(); } catch {}
           activeRef.current = activeRef.current === 'A' ? 'B' : 'A';
           inactive.volume = targetVol;
+          inactive.playbackRate = playbackRateRef.current;
           // Mettre à jour la durée et le temps avec ceux du NOUVEAU son actifs
           setDuration(inactive.duration || 0);
           setCurrentTime(inactive.currentTime || 0);
@@ -449,6 +554,12 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
     setCrossfadeSecondsState(v);
     localStorage.setItem(CROSSFADE_KEY, String(v));
     crossfadeSecondsRef.current = v;
+  }, []);
+
+  const setTransitionMode = useCallback((mode: TransitionMode) => {
+    setTransitionModeState(mode);
+    localStorage.setItem(TRANSITION_MODE_KEY, mode);
+    transitionModeRef.current = mode;
   }, []);
 
 
@@ -1015,13 +1126,13 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
       value={{
         currentSong, isPlaying, currentTime, duration, volume,
         queue, queueIndex, isShuffled, repeatMode, isPlayerOpen, playbackRate,
-        crossfadeSeconds,
+        crossfadeSeconds, transitionMode,
         activeSession, isSessionHost, isSessionGuest, allParticipantsReady,
         refreshSession, setActiveSession, stopAudio, refreshSongStats,
         playSong, playSongFromList, playExternalAudio,
         togglePlay, next, previous, seek, setVolume,
         toggleShuffle, cycleRepeat, openPlayer, closePlayer, setPlaybackRate,
-        setCrossfadeSeconds, addToQueue, startRadio, signalVideoReady,
+        setCrossfadeSeconds, setTransitionMode, addToQueue, startRadio, signalVideoReady,
       }}
     >
       {children}

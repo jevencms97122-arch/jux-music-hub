@@ -9,6 +9,7 @@ import {
   Sparkles,
   Award,
   Music2,
+  Settings,
 } from 'lucide-react';
 import { avatarUrl } from '@/lib/storage';
 import { useEffect, useState } from 'react';
@@ -28,6 +29,7 @@ import {
 import type { Song } from '@/types/music';
 import ThemeSelectorSheet from '@/components/ThemeSelectorSheet';
 import ProfileQrCode from '@/components/ProfileQrCode';
+import TransitionSettings from '@/components/TransitionSettings';
 
 export default function ProfilePage() {
   const { profile, authUser, logout } = useAuth();
@@ -38,6 +40,7 @@ export default function ProfilePage() {
   const [songs, setSongs] = useState<Song[]>([]);
   const [counts, setCounts] = useState({ followers: 0, following: 0 });
   const [streak, setStreak] = useState(0);
+  const [showSettings, setShowSettings] = useState(false);
 
   useEffect(() => {
     if (!authUser) return;
@@ -189,6 +192,26 @@ export default function ProfilePage() {
             </DialogContent>
           </Dialog>
         </div>
+
+        {/* Paramètres */}
+        <Dialog open={showSettings} onOpenChange={setShowSettings}>
+          <DialogTrigger asChild>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="w-full"
+              onClick={() => setShowSettings(true)}
+            >
+              <Settings className="mr-2 h-4 w-4" /> Paramètres
+            </Button>
+          </DialogTrigger>
+          <DialogContent className="max-h-[80vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle>Paramètres audio</DialogTitle>
+            </DialogHeader>
+            <TransitionSettings />
+          </DialogContent>
+        </Dialog>
 
         {/* Déconnexion */}
         <div className="mt-2">

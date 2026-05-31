@@ -27,6 +27,7 @@ import {
 } from '@/components/ui/dialog';
 import type { Song } from '@/types/music';
 import ThemeSelectorSheet from '@/components/ThemeSelectorSheet';
+import ProfileQrCode from '@/components/ProfileQrCode';
 
 export default function ProfilePage() {
   const { profile, authUser, logout } = useAuth();
@@ -74,28 +75,33 @@ export default function ProfilePage() {
         className="px-6 pt-6"
         style={{ animation: 'fadeSlideUp 0.6s cubic-bezier(0.16,1,0.3,1) both' }}
       >
-        <div className="flex items-center gap-5">
-          <Avatar className="h-20 w-20 ring-2 ring-primary/30">
-            <AvatarImage src={profile ? avatarUrl(profile) : ''} />
-            <AvatarFallback>
-              {profile?.pseudo?.[0]?.toUpperCase() ?? '?'}
-            </AvatarFallback>
-          </Avatar>
+        <div className="flex items-start justify-between">
+          <div className="flex items-center gap-5 flex-1">
+            <Avatar className="h-20 w-20 ring-2 ring-primary/30">
+              <AvatarImage src={profile ? avatarUrl(profile) : ''} />
+              <AvatarFallback>
+                {profile?.pseudo?.[0]?.toUpperCase() ?? '?'}
+              </AvatarFallback>
+            </Avatar>
 
-          <div className="grid flex-1 grid-cols-3 gap-2 text-center">
-            <div>
-              <div className="text-lg font-bold">{songs.length}</div>
-              <div className="text-xs text-muted-foreground">Sons</div>
-            </div>
-            <div>
-              <div className="text-lg font-bold">{counts.followers}</div>
-              <div className="text-xs text-muted-foreground">Abonnés</div>
-            </div>
-            <div>
-              <div className="text-lg font-bold">{counts.following}</div>
-              <div className="text-xs text-muted-foreground">Abonnements</div>
+            <div className="grid flex-1 grid-cols-3 gap-2 text-center">
+              <div>
+                <div className="text-lg font-bold">{songs.length}</div>
+                <div className="text-xs text-muted-foreground">Sons</div>
+              </div>
+              <div>
+                <div className="text-lg font-bold">{counts.followers}</div>
+                <div className="text-xs text-muted-foreground">Abonnés</div>
+              </div>
+              <div>
+                <div className="text-lg font-bold">{counts.following}</div>
+                <div className="text-xs text-muted-foreground">Abonnements</div>
+              </div>
             </div>
           </div>
+
+          {/* QR Code Button - top right */}
+          <ProfileQrCode />
         </div>
 
         <div className="mt-4 flex items-center gap-3 flex-wrap">

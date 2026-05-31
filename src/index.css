@@ -116,6 +116,128 @@
   }
 }
 
+/* ── Song change transition animations ── */
+
+/* Cover qui part vers la gauche (next) */
+@keyframes slideOutLeft {
+  0% {
+    opacity: 1;
+    transform: translateX(0) scale(1);
+  }
+  100% {
+    opacity: 0;
+    transform: translateX(-100%) scale(0.92);
+  }
+}
+
+/* Cover qui arrive depuis la droite (next) */
+@keyframes slideInRight {
+  0% {
+    opacity: 0;
+    transform: translateX(100%) scale(0.92);
+  }
+  100% {
+    opacity: 1;
+    transform: translateX(0) scale(1);
+  }
+}
+
+/* Cover qui part vers la droite (previous) */
+@keyframes slideOutRight {
+  0% {
+    opacity: 1;
+    transform: translateX(0) scale(1);
+  }
+  100% {
+    opacity: 0;
+    transform: translateX(100%) scale(0.92);
+  }
+}
+
+/* Cover qui arrive depuis la gauche (previous) */
+@keyframes slideInLeft {
+  0% {
+    opacity: 0;
+    transform: translateX(-100%) scale(0.92);
+  }
+  100% {
+    opacity: 1;
+    transform: translateX(0) scale(1);
+  }
+}
+
+/* Infos : slide up avec de l'élasticité */
+@keyframes slideUpStagger {
+  0% {
+    opacity: 0;
+    transform: translateY(18px) scale(0.97);
+  }
+  60% {
+    opacity: 1;
+    transform: translateY(-2px) scale(1.01);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+/* Lueur subtile qui pulse sur le fond */
+@keyframes glowSwell {
+  0% {
+    opacity: 0.25;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.55;
+    transform: scale(1.04);
+  }
+  100% {
+    opacity: 0.25;
+    transform: scale(1);
+  }
+}
+
+/* Background crossfade : zoom in subtil */
+@keyframes bgReveal {
+  0% {
+    opacity: 0;
+    transform: scale(1.05);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+.animate-slide-out-left {
+  animation: slideOutLeft 0.45s cubic-bezier(0.4, 0, 0.2, 1) both;
+}
+
+.animate-slide-in-right {
+  animation: slideInRight 0.45s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.animate-slide-out-right {
+  animation: slideOutRight 0.45s cubic-bezier(0.4, 0, 0.2, 1) both;
+}
+
+.animate-slide-in-left {
+  animation: slideInLeft 0.45s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.animate-slide-up-stagger {
+  animation: slideUpStagger 0.55s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.animate-glow-swell {
+  animation: glowSwell 2.5s ease-in-out infinite;
+}
+
+.animate-bg-reveal {
+  animation: bgReveal 0.45s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
 .animate-fade-slide-up {
   animation: fadeSlideUp 0.6s cubic-bezier(0.16, 1, 0.3, 1) both;
 }

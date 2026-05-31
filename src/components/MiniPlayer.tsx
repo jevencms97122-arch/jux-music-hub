@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { usePlayer } from '@/contexts/PlayerContext';
 import { songCoverUrl } from '@/lib/storage';
 import { Play, Pause, SkipForward, Volume2 } from 'lucide-react';
@@ -8,13 +8,24 @@ import VolumeControl from '@/components/VolumeControl';
 export default function MiniPlayer() {
   const { currentSong, isPlaying, togglePlay, next, openPlayer, currentTime, duration } = usePlayer();
   const [volumeOpen, setVolumeOpen] = useState(false);
+  const prevIdRef = useRef<string | null>(null);
+  const [animate, setAnimate] = useState(false);
+
+  useEffect(() => {
+    if (currentSong && currentSong.id !== prevIdRef.current) {
+      prevIdRef.current = currentSong.id;
+      setAnimate(true);
+      const t = setTimeout(() => setAnimate(false), 500);
+      return () => clearTimeout(t);
+    }
+  }, [currentSong]);
 
   if (!currentSong) return null;
   const progress = duration > 0 ? (currentTime / duration) * 100 : 0;
 
   return (
     <>
-      <div className="fixed bottom-16 left-0 right-0 z-40 mx-2 overflow-hidden rounded-xl border border-border bg-gradient-card shadow-elegant backdrop-blur-xl">
+      <div className={`fixed bottom-16 left-0 right-0 z-40 mx-2 overflow-hidden rounded-xl border border-border bg-gradient-card shadow-elegant backdrop-blur-xl ${animate ? 'animate-slide-in-right' : ''}`}>
         <div className="h-0.5 w-full bg-secondary">
           <div className="h-full bg-gradient-primary transition-all" style={{ width: `${progress}%` }} />
         </div>

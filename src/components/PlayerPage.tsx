@@ -14,7 +14,7 @@ import CachedImage from '@/components/CachedImage';
 import { Slider } from '@/components/ui/slider';
 import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
 import { Switch } from '@/components/ui/switch';
-import { useEffect, useState, useRef } from 'react';
+import { useEffect, useState, useRef, useCallback, useMemo } from 'react';
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
@@ -204,6 +204,48 @@ export default function PlayerPage() {
     }
   };
 
+  // ── Directional slide transition management ──
+  const prevSongIdRef = useRef<string | null>(null);
+  const directionRef = useRef<'next' | 'prev'>('next');
+  const [coverAnim, setCoverAnim] = useState<string>('');
+  const [infoAnim, setInfoAnim] = useState<string>('');
+  const [bgAnim, setBgAnim] = useState<string>('');
+  const [prevIndex, setPrevIndex] = useState<number>(-1);
+  const prevIndexRef = useRef(prevIndex);
+
+  // Wrap next/previous to capture direction
+  const handleNext = useCallback(() => {
+    directionRef.current = 'next';
+    next();
+  }, [next]);
+
+  const handlePrev = useCallback(() => {
+    directionRef.current = 'prev';
+    previous();
+  }, [previous]);
+
+  // Detect song change and apply directional slide
+  useEffect(() => {
+    if (!currentSong) return;
+
+    if (prevSongIdRef.current && prevSongIdRef.current !== currentSong.id) {
+      const dir = directionRef.current;
+      const isNext = dir === 'next';
+
+      // Set animations for entering content
+      setCoverAnim(isNext ? 'animate-slide-in-right' : 'animate-slide-in-left');
+      setInfoAnim('animate-slide-up-stagger');
+      setBgAnim('animate-bg-reveal');
+    } else {
+      // First load
+      setCoverAnim('animate-slide-in-right');
+      setInfoAnim('animate-slide-up-stagger');
+      setBgAnim('animate-bg-reveal');
+    }
+
+    prevSongIdRef.current = currentSong.id;
+  }, [currentSong?.id]);
+
   if (!isPlayerOpen || !currentSong) return null;
 
   const value = seeking ?? currentTime;
@@ -211,31 +253,33 @@ export default function PlayerPage() {
   return (
     <>
       <div className="fixed inset-0 z-50 flex flex-col overflow-hidden bg-background animate-in slide-in-from-bottom">
-        {/* ── Video background fullscreen ── */}
-        {currentSong.video_url && !skipVideoBg ? (
-          <SynchronizedVideoPlayer
-            song={currentSong}
-            isPlaying={isPlaying}
-            currentTime={currentTime}
-            onReady={signalVideoReady}
-            asBackground
-          />
-        ) : currentSong.video_url && skipVideoBg ? (
-          <div className="pointer-events-none absolute inset-0">
-            <CachedImage
-              src={songCoverUrl(currentSong)}
-              alt=""
-              className="h-full w-full object-cover"
+        {/* ── Video background fullscreen with directional slide ── */}
+        <div key={`bg-${currentSong.id}`} className={`${bgAnim} pointer-events-none absolute inset-0`}>
+          {currentSong.video_url && !skipVideoBg ? (
+            <SynchronizedVideoPlayer
+              song={currentSong}
+              isPlaying={isPlaying}
+              currentTime={currentTime}
+              onReady={signalVideoReady}
+              asBackground
             />
-            <div className="absolute inset-0 bg-black/70" />
-          </div>
-        ) : (
-          <div className="pointer-events-none absolute inset-0 bg-gradient-hero" />
-        )}
+          ) : currentSong.video_url && skipVideoBg ? (
+            <>
+              <CachedImage
+                src={songCoverUrl(currentSong)}
+                alt=""
+                className="h-full w-full object-cover"
+              />
+              <div className="absolute inset-0 bg-black/70" />
+            </>
+          ) : (
+            <div className="absolute inset-0 bg-gradient-hero" />
+          )}
+        </div>
 
         {/* ── Mobile layout ── */}
         <div className={`relative z-20 flex flex-1 flex-col ${isMobile ? 'px-3 pt-1.5 pb-2' : 'p-6 pb-2'} h-full`}>
-          {/* Header */}
+          {/* Header — stable, no transition */}
           <div className={`flex items-center justify-between ${isMobile ? 'mb-0.5' : 'mb-2'}`}>
             <button onClick={closePlayer} aria-label="Fermer" className="rounded-full p-1 hover:bg-secondary">
               <ChevronDown className={isMobile ? 'h-4 w-4' : 'h-6 w-6'} />
@@ -310,9 +354,9 @@ export default function PlayerPage() {
             </DropdownMenu>
           </div>
 
-          {/* Cover image */}
-          <div className={`flex items-center justify-center ${isMobile ? 'flex-[0.9] py-0.5' : 'flex-1 py-4 sm:py-8'}`}>
-            <div className={`relative flex w-full items-center justify-center ${isMobile ? 'px-0 max-w-[50vw]' : 'px-4 sm:max-w-sm'}`}>
+          {/* Cover image with directional slide */}
+          <div key={`cover-${currentSong.id}`} className={`flex items-center justify-center ${isMobile ? 'flex-[0.9] py-0.5' : 'flex-1 py-4 sm:py-8'}`}>
+            <div className={`relative flex w-full items-center justify-center ${coverAnim} ${isMobile ? 'px-0 max-w-[50vw]' : 'px-4 sm:max-w-sm'}`}>
               {currentSong.video_url ? (
                 <div className="relative w-full overflow-hidden rounded-2xl shadow-elegant" style={{ aspectRatio: '1 / 1' }}>
                   <CachedImage
@@ -378,11 +422,11 @@ export default function PlayerPage() {
             </div>
           </div>
 
-          {/* Song info + stats */}
-          <div className={isMobile ? 'mb-0.5' : 'mb-3'}>
-            <h2 className={`truncate font-bold text-foreground ${isMobile ? 'text-sm leading-tight' : 'text-2xl'}`}>{currentSong.title}</h2>
-            <p className={`truncate text-muted-foreground ${isMobile ? 'text-[11px]' : 'text-sm'}`}>{currentSong.author}</p>
-            <div className={`flex flex-wrap items-center gap-1 text-muted-foreground ${isMobile ? 'mt-0.5' : 'mt-1'}`}>
+          {/* Song info + stats with staggered entrance */}
+          <div key={`info-${currentSong.id}`} className={isMobile ? 'mb-0.5' : 'mb-3'}>
+            <h2 className={`truncate font-bold text-foreground ${infoAnim} ${isMobile ? 'text-sm leading-tight' : 'text-2xl'}`}>{currentSong.title}</h2>
+            <p className={`truncate text-muted-foreground ${infoAnim} delay-1 ${isMobile ? 'text-[11px]' : 'text-sm'}`}>{currentSong.author}</p>
+            <div className={`flex flex-wrap items-center gap-1 text-muted-foreground ${infoAnim} delay-2 ${isMobile ? 'mt-0.5' : 'mt-1'}`}>
               <span className={`flex items-center gap-1 ${isMobile ? 'text-[9px]' : 'text-xs'}`}>
                 <Headphones className={`${isMobile ? 'h-2 w-2' : 'h-3 w-3'}`} /> {(currentSong.play_count ?? 0).toLocaleString()}
               </span>
@@ -449,7 +493,7 @@ export default function PlayerPage() {
           {/* Controls */}
           <div className={`flex items-center justify-around ${isMobile ? 'py-1.5' : 'py-4'}`}>
             <ShuffleButton isShuffled={isShuffled} toggleShuffle={toggleShuffle} isMobile={isMobile} />
-            <button onClick={previous} aria-label="Précédent" className="rounded-full p-1.5 hover:bg-secondary">
+            <button onClick={handlePrev} aria-label="Précédent" className="rounded-full p-1.5 hover:bg-secondary">
               <SkipBack className={`fill-current ${isMobile ? 'h-5 w-5' : 'h-7 w-7'}`} />
             </button>
             <button
@@ -460,7 +504,7 @@ export default function PlayerPage() {
             >
               {isPlaying ? <Pause className={`fill-current ${isMobile ? 'h-5 w-5' : 'h-7 w-7'}`} /> : <Play className={`fill-current ${isMobile ? 'h-5 w-5' : 'h-7 w-7'}`} />}
             </button>
-            <button onClick={next} aria-label="Suivant" className="rounded-full p-1.5 hover:bg-secondary">
+            <button onClick={handleNext} aria-label="Suivant" className="rounded-full p-1.5 hover:bg-secondary">
               <SkipForward className={`fill-current ${isMobile ? 'h-5 w-5' : 'h-7 w-7'}`} />
             </button>
             <RepeatButton repeatMode={repeatMode} cycleRepeat={cycleRepeat} isMobile={isMobile} />

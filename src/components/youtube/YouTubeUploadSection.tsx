@@ -2,8 +2,9 @@ import { useState, useRef, useEffect, useCallback } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Loader2, Youtube, CheckCircle, Music, Upload as UploadIcon } from 'lucide-react';
+import { Loader2, Youtube, CheckCircle, Music, Upload as UploadIcon, ExternalLink, Search } from 'lucide-react';
 import { toast } from 'sonner';
+import CachedImage from '@/components/CachedImage';
 
 interface YouTubeUploadSectionProps {
   onVideoDetected: (videoId: string, title: string, author: string) => void;
@@ -22,30 +23,6 @@ export default function YouTubeUploadSection({
   const [urlInput, setUrlInput] = useState('');
   const [isDetecting, setIsDetecting] = useState(false);
   const [error, setError] = useState('');
-  const iframeRef = useRef<HTMLIFrameElement>(null);
-  const playerApiReady = useRef(false);
-  const currentVideoIdRef = useRef<string | null>(null);
-
-  // YouTube IFrame API
-  useEffect(() => {
-    // Load YouTube IFrame API if not already loaded
-    if (!(window as any).YT) {
-      const tag = document.createElement('script');
-      tag.src = 'https://www.youtube.com/iframe_api';
-      const firstScriptTag = document.getElementsByTagName('script')[0];
-      firstScriptTag.parentNode?.insertBefore(tag, firstScriptTag);
-    }
-
-    const onReady = () => {
-      playerApiReady.current = true;
-    };
-
-    (window as any).onYouTubeIframeAPIReady = onReady;
-
-    return () => {
-      (window as any).onYouTubeIframeAPIReady = undefined;
-    };
-  }, []);
 
   const extractVideoId = (url: string): string | null => {
     if (!url.trim()) return null;
@@ -72,7 +49,6 @@ export default function YouTubeUploadSection({
       
       const data = await response.json();
       const title = data.title || 'Sans titre';
-      let author = data.author_name || 'Inconnu';
 
       // Clean up title (remove "(Official Video)" etc.)
       const cleanTitle = title
@@ -86,8 +62,7 @@ export default function YouTubeUploadSection({
         .replace(/^[:\s-]+/, '')
         .trim();
 
-      onVideoDetected(videoId, cleanTitle, author);
-      currentVideoIdRef.current = videoId;
+      onVideoDetected(videoId, cleanTitle, data.author_name || 'Inconnu');
       toast.success('Vidéo détectée !');
     } catch (err) {
       console.error('oEmbed error:', err);
@@ -112,10 +87,8 @@ export default function YouTubeUploadSection({
   const handleUrlChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setUrlInput(e.target.value);
     setError('');
-    // Auto-detect when pasting a valid YouTube URL
     const videoId = extractVideoId(e.target.value);
     if (videoId) {
-      // Debounce auto-detect
       if (autoDetectTimer.current) clearTimeout(autoDetectTimer.current);
       autoDetectTimer.current = setTimeout(() => {
         fetchVideoInfo(videoId);
@@ -125,29 +98,38 @@ export default function YouTubeUploadSection({
 
   const autoDetectTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Update the iframe src when detected
-  const embedUrl = detectedVideo?.videoId
-    ? `https://www.youtube.com/embed/${detectedVideo.videoId}?autoplay=0&controls=1&modestbranding=1&rel=0&showinfo=1`
-    : 'https://www.youtube.com';
+  // YouTube thumbnail URL
+  const thumbnailUrl = detectedVideo?.videoId 
+    ? `https://img.youtube.com/vi/${detectedVideo.videoId}/hqdefault.jpg` 
+    : null;
+
+  // YouTube video URL for external link
+  const youtubeWatchUrl = detectedVideo?.videoId
+    ? `https://www.youtube.com/watch?v=${detectedVideo.videoId}`
+    : null;
 
   return (
     <div className="space-y-4">
-      {/* YouTube Iframe */}
-      <div className="relative w-full overflow-hidden rounded-2xl" style={{ aspectRatio: '16 / 9' }}>
-        <iframe
-          ref={iframeRef}
-          src={embedUrl}
-          title="YouTube"
-          className="absolute inset-0 h-full w-full"
-          allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
-          referrerPolicy="strict-origin-when-cross-origin"
-          sandbox="allow-scripts allow-same-origin allow-popups allow-forms"
-        />
+      {/* Instructions */}
+      <div className="rounded-xl border bg-secondary/20 p-4 space-y-2">
+        <div className="flex items-start gap-3">
+          <Youtube className="h-5 w-5 text-red-500 mt-0.5 shrink-0" />
+          <div className="text-sm text-muted-foreground space-y-1">
+            <p>1. Ouvrez <strong>YouTube</strong> dans un nouvel onglet</p>
+            <p>2. Trouvez la musique que vous voulez</p>
+            <p>3. Copiez le lien de la vidéo et collez-le ci-dessous</p>
+          </div>
+        </div>
+        <Button
+          type="button"
+          variant="outline"
+          className="w-full gap-2"
+          onClick={() => window.open('https://www.youtube.com', '_blank', 'noopener,noreferrer')}
+        >
+          <ExternalLink className="h-4 w-4" />
+          Ouvrir YouTube
+        </Button>
       </div>
-
-      <p className="text-xs text-muted-foreground text-center">
-        Naviguez sur YouTube pour trouver votre musique, puis collez le lien ci-dessous
-      </p>
 
       {/* URL Input + Detect */}
       <div className="space-y-2">
@@ -183,42 +165,69 @@ export default function YouTubeUploadSection({
         {error && <p className="text-xs text-destructive">{error}</p>}
       </div>
 
-      {/* Detected Video Info */}
+      {/* Detected Video Info with Thumbnail */}
       {detectedVideo && (
-        <div className="rounded-xl border bg-secondary/30 p-4 space-y-2">
-          <div className="flex items-start gap-3">
-            <CheckCircle className="h-5 w-5 text-green-500 mt-0.5 shrink-0" />
-            <div className="min-w-0">
-              <p className="text-sm font-medium truncate">{detectedVideo.title}</p>
-              <p className="text-xs text-muted-foreground">{detectedVideo.author}</p>
+        <div className="rounded-xl border bg-secondary/30 overflow-hidden">
+          {/* YouTube Thumbnail */}
+          {thumbnailUrl && (
+            <div className="relative w-full" style={{ aspectRatio: '16 / 9' }}>
+              <img
+                src={thumbnailUrl}
+                alt={detectedVideo.title}
+                className="absolute inset-0 h-full w-full object-cover"
+                onError={(e) => {
+                  // Fallback if thumbnail fails
+                  (e.target as HTMLImageElement).style.display = 'none';
+                }}
+              />
+              <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent" />
+              <a
+                href={youtubeWatchUrl!}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="absolute bottom-2 right-2 flex items-center gap-1 rounded-full bg-red-600 px-3 py-1.5 text-xs font-medium text-white shadow-lg hover:bg-red-700 transition-colors"
+              >
+                <Youtube className="h-3 w-3" />
+                Voir sur YouTube
+              </a>
             </div>
-          </div>
-          
-          <div className="grid grid-cols-2 gap-2 text-xs text-muted-foreground">
-            <div className="flex items-center gap-1">
-              <Youtube className="h-3 w-3 text-red-500" />
-              YouTube Music
-            </div>
-            <div className="flex items-center gap-1">
-              <Music className="h-3 w-3" />
-              Détection automatique
-            </div>
-          </div>
+          )}
 
-          {/* Upload button */}
-          <Button
-            type="button"
-            onClick={onUpload}
-            disabled={submitting}
-            className="w-full mt-2"
-          >
-            <UploadIcon className="mr-2 h-4 w-4" />
-            {submitting ? 'Upload en cours...' : 'Uploader vers Jux'}
-          </Button>
+          <div className="p-4 space-y-2">
+            <div className="flex items-start gap-3">
+              <CheckCircle className="h-5 w-5 text-green-500 mt-0.5 shrink-0" />
+              <div className="min-w-0">
+                <p className="text-sm font-medium truncate">{detectedVideo.title}</p>
+                <p className="text-xs text-muted-foreground">{detectedVideo.author}</p>
+              </div>
+            </div>
+            
+            <div className="grid grid-cols-2 gap-2 text-xs text-muted-foreground">
+              <div className="flex items-center gap-1">
+                <Youtube className="h-3 w-3 text-red-500" />
+                YouTube Music
+              </div>
+              <div className="flex items-center gap-1">
+                <Music className="h-3 w-3" />
+                Détection automatique
+              </div>
+            </div>
 
-          <p className="text-[10px] text-muted-foreground text-center">
-            La vidéo YouTube sera lue en fond avec le son original
-          </p>
+            {/* Upload button */}
+            <Button
+              type="button"
+              onClick={onUpload}
+              disabled={submitting}
+              className="w-full mt-2"
+            >
+              <UploadIcon className="mr-2 h-4 w-4" />
+              {submitting ? 'Upload en cours...' : 'Uploader vers Jux'}
+            </Button>
+
+            <p className="text-[10px] text-muted-foreground text-center">
+              La vidéo YouTube sera lue en fond avec le son original
+            </p>
+          </div>
         </div>
       )}
     </div>

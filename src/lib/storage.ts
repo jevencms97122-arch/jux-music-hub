@@ -13,6 +13,7 @@ export function songCoverUrl(song: { cover_url?: string | null }): string {
 }
 
 export function songAudioUrl(song: { audio_url: string }): string {
+  if (!song.audio_url) return '';
   return publicUrl('songs', song.audio_url);
 }
 

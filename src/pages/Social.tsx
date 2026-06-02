@@ -10,6 +10,7 @@ import { toast } from 'sonner';
 import { usePlayer } from '@/contexts/PlayerContext';
 import { Headphones, Users, Search, Radio, Clock } from 'lucide-react';
 import type { Profile, Follow, Song } from '@/types/music';
+import { useSeo } from '@/lib/useSeo';
 
 interface FriendPresence {
   user: Profile;
@@ -22,6 +23,11 @@ interface FriendPresence {
 }
 
 export default function Social() {
+  useSeo({
+    title: 'Social — Jux-Music',
+    description: 'Suis tes amis, découvre leurs écoutes en direct et leur activité musicale sur Jux-Music.',
+    path: '/social',
+  });
   const { authUser } = useAuth();
   const navigate = useNavigate();
   const { playSongFromList } = usePlayer();

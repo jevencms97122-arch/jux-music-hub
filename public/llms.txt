@@ -1,0 +1,17 @@
+# Jux-Music
+
+> Jux-Music est une PWA mobile francophone gratuite pour écouter, uploader et partager de la musique avec ses amis, sans publicité.
+
+Jux-Music propose un lecteur musical complet (crossfade, contrôle de vitesse et de hauteur, file d'attente), des playlists publiques et collaboratives, des stories audio de 15 secondes, une écoute synchronisée entre utilisateurs et un fil social. L'application est mobile-first avec une barre de navigation inférieure et un lecteur en bottom sheet.
+
+## Pages
+
+- [Accueil](/jux): Découverte musicale, Daily Mix personnalisé, tendances et playlists publiques.
+- [Playlists](/playlists): Parcourir les playlists publiques et gérer ses propres playlists.
+- [Social](/social): Fil d'activité des amis et écoutes en cours.
+- [Recherche](/search): Recherche de titres, artistes et utilisateurs.
+
+## Optional
+
+- [Favoris](/favorites): Titres aimés (nécessite un compte).
+- [Mode voiture](/car): Interface large pour la conduite (nécessite un compte).

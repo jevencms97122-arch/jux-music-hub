@@ -4,8 +4,14 @@ import { useAuth } from '@/contexts/AuthContext';
 import { usePlayer } from '@/contexts/PlayerContext';
 import SongCard from '@/components/SongCard';
 import type { Song } from '@/types/music';
+import { useSeo } from '@/lib/useSeo';
 
 export default function Favorites() {
+  useSeo({
+    title: 'Favoris — Jux-Music',
+    description: 'Retrouve tous les titres que tu as aimés sur Jux-Music.',
+    path: '/favorites',
+  });
   const { authUser } = useAuth();
   const { playSongFromList } = usePlayer();
   const [songs, setSongs] = useState<Song[]>([]);

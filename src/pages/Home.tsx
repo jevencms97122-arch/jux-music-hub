@@ -17,6 +17,7 @@ import CollabCard from '@/components/CollabCard';
 import { collaborations } from '@/data/collaborations';
 import TutorialModal from '@/components/TutorialModal';
 import juxLogo from '@/assets/jux-logo.png';
+import { useSeo } from '@/lib/useSeo';
 
 export default function Home() {
   const { authUser } = useAuth();
@@ -28,6 +29,11 @@ export default function Home() {
   const [loading, setLoading] = useState(true);
   const [unread, setUnread] = useState(0);
   const [tutorialOpen, setTutorialOpen] = useState(false);
+  useSeo({
+    title: 'Accueil — Jux-Music',
+    description: 'Découvre ton Daily Mix, les tendances et les nouveautés musicales partagées par la communauté Jux-Music.',
+    path: '/jux',
+  });
   const [publicPlaylists, setPublicPlaylists] = useState<Playlist[]>([]);
   const [playlistsLoading, setPlaylistsLoading] = useState(true);
 

@@ -5,8 +5,14 @@ import { useNavigate } from 'react-router-dom';
 import { Bell, Trash2, Check, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import type { AppNotification } from '@/types/music';
+import { useSeo } from '@/lib/useSeo';
 
 export default function Notifications() {
+  useSeo({
+    title: 'Notifications — Jux-Music',
+    description: 'Tes notifications, invitations et activité sociale sur Jux-Music.',
+    path: '/notifications',
+  });
   const { authUser } = useAuth();
   const navigate = useNavigate();
   const [notifs, setNotifs] = useState<AppNotification[]>([]);

@@ -12,8 +12,14 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { Plus, ListMusic, Heart, Globe, Lock, Compass } from 'lucide-react';
 import { toast } from 'sonner';
 import type { Playlist } from '@/types/music';
+import { useSeo } from '@/lib/useSeo';
 
 export default function Playlists() {
+  useSeo({
+    title: 'Playlists — Jux-Music',
+    description: 'Crée tes playlists, explore les playlists publiques et collaboratives partagées par la communauté Jux-Music.',
+    path: '/playlists',
+  });
   const { authUser } = useAuth();
   const navigate = useNavigate();
   const [own, setOwn] = useState<Playlist[]>([]);

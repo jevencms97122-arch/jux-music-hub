@@ -10,6 +10,7 @@ import { toast } from 'sonner';
 import { usePlayer } from '@/contexts/PlayerContext';
 import { Headphones, Users, Search, Radio, Clock } from 'lucide-react';
 import type { Profile, Follow, Song } from '@/types/music';
+import { useSeo } from '@/lib/useSeo';
 
 interface FriendPresence {
   user: Profile;
@@ -18,6 +19,9 @@ interface FriendPresence {
   current_song_title: string | null;
   current_song_author: string | null;
   current_song_cover_url: string | null;
+}
+
+const _SOCIAL_SEO_MARK = true;
   last_seen_at: string;
 }
 

@@ -8,8 +8,14 @@ import { useNavigate } from 'react-router-dom';
 import { avatarUrl } from '@/lib/storage';
 import type { Song, Profile } from '@/types/music';
 import { Search as SearchIcon } from 'lucide-react';
+import { useSeo } from '@/lib/useSeo';
 
 export default function Search() {
+  useSeo({
+    title: 'Recherche — Jux-Music',
+    description: 'Recherche des titres, artistes et utilisateurs sur Jux-Music.',
+    path: '/search',
+  });
   const { playSongFromList } = usePlayer();
   const navigate = useNavigate();
   const [q, setQ] = useState('');

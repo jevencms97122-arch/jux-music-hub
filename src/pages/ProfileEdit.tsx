@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
-import { uploadFile } from '@/lib/storage';
+import { uploadFileSmart } from '@/lib/storage';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -34,7 +34,7 @@ export default function ProfileEdit({ onBack }: Props) {
     setSubmitting(true);
     try {
       let avatar_url: string | undefined;
-      if (avatar) avatar_url = await uploadFile('avatars', authUser.id, avatar);
+      if (avatar) avatar_url = await uploadFileSmart('avatars', authUser.id, avatar);
       await updateProfile({
         pseudo: pseudo.trim(),
         first_name: firstName.trim() || null,

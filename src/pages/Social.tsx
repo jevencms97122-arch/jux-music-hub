@@ -19,6 +19,7 @@ interface FriendPresence {
   current_song_title: string | null;
   current_song_author: string | null;
   current_song_cover_url: string | null;
+  last_seen_at: string;
 }
 
 export default function Social() {

@@ -11,6 +11,7 @@ import { toast } from 'sonner';
 import { useTheme } from '@/contexts/ThemeContext';
 import { updatePresence, clearPresence } from '@/lib/userPresence';
 import type { Song } from '@/types/music';
+import { getPlayableAudioUrl, ensureCachedForPlayback, initOfflineManager } from '@/lib/offlineManager';
 
 export type TransitionMode = 'linear' | 'hardCut' | 'exponential' | 'logarithmic' | 'sine' | 'sCurve' | 'elastic' | 'cubicEaseInOut' | 'quartEaseInOut' | 'tempoShift';
 
@@ -353,6 +354,8 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
 
   // Init audio elements
   useEffect(() => {
+    // Init offline manager (cleanup + DB open)
+    initOfflineManager().catch(() => {});
     const create = () => {
       const a = new Audio();
       a.preload = 'auto';
@@ -657,7 +660,7 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
     }
     const a = getActive();
     if (!a) return;
-    a.src = songAudioUrl(song);
+    a.src = await getPlayableAudioUrl(song);
     a.volume = volume;
     // Force playbackRate après changement de src (certains navigateurs reset à 1)
     const applyRate = () => { a.playbackRate = playbackRate; };
@@ -677,6 +680,8 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
       await a.play();
       a.playbackRate = playbackRate;
       recordPlay(song);
+      // Kick off background caching for offline playback
+      ensureCachedForPlayback(song).catch(() => {});
     } catch (e) {
       console.error('Audio play failed', e);
     }

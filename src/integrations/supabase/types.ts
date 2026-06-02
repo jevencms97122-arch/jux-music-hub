@@ -418,10 +418,11 @@ export type Database = {
       }
       songs: {
         Row: {
-          audio_url: string
+          audio_url: string | null
           author: string
           cover_url: string | null
           created_at: string
+          duration: number | null
           genre: string | null
           id: string
           likes_count: number
@@ -429,13 +430,17 @@ export type Database = {
           title: string
           updated_at: string
           uploaded_by: string
+          video_url: string | null
           weekly_play_count: number
+          weekly_reset_at: string
+          youtube_id: string | null
         }
         Insert: {
-          audio_url: string
+          audio_url?: string | null
           author: string
           cover_url?: string | null
           created_at?: string
+          duration?: number | null
           genre?: string | null
           id?: string
           likes_count?: number
@@ -443,13 +448,17 @@ export type Database = {
           title: string
           updated_at?: string
           uploaded_by: string
+          video_url?: string | null
           weekly_play_count?: number
+          weekly_reset_at?: string
+          youtube_id?: string | null
         }
         Update: {
-          audio_url?: string
+          audio_url?: string | null
           author?: string
           cover_url?: string | null
           created_at?: string
+          duration?: number | null
           genre?: string | null
           id?: string
           likes_count?: number
@@ -457,7 +466,10 @@ export type Database = {
           title?: string
           updated_at?: string
           uploaded_by?: string
+          video_url?: string | null
           weekly_play_count?: number
+          weekly_reset_at?: string
+          youtube_id?: string | null
         }
         Relationships: []
       }
@@ -531,6 +543,53 @@ export type Database = {
           },
         ]
       }
+      user_presence: {
+        Row: {
+          created_at: string
+          current_song_author: string | null
+          current_song_cover_url: string | null
+          current_song_id: string | null
+          current_song_title: string | null
+          id: string
+          is_listening: boolean
+          last_seen_at: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          current_song_author?: string | null
+          current_song_cover_url?: string | null
+          current_song_id?: string | null
+          current_song_title?: string | null
+          id?: string
+          is_listening?: boolean
+          last_seen_at?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          current_song_author?: string | null
+          current_song_cover_url?: string | null
+          current_song_id?: string | null
+          current_song_title?: string | null
+          id?: string
+          is_listening?: boolean
+          last_seen_at?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "user_presence_current_song_id_fkey"
+            columns: ["current_song_id"]
+            isOneToOne: false
+            referencedRelation: "songs"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       user_roles: {
         Row: {
           created_at: string
@@ -598,7 +657,10 @@ export type Database = {
         Returns: boolean
       }
       increment_song_play: { Args: { _song_id: string }; Returns: number }
-      increment_song_weekly_play: { Args: { _song_id: string }; Returns: number }
+      increment_song_weekly_play: {
+        Args: { _song_id: string }
+        Returns: number
+      }
       is_playlist_collaborator: {
         Args: { _min_role?: string; _playlist_id: string; _user_id: string }
         Returns: boolean

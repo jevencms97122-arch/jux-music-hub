@@ -10,7 +10,7 @@
 import type { JuxPlatform } from './platform';
 
 /** Version actuelle de l'app Android */
-export const LATEST_ANDROID_VERSION = "1.0.2";
+export const LATEST_ANDROID_VERSION = "1.0.3";
 
 /** Version actuelle de l'app PC */
 export const LATEST_PC_VERSION = "1.0.3";
@@ -144,7 +144,7 @@ export function getDownloadUrl(): string {
 export function getReleaseNotes(): string {
   const platform = getDetectedPlatform();
   if (platform === 'android-app') {
-    return "Ajout du contrôle de musique dans les notifications de l'appareil et optimisation de l'app, plus rapide";
+    return "Version 1.0.3 (mobile) — Migration du serveur de musique : passage de Supabase (5 Go) à PocketBase (≈450 Go) pour plus d'espace et fiabilité. Inclut améliorations de lecture offline et gestion du cache.";
   }
   // PC Desktop
   return "Optimisation de l'application, plus rapide";

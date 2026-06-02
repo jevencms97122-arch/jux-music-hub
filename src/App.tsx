@@ -154,28 +154,30 @@ function AppContent() {
       <div className="min-h-screen">
         {/* Vérification de mise à jour de l'app PC -- visible uniquement sur Jux Desktop */}
         {profileCompleted && <UpdateChecker />}
-        <AnimatePresence mode="wait" initial={false}>
-          <Routes location={location} key={location.pathname}>
-            <Route path="/" element={<Navigate to="/jux" replace />} />
-            <Route path="/profile-setup" element={<PageWrap><ProfileSetup /></PageWrap>} />
-            <Route path="/jux" element={guard(<Home />)} />
-            <Route path="/upload" element={guard(<Upload />)} />
-            <Route path="/playlists" element={guard(<Playlists />)} />
-            <Route path="/playlist/:id" element={guard(<PlaylistDetail />)} />
-            <Route path="/social" element={guard(<Social />)} />
-            <Route path="/listen-together" element={guard(<ListenTogether />)} />
-            <Route path="/u/:userId" element={guard(<UserProfile />)} />
-            <Route path="/search" element={guard(<Search />)} />
-            <Route path="/favorites" element={guard(<Favorites />)} />
-            <Route path="/notifications" element={guard(<Notifications />)} />
-            <Route path="/car" element={guard(<CarMode />)} />
-            <Route path="/collab/:username" element={guard(<CollabDetail />)} />
-            <Route path="/wrapped" element={guard(<Wrapped />)} />
-            <Route path="/profile" element={guard(<ProfilePage />)} />
-            <Route path="/profile-edit" element={guard(<ProfileEdit onBack={() => navigate('/profile')} />)} />
-            <Route path="*" element={<Navigate to="/jux" replace />} />
-          </Routes>
-        </AnimatePresence>
+        <main>
+          <AnimatePresence mode="wait" initial={false}>
+            <Routes location={location} key={location.pathname}>
+              <Route path="/" element={<Navigate to="/jux" replace />} />
+              <Route path="/profile-setup" element={<PageWrap><ProfileSetup /></PageWrap>} />
+              <Route path="/jux" element={guard(<Home />)} />
+              <Route path="/upload" element={guard(<Upload />)} />
+              <Route path="/playlists" element={guard(<Playlists />)} />
+              <Route path="/playlist/:id" element={guard(<PlaylistDetail />)} />
+              <Route path="/social" element={guard(<Social />)} />
+              <Route path="/listen-together" element={guard(<ListenTogether />)} />
+              <Route path="/u/:userId" element={guard(<UserProfile />)} />
+              <Route path="/search" element={guard(<Search />)} />
+              <Route path="/favorites" element={guard(<Favorites />)} />
+              <Route path="/notifications" element={guard(<Notifications />)} />
+              <Route path="/car" element={guard(<CarMode />)} />
+              <Route path="/collab/:username" element={guard(<CollabDetail />)} />
+              <Route path="/wrapped" element={guard(<Wrapped />)} />
+              <Route path="/profile" element={guard(<ProfilePage />)} />
+              <Route path="/profile-edit" element={guard(<ProfileEdit onBack={() => navigate('/profile')} />)} />
+              <Route path="*" element={<Navigate to="/jux" replace />} />
+            </Routes>
+          </AnimatePresence>
+        </main>
         <MiniPlayer />
         <PlayerPage />
         {profileCompleted && (

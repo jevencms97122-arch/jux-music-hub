@@ -1,4 +1,5 @@
 import { supabase } from '@/integrations/supabase/client';
+import { isMediaServerConfigured, uploadMedia, type MediaKind } from './mediaServer';
 
 /** URL publique d'un fichier dans un bucket Supabase Storage. */
 export function publicUrl(bucket: 'songs' | 'covers' | 'avatars', path: string): string {
@@ -61,6 +62,34 @@ export async function uploadFile(
   });
   if (error) throw error;
   return path;
+}
+
+const BUCKET_TO_KIND: Record<'songs' | 'covers' | 'avatars', MediaKind> = {
+  songs: 'audio',
+  covers: 'cover',
+  avatars: 'avatar',
+};
+
+/**
+ * Upload "smart" : envoie vers le serveur média externe si VITE_MEDIA_BASE_URL
+ * est défini, sinon fallback Supabase Storage.
+ *
+ * Retourne :
+ * - une URL HTTPS complète (cas serveur externe) — à stocker telle quelle en DB
+ * - un chemin relatif au bucket (cas Supabase) — résolu par `publicUrl()` à l'affichage
+ *
+ * Les helpers `songCoverUrl`, `songAudioUrl`, `avatarUrl` gèrent déjà les deux
+ * formes (passthrough si la valeur commence par `http`).
+ */
+export async function uploadFileSmart(
+  bucket: 'songs' | 'covers' | 'avatars',
+  userId: string,
+  file: File,
+): Promise<string> {
+  if (isMediaServerConfigured()) {
+    return uploadMedia(BUCKET_TO_KIND[bucket], file, userId);
+  }
+  return uploadFile(bucket, userId, file);
 }
 
 export async function deleteFile(

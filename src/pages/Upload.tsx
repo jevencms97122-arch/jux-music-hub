@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
-import { uploadFile, extractYoutubeId } from '@/lib/storage';
+import { uploadFileSmart, extractYoutubeId } from '@/lib/storage';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -42,8 +42,8 @@ export default function Upload() {
     setSubmitting(true);
     setYoutubeError('');
     try {
-      const audioPath = await uploadFile('songs', authUser.id, audio);
-      const coverPath = cover ? await uploadFile('covers', authUser.id, cover) : null;
+      const audioPath = await uploadFileSmart('songs', authUser.id, audio);
+      const coverPath = cover ? await uploadFileSmart('covers', authUser.id, cover) : null;
 
       const { error } = await supabase.from('songs').insert({
         title,

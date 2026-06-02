@@ -32,8 +32,6 @@ export interface Song {
   title: string;
   author: string;
   audio_url: string;
-  /** For YouTube-only songs (no uploaded audio file), this is set to '' */
-  source_type?: 'upload' | 'youtube';
   cover_url: string | null;
   video_url: string | null;
   genre: string | null;

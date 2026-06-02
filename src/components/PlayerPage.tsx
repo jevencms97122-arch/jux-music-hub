@@ -67,9 +67,6 @@ export default function PlayerPage() {
   const platform = detectPlatform();
   const isAndroidApp = platform === 'android-app';
   const skipVideoBg = isMobile || isAndroidApp;
-  
-  // Detect YouTube-only songs (no audio file, only YouTube video)
-  const isYoutubeOnly = !!currentSong?.video_url && !currentSong?.audio_url;
 
   // Vérifie si le morceau est déjà téléchargé hors connexion
   useEffect(() => {
@@ -265,7 +262,6 @@ export default function PlayerPage() {
               currentTime={currentTime}
               onReady={signalVideoReady}
               asBackground
-              playWithSound={isYoutubeOnly}
             />
           ) : currentSong.video_url && skipVideoBg ? (
             <>
@@ -361,7 +357,7 @@ export default function PlayerPage() {
           {/* Cover image with directional slide */}
           <div key={`cover-${currentSong.id}`} className={`flex items-center justify-center ${isMobile ? 'flex-[0.9] py-0.5' : 'flex-1 py-4 sm:py-8'}`}>
             <div className={`relative flex w-full items-center justify-center ${coverAnim} ${isMobile ? 'px-0 max-w-[50vw]' : 'px-4 sm:max-w-sm'}`}>
-              {currentSong.video_url && !isYoutubeOnly ? (
+              {currentSong.video_url ? (
                 <div className="relative w-full overflow-hidden rounded-2xl shadow-elegant" style={{ aspectRatio: '1 / 1' }}>
                   <CachedImage
                     src={songCoverUrl(currentSong)}

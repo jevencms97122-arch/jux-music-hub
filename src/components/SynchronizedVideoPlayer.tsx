@@ -10,8 +10,6 @@ interface SynchronizedVideoPlayerProps {
   onReady?: () => void;
   /** If true, renders as a full-background video behind content */
   asBackground?: boolean;
-  /** If true, video will play with sound (for YouTube-only songs) */
-  playWithSound?: boolean;
 }
 
 const TIMEOUT_MS = 4000; // 4 secondes max pour charger la vidéo
@@ -22,7 +20,6 @@ export default function SynchronizedVideoPlayer({
   currentTime,
   onReady,
   asBackground = false,
-  playWithSound = false,
 }: SynchronizedVideoPlayerProps) {
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const videoUrl = song.video_url || null;
@@ -123,9 +120,7 @@ export default function SynchronizedVideoPlayer({
     return fallback;
   }
 
-  // Build embed URL - if playWithSound, don't mute the video
-  const isMuted = !playWithSound;
-  const embedUrl = `https://www.youtube.com/embed/${youtubeId}?enablejsapi=1&autoplay=0&controls=0&modestbranding=1&rel=0&showinfo=0&iv_load_policy=3${isMuted ? '&mute=1' : ''}&playsinline=1&disablekb=1&fs=0&cc_load_policy=0`;
+  const embedUrl = `https://www.youtube.com/embed/${youtubeId}?enablejsapi=1&autoplay=0&controls=0&modestbranding=1&rel=0&showinfo=0&iv_load_policy=3&mute=1&playsinline=1&disablekb=1&fs=0&cc_load_policy=0`;
 
   // Background mode: fullscreen cover video with dark overlay
   if (asBackground) {
@@ -137,9 +132,9 @@ export default function SynchronizedVideoPlayer({
           title="YouTube video player"
           className="absolute left-1/2 top-1/2 min-h-[130%] min-w-[130%] -translate-x-1/2 -translate-y-1/2 scale-[1.3]"
           onLoad={handleLoad}
-          allow={`autoplay; encrypted-media; gyroscope; picture-in-picture${playWithSound ? '' : ''}`}
+          allow="autoplay; encrypted-media; gyroscope; picture-in-picture"
           referrerPolicy="strict-origin-when-cross-origin"
-          style={{ pointerEvents: 'none', opacity: playWithSound ? 0.35 : 0.35 }}
+          style={{ pointerEvents: 'none', opacity: 0.35 }}
         />
           <div className="absolute inset-0 bg-black/35" />
       </div>
@@ -154,7 +149,7 @@ export default function SynchronizedVideoPlayer({
         title="YouTube video player"
         className="absolute inset-0 h-full w-full"
         onLoad={handleLoad}
-        allow={`autoplay; encrypted-media; gyroscope; picture-in-picture${playWithSound ? '' : ''}`}
+        allow="autoplay; encrypted-media; gyroscope; picture-in-picture"
         referrerPolicy="strict-origin-when-cross-origin"
         style={{ pointerEvents: 'none' }}
       />

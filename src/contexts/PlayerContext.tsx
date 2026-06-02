@@ -650,36 +650,11 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
       crossfadeIntervalRef.current = null;
     }
     crossfadingRef.current = false;
-    
     // Stop the inactive audio if it was preloading a crossfade
     const inactive = getInactive();
     if (inactive) {
       try { inactive.pause(); inactive.volume = 0; inactive.removeAttribute('src'); inactive.load(); } catch {}
     }
-    
-    // Check if this is a YouTube-only song (no audio file, only YouTube video)
-    const isYoutubeOnly = !!song.video_url && !song.audio_url;
-    
-    if (isYoutubeOnly) {
-      // YouTube-only: skip audio element, clear active audio, let video player handle everything
-      const active = getActive();
-      if (active) {
-        try { active.pause(); active.removeAttribute('src'); active.load(); } catch {}
-        active.volume = 0;
-      }
-      // Set duration to unknown (video player manages it)
-      setCurrentSong(song);
-      setDuration(0);
-      setCurrentTime(0);
-      setIsPlaying(autoPlay);
-      
-      // Broadcast if needed
-      if (sessionRef.current && authUser && sessionRef.current.host_id === authUser.id) {
-        broadcastSongRef.current(song);
-      }
-      return;
-    }
-    
     const a = getActive();
     if (!a) return;
     a.src = songAudioUrl(song);
@@ -854,51 +829,15 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
   }, [loadAndPlay, authUser, broadcastSong]);
 
   const togglePlay = useCallback(() => {
-    if (!currentSong) return;
+    const a = getActive();
+    if (!a || !currentSong) return;
     // Invité : redirige vers session
     if (isSessionGuestRef.current) {
       toast.info("Seul l'hôte peut contrôler la lecture");
       return;
     }
-    pendingSessionAutoplayRef.current = false;
-
-    // Check if this is a YouTube-only song
-    const isYoutubeOnly = !!currentSong.video_url && !currentSong.audio_url;
-
-    if (isYoutubeOnly) {
-      // For YouTube-only songs, toggle via isPlaying state
-      // The SynchronizedVideoPlayer will handle play/pause via this state
-      const newPlaying = !isPlaying;
-      setIsPlaying(newPlaying);
-      
-      // Met à jour la présence
-      if (authUser) {
-        if (newPlaying) {
-          updatePresence({
-            userId: authUser.id,
-            isListening: true,
-            songId: currentSong.id,
-            songTitle: currentSong.title,
-            songAuthor: currentSong.author,
-          });
-        } else {
-          clearPresence(authUser.id);
-        }
-      }
-      // Host : broadcast play/pause
-      const s = sessionRef.current;
-      if (s && authUser && s.host_id === authUser.id) {
-        supabase.from('listen_sessions').update({
-          is_playing: newPlaying,
-          current_time_seconds: 0,
-        }).eq('id', s.id).then(() => {});
-      }
-      return;
-    }
-
-    const a = getActive();
-    if (!a) return;
     const shouldPlay = a.paused;
+    pendingSessionAutoplayRef.current = false;
 
     if (shouldPlay) {
       a.play().catch(console.error);
@@ -927,7 +866,7 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
         current_time_seconds: a.currentTime,
       }).eq('id', s.id).then(() => {});
     }
-  }, [currentSong, isPlaying, authUser]);
+  }, [currentSong, authUser]);
 
   const findRecommendedSongs = useCallback(async (baseSong: Song): Promise<Song[]> => {
     try {

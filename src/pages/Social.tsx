@@ -20,12 +20,15 @@ interface FriendPresence {
   current_song_author: string | null;
   current_song_cover_url: string | null;
 }
-
-const _SOCIAL_SEO_MARK = true;
   last_seen_at: string;
 }
 
 export default function Social() {
+  useSeo({
+    title: 'Social — Jux-Music',
+    description: 'Suis tes amis, découvre leurs écoutes en direct et leur activité musicale sur Jux-Music.',
+    path: '/social',
+  });
   const { authUser } = useAuth();
   const navigate = useNavigate();
   const { playSongFromList } = usePlayer();

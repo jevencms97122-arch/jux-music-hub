@@ -127,6 +127,14 @@ export default function Home() {
         </div>
       </header>
 
+      <div className="mx-4 mb-4 rounded-2xl border border-amber-300 bg-amber-100/90 p-4 text-sm text-amber-950 shadow-sm">
+        <p className="font-semibold">Important :</p>
+        <p>
+          Le site va être mis hors ligne pendant un temps limité. Il rouvrira très bientôt.
+          Toutes les musiques seront supprimées pour mettre en place le nouveau serveur d'hébergement de musique.
+        </p>
+      </div>
+
       {/* ── Greeting ── */}
       <div
         className="relative px-4 pb-6"

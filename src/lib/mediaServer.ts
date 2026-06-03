@@ -20,7 +20,7 @@
 
 export type MediaKind = 'audio' | 'cover' | 'avatar';
 
-const DEFAULT_MEDIA_BASE_URL = 'https://feat-success-cgi-disclaimer.trycloudflare.com';
+const DEFAULT_MEDIA_BASE_URL = 'https://ethical-flying-specified-dividend.trycloudflare.com';
 const BASE = (import.meta.env.VITE_MEDIA_BASE_URL || DEFAULT_MEDIA_BASE_URL).replace(/\/+$/, '');
 const COLLECTION = import.meta.env.VITE_MEDIA_COLLECTION || 'media';
 

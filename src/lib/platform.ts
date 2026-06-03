@@ -66,6 +66,22 @@ export function detectPlatform(): JuxPlatform {
   return 'web';
 }
 
+export function isAndroidNative(): boolean {
+  return detectPlatform() === 'android-app';
+}
+
+export function isDesktopNative(): boolean {
+  return detectPlatform() === 'windows-app';
+}
+
+function __unused_detectPlatform_placeholder(): JuxPlatform {
+  if (typeof window === 'undefined') return 'web';
+  const ua = (navigator.userAgent || '').toLowerCase();
+  if (window.JuxAndroid || ua.includes('jux_music') || ua.includes('com.example.jux_music')) return 'android-app';
+  if (window.JuxDesktop || ua.includes('jux-music-pc-app') || ua.includes('electron')) return 'windows-app';
+  return 'web';
+}
+
 export interface DownloadPayload {
   id: string;
   title: string;

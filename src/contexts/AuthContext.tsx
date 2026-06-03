@@ -5,6 +5,7 @@ import type { RecordModel } from 'pocketbase';
 
 interface AuthContextType {
   user: PBUser | null;
+  authUser: PBUser | null;
   profile: Profile | null;
   loading: boolean;
   signIn: (email: string, password: string) => Promise<void>;

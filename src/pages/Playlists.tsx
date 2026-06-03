@@ -1,155 +1,122 @@
 import { useEffect, useState } from 'react';
-import { supabase } from '@/integrations/supabase/client';
+import { pb } from '@/lib/pocketbase';
 import { useAuth } from '@/contexts/AuthContext';
-import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Textarea } from '@/components/ui/textarea';
-import { Switch } from '@/components/ui/switch';
-import { Label } from '@/components/ui/label';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
-import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
-import { Plus, ListMusic, Heart, Globe, Lock, Compass } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { ArrowLeft, ListMusic, Plus, Globe, Heart } from 'lucide-react';
 import { toast } from 'sonner';
+import { Input } from '@/components/ui/input';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import type { Playlist } from '@/types/music';
-import { useSeo } from '@/lib/useSeo';
 
 export default function Playlists() {
-  useSeo({
-    title: 'Playlists — Jux-Music',
-    description: 'Crée tes playlists, explore les playlists publiques et collaboratives partagées par la communauté Jux-Music.',
-    path: '/playlists',
-  });
-  const { authUser } = useAuth();
+  const { user } = useAuth();
   const navigate = useNavigate();
-  const [own, setOwn] = useState<Playlist[]>([]);
-  const [liked, setLiked] = useState<Playlist[]>([]);
+  const [myPlaylists, setMyPlaylists] = useState<Playlist[]>([]);
+  const [likedPlaylists, setLikedPlaylists] = useState<Playlist[]>([]);
   const [publicPlaylists, setPublicPlaylists] = useState<Playlist[]>([]);
-  const [open, setOpen] = useState(false);
+  const [createOpen, setCreateOpen] = useState(false);
   const [title, setTitle] = useState('');
-  const [description, setDescription] = useState('');
-  const [isPublic, setIsPublic] = useState(true);
-  const [creating, setCreating] = useState(false);
 
   const load = async () => {
-    if (!authUser) return;
-    const { data: mine } = await supabase
-      .from('playlists').select('*').eq('owner_id', authUser.id).order('created_at', { ascending: false });
-    setOwn((mine ?? []) as Playlist[]);
-
-    const { data: likes } = await supabase
-      .from('playlist_likes').select('playlist_id').eq('user_id', authUser.id);
-    const ids = (likes ?? []).map((l) => l.playlist_id);
-    if (ids.length) {
-      const { data } = await supabase.from('playlists').select('*').in('id', ids);
-      setLiked((data ?? []) as Playlist[]);
-    } else setLiked([]);
-
-    const { data: pubs } = await supabase
-      .from('playlists').select('*')
-      .eq('is_public', true).neq('owner_id', authUser.id)
-      .order('likes_count', { ascending: false }).limit(30);
-    setPublicPlaylists((pubs ?? []) as Playlist[]);
+    if (!user) return;
+    try {
+      const [mine, likes] = await Promise.all([
+        pb.collection('playlists').getList(1, 50, { filter: `owner_id = "${user.id}"`, sort: '-created', requestKey: null }),
+        pb.collection('playlist_likes').getList(1, 200, { filter: `user_id = "${user.id}"`, requestKey: null }),
+      ]);
+      setMyPlaylists(mine.items.map((r: any) => ({ id: r.id, title: r.get('title'), description: r.get('description'), is_public: r.get('is_public'), owner_id: r.get('owner_id'), view_count: r.get('view_count'), play_count: r.get('play_count'), likes_count: r.get('likes_count'), thumbnail_mode: r.get('thumbnail_mode'), created_at: r.get('created') || r.created, updated_at: r.get('updated') || r.updated })) as Playlist[]);
+      
+      const likedIds = likes.items.map((r: any) => r.get('playlist_id')).filter(Boolean);
+      if (likedIds.length > 0) {
+        const filters = likedIds.map((id: string) => `id = "${id}"`).join(' || ');
+        const res = await pb.collection('playlists').getList(1, 50, { filter: filters, requestKey: null });
+        setLikedPlaylists(res.items.map((r: any) => ({ id: r.id, title: r.get('title'), description: r.get('description'), is_public: r.get('is_public'), owner_id: r.get('owner_id'), view_count: r.get('view_count'), play_count: r.get('play_count'), likes_count: r.get('likes_count'), thumbnail_mode: r.get('thumbnail_mode'), created_at: r.get('created') || r.created, updated_at: r.get('updated') || r.updated })) as Playlist[]);
+      }
+      
+      const pubs = await pb.collection('playlists').getList(1, 30, { filter: 'is_public = true', sort: '-likes_count', requestKey: null });
+      setPublicPlaylists(pubs.items.map((r: any) => ({ id: r.id, title: r.get('title'), description: r.get('description'), is_public: r.get('is_public'), owner_id: r.get('owner_id'), view_count: r.get('view_count'), play_count: r.get('play_count'), likes_count: r.get('likes_count'), thumbnail_mode: r.get('thumbnail_mode'), created_at: r.get('created') || r.created, updated_at: r.get('updated') || r.updated })) as Playlist[]);
+    } catch {}
   };
 
-  useEffect(() => { load(); }, [authUser]);
+  useEffect(() => { load(); }, [user]);
 
-  const create = async () => {
-    if (!authUser || !title.trim()) return;
-    setCreating(true);
-    const { data, error } = await supabase
-      .from('playlists')
-      .insert({ owner_id: authUser.id, title: title.trim(), description: description.trim() || null, is_public: isPublic })
-      .select().single();
-    setCreating(false);
-    if (error) { toast.error(error.message); return; }
-    toast.success('Playlist créée');
-    setOpen(false); setTitle(''); setDescription(''); setIsPublic(true);
-    navigate(`/playlist/${data.id}`);
+  const createPlaylist = async () => {
+    if (!user || !title.trim()) return;
+    try {
+      await pb.collection('playlists').create({ title: title.trim(), owner_id: user.id, is_public: false, description: '' });
+      toast.success('Playlist créée');
+      setCreateOpen(false);
+      setTitle('');
+      load();
+    } catch (e: any) { toast.error(e.message); }
   };
-
-  const Card = ({ p, showVisibility = true }: { p: Playlist; showVisibility?: boolean }) => (
-    <button
-      onClick={() => navigate(`/playlist/${p.id}`)}
-      className="group flex items-center gap-3 rounded-xl border border-transparent bg-card/50 p-2.5 text-left transition-all hover:border-border hover:bg-card hover:shadow-card w-full"
-    >
-      <div className="flex h-14 w-14 items-center justify-center rounded-lg bg-gradient-primary shadow-card">
-        <ListMusic className="h-6 w-6 text-primary-foreground" />
-      </div>
-      <div className="min-w-0 flex-1">
-        <p className="truncate text-sm font-semibold">{p.title}</p>
-        {showVisibility && (
-          <p className="flex items-center gap-1 truncate text-xs text-muted-foreground">
-            {p.is_public ? <Globe className="h-3 w-3" /> : <Lock className="h-3 w-3" />}
-            {p.is_public ? 'Publique' : 'Privée'}
-            {p.likes_count > 0 && <> · <Heart className="h-3 w-3" /> {p.likes_count}</>}
-          </p>
-        )}
-      </div>
-    </button>
-  );
 
   return (
-    <div className="relative min-h-screen pb-40">
-      <div className="pointer-events-none absolute inset-x-0 top-0 h-60 bg-gradient-hero" />
-      <div className="relative px-4 py-6">
-        <div className="mb-4 flex items-center justify-between" style={{ animation: 'fadeSlideUp 0.6s cubic-bezier(0.16,1,0.3,1) both' }}>
-          <h1 className="text-2xl font-bold">Playlists</h1>
-          <Dialog open={open} onOpenChange={setOpen}>
-            <DialogTrigger asChild>
-              <Button size="sm" className="bg-gradient-primary shadow-elegant"><Plus className="mr-1 h-4 w-4" /> Nouvelle</Button>
-            </DialogTrigger>
-            <DialogContent>
-              <DialogHeader><DialogTitle>Nouvelle playlist</DialogTitle></DialogHeader>
-              <div className="space-y-3">
-                <Input placeholder="Titre" value={title} onChange={(e) => setTitle(e.target.value)} />
-                <Textarea placeholder="Description (optionnel)" value={description} onChange={(e) => setDescription(e.target.value)} />
-                <div className="flex items-center gap-2">
-                  <Switch id="pub" checked={isPublic} onCheckedChange={setIsPublic} />
-                  <Label htmlFor="pub">Publique</Label>
-                </div>
-                <Button className="w-full" onClick={create} disabled={creating || !title.trim()}>
-                  {creating ? 'Création...' : 'Créer'}
-                </Button>
-              </div>
-            </DialogContent>
-          </Dialog>
+    <div className="relative min-h-screen pb-40 p-4">
+      <header className="flex items-center justify-between mb-6">
+        <div className="flex items-center gap-3">
+          <Button variant="ghost" size="icon" onClick={() => navigate(-1)}><ArrowLeft className="h-5 w-5" /></Button>
+          <h1 className="text-xl font-bold">Playlists</h1>
         </div>
+        <Dialog open={createOpen} onOpenChange={setCreateOpen}>
+          <DialogTrigger asChild>
+            <Button size="sm"><Plus className="h-4 w-4 mr-1" /> Créer</Button>
+          </DialogTrigger>
+          <DialogContent>
+            <DialogHeader><DialogTitle>Nouvelle playlist</DialogTitle></DialogHeader>
+            <Input placeholder="Titre de la playlist" value={title} onChange={(e) => setTitle(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && createPlaylist()} />
+            <Button onClick={createPlaylist}>Créer</Button>
+          </DialogContent>
+        </Dialog>
+      </header>
 
-        <div style={{ animation: 'fadeSlideUp 0.6s cubic-bezier(0.16,1,0.3,1) both', animationDelay: '0.1s' }}>
-          <Tabs defaultValue="mine" className="w-full">
-            <TabsList className="mb-4 w-full">
-              <TabsTrigger value="mine" className="flex-1">Mes playlists</TabsTrigger>
-              <TabsTrigger value="liked" className="flex-1">Likées</TabsTrigger>
-              <TabsTrigger value="discover" className="flex-1"><Compass className="mr-1 h-3.5 w-3.5" />Explorer</TabsTrigger>
-            </TabsList>
-
-            <TabsContent value="mine" className="space-y-1.5">
-              {own.length === 0 ? (
-                <div className="rounded-xl border border-border bg-card p-8 text-center">
-                  <p className="text-sm text-muted-foreground">Tu n'as pas encore de playlist.</p>
+      {myPlaylists.length > 0 && (
+        <section className="mb-6">
+          <h2 className="text-lg font-bold mb-3 flex items-center gap-2"><ListMusic className="h-5 w-5" />Mes playlists</h2>
+          <div className="space-y-2">
+            {myPlaylists.map((p) => (
+              <button key={p.id} onClick={() => navigate(`/playlist/${p.id}`)} className="flex w-full items-center gap-3 rounded-xl bg-card/50 p-3 text-left hover:bg-card">
+                <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-gradient-primary"><ListMusic className="h-6 w-6 text-primary-foreground" /></div>
+                <div className="min-w-0 flex-1">
+                  <p className="font-semibold truncate">{p.title}</p>
+                  <p className="text-xs text-muted-foreground">{p.is_public ? 'Publique' : 'Privée'} · {p.likes_count} likes</p>
                 </div>
-              ) : own.map((p, i) => <div key={p.id} style={{ animation: 'fadeSlideUp 0.4s cubic-bezier(0.16,1,0.3,1) both', animationDelay: `${0.15 + i * 0.04}s` }}><Card p={p} /></div>)}
-            </TabsContent>
+              </button>
+            ))}
+          </div>
+        </section>
+      )}
 
-            <TabsContent value="liked" className="space-y-1.5">
-              {liked.length === 0 ? (
-                <div className="rounded-xl border border-border bg-card p-8 text-center">
-                  <p className="text-sm text-muted-foreground">Aucune playlist likée.</p>
-                </div>
-              ) : liked.map((p, i) => <div key={p.id} style={{ animation: 'fadeSlideUp 0.4s cubic-bezier(0.16,1,0.3,1) both', animationDelay: `${0.15 + i * 0.04}s` }}><Card p={p} /></div>)}
-            </TabsContent>
+      {likedPlaylists.length > 0 && (
+        <section className="mb-6">
+          <h2 className="text-lg font-bold mb-3 flex items-center gap-2"><Heart className="h-5 w-5" />Playlists aimées</h2>
+          <div className="space-y-2">
+            {likedPlaylists.map((p) => (
+              <button key={p.id} onClick={() => navigate(`/playlist/${p.id}`)} className="flex w-full items-center gap-3 rounded-xl bg-card/50 p-3 text-left hover:bg-card">
+                <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-gradient-primary"><ListMusic className="h-6 w-6 text-primary-foreground" /></div>
+                <div className="min-w-0 flex-1"><p className="font-semibold truncate">{p.title}</p><p className="text-xs text-muted-foreground">{p.likes_count} likes</p></div>
+              </button>
+            ))}
+          </div>
+        </section>
+      )}
 
-            <TabsContent value="discover" className="space-y-1.5">
-              {publicPlaylists.length === 0 ? (
-                <div className="rounded-xl border border-border bg-card p-8 text-center">
-                  <p className="text-sm text-muted-foreground">Pas encore de playlists publiques.</p>
-                </div>
-              ) : publicPlaylists.map((p, i) => <div key={p.id} style={{ animation: 'fadeSlideUp 0.4s cubic-bezier(0.16,1,0.3,1) both', animationDelay: `${0.15 + i * 0.04}s` }}><Card p={p} /></div>)}
-            </TabsContent>
-          </Tabs>
-        </div>
-      </div>
+      <section>
+        <h2 className="text-lg font-bold mb-3 flex items-center gap-2"><Globe className="h-5 w-5" />Playlists publiques</h2>
+        {publicPlaylists.length === 0 ? (
+          <p className="text-sm text-muted-foreground">Aucune playlist publique pour l'instant.</p>
+        ) : (
+          <div className="space-y-2">
+            {publicPlaylists.map((p) => (
+              <button key={p.id} onClick={() => navigate(`/playlist/${p.id}`)} className="flex w-full items-center gap-3 rounded-xl bg-card/50 p-3 text-left hover:bg-card">
+                <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-gradient-primary"><ListMusic className="h-6 w-6 text-primary-foreground" /></div>
+                <div className="min-w-0 flex-1"><p className="font-semibold truncate">{p.title}</p><p className="text-xs text-muted-foreground">{p.likes_count} likes</p></div>
+              </button>
+            ))}
+          </div>
+        )}
+      </section>
     </div>
   );
 }

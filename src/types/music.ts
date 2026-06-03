@@ -36,6 +36,7 @@ export interface Song {
   video_url: string | null;
   genre: string | null;
   uploaded_by: string;
+  duration?: number;
   play_count: number;
   weekly_play_count?: number;
   likes_count: number;

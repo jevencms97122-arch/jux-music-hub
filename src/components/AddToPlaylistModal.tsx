@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { supabase } from '@/integrations/supabase/client';
+import { pb } from '@/lib/pocketbase';
 import { useAuth } from '@/contexts/AuthContext';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
@@ -14,28 +14,26 @@ interface Props {
 }
 
 export default function AddToPlaylistModal({ open, onOpenChange, songId }: Props) {
-  const { authUser } = useAuth();
+  const { user } = useAuth();
   const [playlists, setPlaylists] = useState<Playlist[]>([]);
 
   useEffect(() => {
-    if (!open || !authUser) return;
+    if (!open || !user) return;
     (async () => {
-      const { data } = await supabase
-        .from('playlists').select('*').eq('owner_id', authUser.id).order('created_at', { ascending: false });
-      setPlaylists((data ?? []) as Playlist[]);
+      const result = await pb.collection('playlists').getList(1, 50, { filter: `owner_id = "${user.id}"`, sort: '-created', requestKey: null });
+      setPlaylists(result.items.map((r: any) => ({ id: r.id, title: r.get('title'), description: r.get('description'), is_public: r.get('is_public'), owner_id: r.get('owner_id'), view_count: r.get('view_count'), play_count: r.get('play_count'), likes_count: r.get('likes_count'), thumbnail_mode: r.get('thumbnail_mode'), created_at: r.get('created') || r.created, updated_at: r.get('updated') || r.updated })) as Playlist[]);
     })();
-  }, [open, authUser]);
+  }, [open, user]);
 
   const add = async (playlistId: string) => {
-    if (!authUser) return;
-    const { count } = await supabase
-      .from('playlist_songs').select('*', { count: 'exact', head: true }).eq('playlist_id', playlistId);
-    const { error } = await supabase
-      .from('playlist_songs')
-      .insert({ playlist_id: playlistId, song_id: songId, added_by: authUser.id, position: count ?? 0 });
-    if (error) { toast.error(error.message); return; }
-    toast.success('Ajouté à la playlist');
-    onOpenChange(false);
+    if (!user) return;
+    try {
+      const existing = await pb.collection('playlist_songs').getList(1, 1, { filter: `playlist_id = "${playlistId}" && song_id = "${songId}"`, requestKey: null });
+      const count = existing.totalItems;
+      await pb.collection('playlist_songs').create({ playlist_id: playlistId, song_id: songId, added_by: user.id, position: count });
+      toast.success('Ajouté à la playlist');
+      onOpenChange(false);
+    } catch (e: any) { toast.error(e.message || 'Erreur'); }
   };
 
   return (

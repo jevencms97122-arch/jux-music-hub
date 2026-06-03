@@ -1,18 +1,16 @@
-import { supabase } from '@/integrations/supabase/client';
+import { pb } from './pocketbase';
 
 /** Met à jour la série d'écoute quotidienne de l'utilisateur. */
 export async function updateStreak(userId: string): Promise<void> {
   try {
     const today = new Date().toISOString().split('T')[0];
 
-    const { data: existing } = await supabase
-      .from('user_stats')
-      .select('*')
-      .eq('user_id', userId)
-      .maybeSingle();
+    const records = await pb.collection('user_stats').getList(1, 1, {
+      filter: `user_id = "${userId}"`,
+    });
 
-    if (!existing) {
-      await supabase.from('user_stats').insert({
+    if (records.items.length === 0) {
+      await pb.collection('user_stats').create({
         user_id: userId,
         current_streak: 1,
         longest_streak: 1,
@@ -22,13 +20,13 @@ export async function updateStreak(userId: string): Promise<void> {
       return;
     }
 
-    const lastDate = existing.last_listen_date;
+    const existing = records.items[0];
+    const lastDate = existing.get('last_listen_date') as string;
 
     if (lastDate === today) {
-      await supabase
-        .from('user_stats')
-        .update({ total_listens: (existing.total_listens ?? 0) + 1 })
-        .eq('id', existing.id);
+      await pb.collection('user_stats').update(existing.id, {
+        total_listens: (existing.get('total_listens') ?? 0) + 1,
+      });
       return;
     }
 
@@ -36,28 +34,30 @@ export async function updateStreak(userId: string): Promise<void> {
     yesterday.setDate(yesterday.getDate() - 1);
     const yesterdayStr = yesterday.toISOString().split('T')[0];
 
-    const newStreak = lastDate === yesterdayStr ? (existing.current_streak ?? 0) + 1 : 1;
-    const longestStreak = Math.max(newStreak, existing.longest_streak ?? 0);
+    const currentStreak = existing.get('current_streak') ?? 0;
+    const longestStreak = existing.get('longest_streak') ?? 0;
+    const newStreak = lastDate === yesterdayStr ? currentStreak + 1 : 1;
+    const newLongestStreak = Math.max(newStreak, longestStreak);
 
-    await supabase
-      .from('user_stats')
-      .update({
-        current_streak: newStreak,
-        longest_streak: longestStreak,
-        total_listens: (existing.total_listens ?? 0) + 1,
-        last_listen_date: today,
-      })
-      .eq('id', existing.id);
+    await pb.collection('user_stats').update(existing.id, {
+      current_streak: newStreak,
+      longest_streak: newLongestStreak,
+      total_listens: (existing.get('total_listens') ?? 0) + 1,
+      last_listen_date: today,
+    });
   } catch (e) {
     console.error('updateStreak', e);
   }
 }
 
 export async function getUserStats(userId: string) {
-  const { data } = await supabase
-    .from('user_stats')
-    .select('*')
-    .eq('user_id', userId)
-    .maybeSingle();
-  return data;
+  try {
+    const records = await pb.collection('user_stats').getList(1, 1, {
+      filter: `user_id = "${userId}"`,
+    });
+    return records.items.length > 0 ? records.items[0] : null;
+  } catch (e) {
+    console.error('getUserStats', e);
+    return null;
+  }
 }

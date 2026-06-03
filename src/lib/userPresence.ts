@@ -1,8 +1,7 @@
-import { supabase } from '@/integrations/supabase/client';
+import { pb } from './pocketbase';
 
 /**
  * Met à jour la présence de l'utilisateur (ce qu'il écoute actuellement).
- * Appelé à chaque changement de chanson et à la mise en pause/arrêt.
  */
 export async function updatePresence(payload: {
   userId: string;
@@ -26,10 +25,16 @@ export async function updatePresence(payload: {
     if (songAuthor) upsertData.current_song_author = songAuthor;
     if (songCoverUrl) upsertData.current_song_cover_url = songCoverUrl;
 
-    await (supabase as any).from('user_presence').upsert(upsertData, {
-      onConflict: 'user_id',
-      ignoreDuplicates: false,
+    // PocketBase upsert: find existing record first
+    const existing = await pb.collection('user_presence').getList(1, 1, {
+      filter: `user_id = "${userId}"`,
     });
+
+    if (existing.items.length > 0) {
+      await pb.collection('user_presence').update(existing.items[0].id, upsertData);
+    } else {
+      await pb.collection('user_presence').create(upsertData);
+    }
   } catch (e) {
     console.error('updatePresence', e);
   }
@@ -40,18 +45,21 @@ export async function updatePresence(payload: {
  */
 export async function clearPresence(userId: string) {
   try {
-    await (supabase as any).from('user_presence').upsert({
-      user_id: userId,
-      is_listening: false,
-      current_song_id: null,
-      current_song_title: null,
-      current_song_author: null,
-      current_song_cover_url: null,
-      last_seen_at: new Date().toISOString(),
-    }, {
-      onConflict: 'user_id',
-      ignoreDuplicates: false,
+    const existing = await pb.collection('user_presence').getList(1, 1, {
+      filter: `user_id = "${userId}"`,
     });
+    
+    if (existing.items.length > 0) {
+      await pb.collection('user_presence').update(existing.items[0].id, {
+        user_id: userId,
+        is_listening: false,
+        current_song_id: null,
+        current_song_title: null,
+        current_song_author: null,
+        current_song_cover_url: null,
+        last_seen_at: new Date().toISOString(),
+      });
+    }
   } catch (e) {
     console.error('clearPresence', e);
   }
@@ -59,18 +67,25 @@ export async function clearPresence(userId: string) {
 
 /**
  * Heartbeat rapide : met juste à jour last_seen_at.
- * N'écrase JAMAIS is_listening, current_song_id, etc.
  * Appelé toutes les 3s via setInterval dans App.tsx.
  */
 export async function pingPresence(userId: string) {
   try {
-    await (supabase as any).from('user_presence').upsert({
-      user_id: userId,
-      last_seen_at: new Date().toISOString(),
-    }, {
-      onConflict: 'user_id',
-      ignoreDuplicates: false,
+    const existing = await pb.collection('user_presence').getList(1, 1, {
+      filter: `user_id = "${userId}"`,
     });
+
+    if (existing.items.length > 0) {
+      await pb.collection('user_presence').update(existing.items[0].id, {
+        last_seen_at: new Date().toISOString(),
+      });
+    } else {
+      await pb.collection('user_presence').create({
+        user_id: userId,
+        is_listening: false,
+        last_seen_at: new Date().toISOString(),
+      });
+    }
   } catch (e) {
     // Silence is golden
   }

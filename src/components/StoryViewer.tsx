@@ -1,120 +1,72 @@
 import { useEffect, useRef, useState } from 'react';
-import { createPortal } from 'react-dom';
-import { supabase } from '@/integrations/supabase/client';
+import { pb } from '@/lib/pocketbase';
 import { useAuth } from '@/contexts/AuthContext';
-import { songAudioUrl, songCoverUrl } from '@/lib/storage';
-import { X, ChevronLeft, ChevronRight } from 'lucide-react';
-import CachedImage from '@/components/CachedImage';
-import type { Story, Profile, Song } from '@/types/music';
-
-interface FullStory extends Story { profile?: Profile; song?: Song }
+import { songCoverUrl, songAudioUrl } from '@/lib/storage';
+import { X } from 'lucide-react';
 
 interface Props {
-  stories: FullStory[];
-  startIndex: number;
+  stories: any[];
+  initialIndex?: number;
   onClose: () => void;
 }
 
-export default function StoryViewer({ stories, startIndex, onClose }: Props) {
-  const { authUser } = useAuth();
-  const [idx, setIdx] = useState(startIndex);
+export default function StoryViewer({ stories, initialIndex = 0, onClose }: Props) {
+  const { user } = useAuth();
+  const [currentIndex, setCurrentIndex] = useState(initialIndex);
   const [progress, setProgress] = useState(0);
-  const [closing, setClosing] = useState(false);
-  const audioRef = useRef<HTMLAudioElement | null>(null);
-  const story = stories[idx];
+  const progressRef = useRef(0);
+  const intervalRef = useRef<number | null>(null);
+
+  const story = stories[currentIndex];
 
   useEffect(() => {
-    if (!story?.song) return;
-    const audio = new Audio(songAudioUrl(story.song));
-    audio.currentTime = story.start_time;
-    audio.play().catch(() => {});
-    audioRef.current = audio;
-
-    const dur = story.end_time - story.start_time;
-    const onTime = () => {
-      const p = ((audio.currentTime - story.start_time) / dur) * 100;
-      setProgress(p);
-      if (audio.currentTime >= story.end_time) next();
-    };
-    audio.addEventListener('timeupdate', onTime);
-
-    if (authUser) {
-      supabase.from('story_views').insert({ story_id: story.id, viewer_id: authUser.id }).then(() => {});
+    if (!story) return;
+    // Record view
+    if (user) {
+      pb.collection('story_views').create({ story_id: story.id, viewer_id: user.id }).catch(() => {});
     }
+    // Start progress
+    progressRef.current = 0;
+    setProgress(0);
+    const duration = 5000; // 5s per story
+    const step = 100;
+    intervalRef.current = window.setInterval(() => {
+      progressRef.current += step;
+      setProgress(progressRef.current);
+      if (progressRef.current >= duration) {
+        if (intervalRef.current) clearInterval(intervalRef.current);
+        if (currentIndex < stories.length - 1) setCurrentIndex((i) => i + 1);
+        else onClose();
+      }
+    }, step);
+    return () => { if (intervalRef.current) clearInterval(intervalRef.current); };
+  }, [story?.id, currentIndex, user]);
 
-    return () => { audio.pause(); audio.removeEventListener('timeupdate', onTime); };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [idx]);
-
-  const handleClose = () => {
-    setClosing(true);
-    setTimeout(onClose, 250); // attend la fin de l'animation
+  const handleClick = (e: React.MouseEvent) => {
+    const x = e.clientX / window.innerWidth;
+    if (x < 0.3 && currentIndex > 0) setCurrentIndex((i) => i - 1);
+    else if (x > 0.7 && currentIndex < stories.length - 1) setCurrentIndex((i) => i + 1);
+    else onClose();
   };
-
-  const next = () => idx < stories.length - 1 ? setIdx(idx + 1) : handleClose();
-  const prev = () => idx > 0 && setIdx(idx - 1);
 
   if (!story) return null;
 
-  return createPortal(
-    <div
-      className="fixed inset-0 z-[100] flex flex-col bg-black"
-      style={{
-        animation: closing
-          ? 'fadeOut 0.25s ease-in both'
-          : 'fadeIn 0.3s ease-out both',
-      }}
-    >
-      <div className="flex gap-1 p-2">
+  return (
+    <div className="fixed inset-0 z-50 bg-black" onClick={handleClick}>
+      <button onClick={(e) => { e.stopPropagation(); onClose(); }} className="absolute right-4 top-4 z-10 text-white"><X className="h-6 w-6" /></button>
+      <div className="absolute left-0 right-0 top-2 z-10 flex gap-1 px-2">
         {stories.map((_, i) => (
-          <div key={i} className="h-1 flex-1 overflow-hidden rounded-full bg-white/30">
-            <div className="h-full bg-white" style={{ width: i < idx ? '100%' : i === idx ? `${progress}%` : '0%' }} />
+          <div key={i} className="h-1 flex-1 rounded-full bg-white/30 overflow-hidden">
+            <div className="h-full rounded-full bg-white transition-all" style={{ width: i === currentIndex ? `${(progress / 5000) * 100}%` : i < currentIndex ? '100%' : '0%' }} />
           </div>
         ))}
       </div>
-      <div
-        className="flex items-center gap-2 px-4 py-2 text-white"
-        style={{
-          animation: 'fadeSlideUp 0.4s cubic-bezier(0.16,1,0.3,1) both',
-          animationDelay: '0.1s',
-        }}
-      >
-        <p className="flex-1 text-sm font-medium">@{story.profile?.pseudo}</p>
-        <button onClick={handleClose}><X className="h-5 w-5" /></button>
+      <div className="flex h-full items-center justify-center">
+        <div className="text-center">
+          <p className="text-lg font-bold text-white">{story.get('comment') || ''}</p>
+          <p className="text-sm text-white/70 mt-2">Story musicale</p>
+        </div>
       </div>
-      <div
-        className="relative flex min-h-0 flex-1 items-center justify-center"
-        style={{
-          animation: 'scaleIn 0.4s cubic-bezier(0.16,1,0.3,1) both',
-          animationDelay: '0.05s',
-        }}
-      >
-        {story.song && (
-          <div className="flex h-full w-full items-center justify-center">
-            <CachedImage
-              src={songCoverUrl(story.song)}
-              alt=""
-              className="h-full w-full object-contain"
-              fallbackSrc=""
-              style={{ maxHeight: 'calc(100dvh - 120px)' }}
-            />
-          </div>
-        )}
-        <button onClick={prev} className="absolute left-0 top-0 h-full w-1/3"><ChevronLeft className="absolute left-2 top-1/2 -translate-y-1/2 text-white/50" /></button>
-        <button onClick={next} className="absolute right-0 top-0 h-full w-1/3"><ChevronRight className="absolute right-2 top-1/2 -translate-y-1/2 text-white/50" /></button>
-        {story.comment && (
-          <div className="absolute bottom-20 left-0 right-0 px-6 text-center text-white">
-            <p className="rounded-lg bg-black/50 p-3 text-sm">{story.comment}</p>
-          </div>
-        )}
-        {story.song && (
-          <div className="absolute bottom-4 left-0 right-0 text-center text-white">
-            <p className="text-sm font-bold">{story.song.title}</p>
-            <p className="text-xs opacity-80">{story.song.author}</p>
-          </div>
-        )}
-      </div>
-    </div>,
-    document.body
+    </div>
   );
 }

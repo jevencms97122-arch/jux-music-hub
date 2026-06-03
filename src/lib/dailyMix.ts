@@ -1,28 +1,50 @@
-import { supabase } from '@/integrations/supabase/client';
+import { pb } from './pocketbase';
 import type { Song } from '@/types/music';
+
+function recordToSong(r: any): Song {
+  return {
+    id: r.id,
+    title: r.get('title') || '',
+    author: r.get('author') || '',
+    audio_url: r.get('audio_url') || '',
+    cover_url: r.get('cover_url') || null,
+    video_url: r.get('video_url') || null,
+    genre: r.get('genre') || null,
+    uploaded_by: r.get('uploaded_by') || '',
+    play_count: r.get('play_count') ?? 0,
+    weekly_play_count: r.get('weekly_play_count') ?? 0,
+    likes_count: r.get('likes_count') ?? 0,
+    created_at: r.get('created') || r.created,
+    updated_at: r.get('updated') || r.updated,
+    collectionId: r.collectionId,
+    collectionName: r.collectionName,
+  };
+}
 
 /**
  * Génère un Daily Mix basé sur l'historique d'écoute.
- * - Récupère les 100 derniers titres écoutés
- * - Identifie les genres/auteurs préférés
- * - Sélectionne ~20 titres : moitié déjà aimés, moitié découvertes du même genre
- * - Stable pendant la journée (seed = date)
  */
 export async function generateDailyMix(userId: string): Promise<Song[]> {
   try {
-    const { data: history } = await supabase
-      .from('listen_history')
-      .select('song_id, listened_at')
-      .eq('user_id', userId)
-      .order('listened_at', { ascending: false })
-      .limit(100);
+    const historyRes = await pb.collection('listen_history').getList(1, 100, {
+      filter: `user_id = "${userId}"`,
+      sort: '-listened_at',
+    });
 
-    const songIds = Array.from(new Set((history ?? []).map((h: any) => h.song_id)));
+    const songIds = Array.from(new Set(historyRes.items.map((h: any) => h.get('song_id'))));
 
     let listened: Song[] = [];
     if (songIds.length > 0) {
-      const { data } = await supabase.from('songs').select('*').in('id', songIds);
-      listened = (data ?? []) as Song[];
+      // Fetch songs in batches since PB doesn't support in() filter natively via SDK
+      const batchSize = 50;
+      for (let i = 0; i < songIds.length; i += batchSize) {
+        const batch = songIds.slice(i, i + batchSize);
+        const filters = batch.map(id => `id = "${id}"`).join(' || ');
+        const res = await pb.collection('songs').getList(1, batchSize, {
+          filter: filters,
+        });
+        listened.push(...res.items.map(recordToSong));
+      }
     }
 
     // Genres et auteurs préférés
@@ -37,21 +59,20 @@ export async function generateDailyMix(userId: string): Promise<Song[]> {
     // Découvertes : titres jamais écoutés, dans les genres préférés
     let discovery: Song[] = [];
     if (topGenres.length > 0) {
-      const { data } = await supabase
-        .from('songs')
-        .select('*')
-        .in('genre', topGenres)
-        .order('play_count', { ascending: false })
-        .limit(60);
-      discovery = ((data ?? []) as Song[]).filter((s) => !songIds.includes(s.id));
+      const genreFilters = topGenres.map(g => `genre = "${g}"`).join(' || ');
+      const res = await pb.collection('songs').getList(1, 60, {
+        filter: genreFilters,
+        sort: '-play_count',
+      });
+      discovery = res.items.map(recordToSong).filter((s) => !songIds.includes(s.id));
     }
 
     // Si pas assez d'historique → top 20 populaires
     if (listened.length < 5 && discovery.length < 5) {
-      const { data } = await supabase
-        .from('songs').select('*')
-        .order('play_count', { ascending: false }).limit(20);
-      return (data ?? []) as Song[];
+      const res = await pb.collection('songs').getList(1, 20, {
+        sort: '-play_count',
+      });
+      return res.items.map(recordToSong);
     }
 
     // Mix : 10 favoris + 10 découvertes, mélangés avec seed quotidien

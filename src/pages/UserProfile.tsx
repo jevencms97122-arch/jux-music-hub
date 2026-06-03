@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { supabase } from '@/integrations/supabase/client';
+import { pb } from '@/lib/pocketbase';
 import { useAuth } from '@/contexts/AuthContext';
 import { usePlayer } from '@/contexts/PlayerContext';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
@@ -12,10 +12,21 @@ import { toast } from 'sonner';
 import { getUserStats } from '@/lib/streaks';
 import type { Profile, Song } from '@/types/music';
 
+function recordToSong(r: any): Song {
+  return {
+    id: r.id, title: r.get('title') || '', author: r.get('author') || '', audio_url: r.get('audio_url') || '',
+    cover_url: r.get('cover_url') || null, video_url: r.get('video_url') || null, genre: r.get('genre') || null,
+    uploaded_by: r.get('uploaded_by') || '', duration: r.get('duration') || 0, play_count: r.get('play_count') ?? 0,
+    weekly_play_count: r.get('weekly_play_count') ?? 0, likes_count: r.get('likes_count') ?? 0,
+    created_at: r.get('created') || r.created, updated_at: r.get('updated') || r.updated,
+    collectionId: r.collectionId, collectionName: r.collectionName,
+  };
+}
+
 export default function UserProfile() {
   const { userId } = useParams();
   const navigate = useNavigate();
-  const { authUser } = useAuth();
+  const { user } = useAuth();
   const { playSongFromList } = usePlayer();
   const [profile, setProfile] = useState<Profile | null>(null);
   const [songs, setSongs] = useState<Song[]>([]);
@@ -23,115 +34,95 @@ export default function UserProfile() {
   const [counts, setCounts] = useState({ followers: 0, following: 0 });
   const [streak, setStreak] = useState(0);
 
+  const pbGetFirst = async (collection: string, filter: string) => {
+    try { const r = await pb.collection(collection).getList(1, 1, { filter, requestKey: null }); return r.items[0] || null; } catch { return null; }
+  };
+
   const load = async () => {
     if (!userId) return;
-    const { data: p } = await supabase.from('profiles').select('*').eq('user_id', userId).maybeSingle();
-    setProfile(p as Profile | null);
+    const pRecord = await pbGetFirst('profiles', `user_id = "${userId}"`);
+    setProfile(pRecord ? { id: pRecord.id, user_id: pRecord.get('user_id'), pseudo: pRecord.get('pseudo'), first_name: pRecord.get('first_name'), last_name: pRecord.get('last_name'), avatar_url: pRecord.get('avatar') ? 'avatar' : null, bio: pRecord.get('bio'), profile_completed: pRecord.get('profile_completed'), created_at: pRecord.get('created') || pRecord.created, updated_at: pRecord.get('updated') || pRecord.updated } as Profile : null);
 
-    const { data: s } = await supabase
-      .from('songs').select('*').eq('uploaded_by', userId).order('created_at', { ascending: false });
-    setSongs((s ?? []) as Song[]);
+    const songRes = await pb.collection('songs').getList(1, 100, { filter: `uploaded_by = "${userId}"`, sort: '-created', requestKey: null });
+    setSongs(songRes.items.map(recordToSong));
 
-    const [{ count: fers }, { count: fing }] = await Promise.all([
-      supabase.from('follows').select('*', { count: 'exact', head: true }).eq('following_id', userId).eq('status', 'accepted'),
-      supabase.from('follows').select('*', { count: 'exact', head: true }).eq('follower_id', userId).eq('status', 'accepted'),
+    const [fers, fing] = await Promise.all([
+      pb.collection('follows').getList(1, 1, { filter: `following_id = "${userId}" && status = "accepted"`, requestKey: null }),
+      pb.collection('follows').getList(1, 1, { filter: `follower_id = "${userId}" && status = "accepted"`, requestKey: null }),
     ]);
-    setCounts({ followers: fers ?? 0, following: fing ?? 0 });
+    setCounts({ followers: fers.totalItems, following: fing.totalItems });
 
     const statsData = await getUserStats(userId);
-    setStreak(statsData?.current_streak ?? 0);
+    setStreak(statsData?.get('current_streak') ?? 0);
 
-    if (authUser && authUser.id !== userId) {
-      const { data: f } = await supabase
-        .from('follows').select('status')
-        .eq('follower_id', authUser.id).eq('following_id', userId).maybeSingle();
-      setFollowStatus((f?.status as any) ?? 'none');
+    if (user && user.id !== userId) {
+      const fRecord = await pbGetFirst('follows', `follower_id = "${user.id}" && following_id = "${userId}"`);
+      setFollowStatus(fRecord?.get('status') || 'none');
     }
   };
 
-  useEffect(() => { load(); }, [userId, authUser]);
+  useEffect(() => { load(); }, [userId, user]);
 
   const follow = async () => {
-    if (!authUser || !userId) return;
-    const { error } = await supabase.from('follows').insert({
-      follower_id: authUser.id, following_id: userId, status: 'accepted',
-    });
-    if (error) { toast.error(error.message); return; }
-    await supabase.from('notifications').insert({
-      recipient_id: userId,
-      type: 'friend_request',
-      title: 'Nouvel abonné',
-      body: `${authUser.email} vous suit`,
-    });
-    setFollowStatus('accepted');
+    if (!user || !userId) return;
+    try {
+      await pb.collection('follows').create({ follower_id: user.id, following_id: userId, status: 'accepted' });
+      await pb.collection('notifications').create({ recipient_id: userId, type: 'friend_request', title: 'Nouvel abonné', body: `${user.email} vous suit` });
+      setFollowStatus('accepted');
+    } catch (e: any) { toast.error(e.message); }
   };
 
   const unfollow = async () => {
-    if (!authUser || !userId) return;
-    await supabase.from('follows').delete()
-      .eq('follower_id', authUser.id).eq('following_id', userId);
+    if (!user || !userId) return;
+    const fRecord = await pbGetFirst('follows', `follower_id = "${user.id}" && following_id = "${userId}"`);
+    if (fRecord) await pb.collection('follows').delete(fRecord.id);
     setFollowStatus('none');
   };
 
   if (!profile) return <div className="p-6 text-sm text-muted-foreground">Chargement...</div>;
 
-  const isMe = authUser?.id === profile.user_id;
+  const isMe = user?.id === profile.user_id;
 
   return (
-    <div className="min-h-screen pb-40">
-      <header className="flex items-center gap-2 p-4" style={{ animation: 'fadeSlideUp 0.6s cubic-bezier(0.16,1,0.3,1) both' }}>
+    <div className="min-h-screen pb-32 p-4">
+      <header className="flex items-center gap-3 mb-6">
         <Button variant="ghost" size="icon" onClick={() => navigate(-1)}><ArrowLeft className="h-5 w-5" /></Button>
-        <h1 className="flex-1 truncate font-bold">@{profile.pseudo}</h1>
+        <h1 className="text-xl font-bold">Profil</h1>
       </header>
 
-      <div className="flex flex-col items-center gap-2 px-6" style={{ animation: 'fadeSlideUp 0.6s cubic-bezier(0.16,1,0.3,1) both', animationDelay: '0.1s' }}>
-        <Avatar className="h-24 w-24" style={{ animation: 'scaleIn 0.5s cubic-bezier(0.16,1,0.3,1) both', animationDelay: '0.15s' }}>
+      <div className="flex flex-col items-center mb-6">
+        <Avatar className="h-24 w-24 ring-2 ring-primary/30 mb-4">
           <AvatarImage src={avatarUrl(profile)} />
           <AvatarFallback>{profile.pseudo?.[0]?.toUpperCase() ?? '?'}</AvatarFallback>
         </Avatar>
-        <div className="flex items-center gap-3 flex-wrap justify-center">
-          <h2 className="text-lg font-bold">{profile.pseudo}</h2>
-          {streak >= 3 && (
-            <span
-              className="inline-flex items-center gap-1 text-sm font-semibold text-orange-400"
-              title={`${streak} jours d'écoute consécutifs`}
-            >
-              <span className="text-lg drop-shadow-[0_0_6px_rgba(255,165,0,0.5)]">🔥</span>
-              <span>{streak}</span>
-            </span>
-          )}
-        </div>
-        {profile.bio && <p className="max-w-md text-center text-sm text-muted-foreground">{profile.bio}</p>}
-        <div className="flex gap-6 text-sm">
-          <div className="text-center"><p className="font-bold">{counts.followers}</p><p className="text-muted-foreground">Abonnés</p></div>
-          <div className="text-center"><p className="font-bold">{counts.following}</p><p className="text-muted-foreground">Suivis</p></div>
-          <div className="text-center"><p className="font-bold">{songs.length}</p><p className="text-muted-foreground">Titres</p></div>
-        </div>
-        {!isMe && (
-          followStatus === 'accepted' ? (
-            <Button variant="outline" onClick={unfollow}>Se désabonner</Button>
-          ) : followStatus === 'pending' ? (
-            <Button variant="outline" disabled>Demande envoyée</Button>
-          ) : (
-            <Button onClick={follow}>Suivre</Button>
-          )
-        )}
+        <h2 className="text-xl font-bold">{profile.pseudo || 'Utilisateur'}</h2>
+        {profile.bio && <p className="text-sm text-muted-foreground mt-1">{profile.bio}</p>}
       </div>
 
-      <section className="mt-8 px-4" style={{ animation: 'fadeIn 0.6s ease-out both', animationDelay: '0.25s' }}>
-        <h3 className="mb-3 text-sm font-bold text-muted-foreground">Morceaux publiés</h3>
-        {songs.length === 0 ? (
-          <p className="text-sm text-muted-foreground">Aucun morceau publié.</p>
-        ) : (
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4">
-            {songs.map((s, i) => (
-              <div key={s.id} style={{ animation: 'scaleIn 0.4s cubic-bezier(0.16,1,0.3,1) both', animationDelay: `${0.3 + i * 0.04}s` }}>
-                <SongCard song={s} onPlay={() => playSongFromList(s, songs)} />
-              </div>
-            ))}
+      <div className="flex justify-center gap-8 mb-6">
+        <div className="text-center"><div className="text-lg font-bold">{songs.length}</div><div className="text-xs text-muted-foreground">Sons</div></div>
+        <div className="text-center"><div className="text-lg font-bold">{counts.followers}</div><div className="text-xs text-muted-foreground">Abonnés</div></div>
+        <div className="text-center"><div className="text-lg font-bold">{counts.following}</div><div className="text-xs text-muted-foreground">Abonnements</div></div>
+      </div>
+
+      {!isMe && user && (
+        <div className="text-center mb-6">
+          {followStatus === 'accepted' ? (
+            <Button variant="outline" onClick={unfollow}>Ne plus suivre</Button>
+          ) : (
+            <Button onClick={follow}>Suivre</Button>
+          )}
+        </div>
+      )}
+
+      {songs.length > 0 && (
+        <div>
+          <h3 className="font-bold mb-3">Ses morceaux</h3>
+          <div className="grid grid-cols-2 gap-3">
+            {songs.map((s) => (<SongCard key={s.id} song={s} onPlay={() => playSongFromList(s, songs)} />))}
           </div>
-        )}
-      </section>
+        </div>
+      )}
     </div>
   );
 }

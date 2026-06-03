@@ -1,96 +1,85 @@
-import { useEffect, useState } from 'react';
-import { supabase } from '@/integrations/supabase/client';
+import { useState, useEffect, useCallback } from 'react';
+import { pb } from '@/lib/pocketbase';
 import { usePlayer } from '@/contexts/PlayerContext';
+import { songCoverUrl, avatarUrl } from '@/lib/storage';
 import SongCard from '@/components/SongCard';
 import { Input } from '@/components/ui/input';
-import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+import { Button } from '@/components/ui/button';
 import { useNavigate } from 'react-router-dom';
-import { avatarUrl } from '@/lib/storage';
-import type { Song, Profile } from '@/types/music';
-import { Search as SearchIcon } from 'lucide-react';
-import { useSeo } from '@/lib/useSeo';
+import { ArrowLeft, Search as SearchIcon, Music2, Users } from 'lucide-react';
+import type { Song } from '@/types/music';
+
+function recordToSong(r: any): Song {
+  return {
+    id: r.id, title: r.get('title') || '', author: r.get('author') || '', audio_url: r.get('audio_url') || '',
+    cover_url: r.get('cover_url') || null, video_url: r.get('video_url') || null, genre: r.get('genre') || null,
+    uploaded_by: r.get('uploaded_by') || '', duration: r.get('duration') || 0, play_count: r.get('play_count') ?? 0,
+    weekly_play_count: r.get('weekly_play_count') ?? 0, likes_count: r.get('likes_count') ?? 0,
+    created_at: r.get('created') || r.created, updated_at: r.get('updated') || r.updated,
+    collectionId: r.collectionId, collectionName: r.collectionName,
+  };
+}
 
 export default function Search() {
-  useSeo({
-    title: 'Recherche — Jux-Music',
-    description: 'Recherche des titres, artistes et utilisateurs sur Jux-Music.',
-    path: '/search',
-  });
   const { playSongFromList } = usePlayer();
   const navigate = useNavigate();
-  const [q, setQ] = useState('');
+  const [term, setTerm] = useState('');
   const [songs, setSongs] = useState<Song[]>([]);
-  const [users, setUsers] = useState<Profile[]>([]);
+  const [users, setUsers] = useState<any[]>([]);
+  const [searched, setSearched] = useState(false);
+
+  const doSearch = useCallback(async () => {
+    if (!term.trim()) return;
+    setSearched(true);
+    const t = term.trim();
+    try {
+      const [songRes, userRes] = await Promise.all([
+        pb.collection('songs').getList(1, 30, {
+          filter: `title ~ "${t}" || author ~ "${t}" || genre ~ "${t}"`,
+          requestKey: null,
+        }),
+        pb.collection('profiles').getList(1, 20, {
+          filter: `pseudo ~ "${t}"`,
+          requestKey: null,
+        }),
+      ]);
+      setSongs(songRes.items.map(recordToSong));
+      setUsers(userRes.items.map((r: any) => ({ id: r.id, user_id: r.get('user_id'), pseudo: r.get('pseudo'), avatar_url: r.get('avatar') ? URL.createObjectURL(new Blob()) : null })));
+    } catch { setSongs([]); setUsers([]); }
+  }, [term]);
 
   useEffect(() => {
-    const t = setTimeout(async () => {
-      const term = q.trim();
-      if (!term) { setSongs([]); setUsers([]); return; }
-      const [sRes, uRes] = await Promise.all([
-        supabase.from('songs').select('*').or(`title.ilike.%${term}%,author.ilike.%${term}%,genre.ilike.%${term}%`).limit(30),
-        supabase.from('profiles').select('*').ilike('pseudo', `%${term}%`).limit(20),
-      ]);
-      setSongs((sRes.data ?? []) as Song[]);
-      setUsers((uRes.data ?? []) as Profile[]);
-    }, 250);
-    return () => clearTimeout(t);
-  }, [q]);
+    if (!term.trim()) { setSongs([]); setUsers([]); setSearched(false); }
+  }, [term]);
 
   return (
-    <div className="min-h-screen px-4 py-6 pb-40">
-      <div className="relative mb-4" style={{ animation: 'fadeSlideUp 0.6s cubic-bezier(0.16,1,0.3,1) both' }}>
-        <SearchIcon className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+    <div className="relative min-h-screen pb-40 p-4">
+      <header className="flex items-center gap-3 mb-4">
+        <Button variant="ghost" size="icon" onClick={() => navigate(-1)}><ArrowLeft className="h-5 w-5" /></Button>
+        <h1 className="text-xl font-bold">Recherche</h1>
+      </header>
+      <div className="relative mb-4">
+        <SearchIcon className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
         <Input
-          autoFocus
-          placeholder="Rechercher titres, artistes, utilisateurs..."
-          value={q}
-          onChange={(e) => setQ(e.target.value)}
+          placeholder="Titre, artiste, genre, utilisateur..."
+          value={term} onChange={(e) => setTerm(e.target.value)}
+          onKeyDown={(e) => e.key === 'Enter' && doSearch()}
           className="pl-9"
         />
       </div>
-
-      {users.length > 0 && (
-        <section className="mb-6" style={{ animation: 'fadeIn 0.5s ease-out both', animationDelay: '0.1s' }}>
-          <h2 className="mb-2 text-sm font-bold text-muted-foreground">Utilisateurs</h2>
-          <div className="space-y-2">
-            {users.map((u, i) => (
-              <button
-                key={u.id}
-                onClick={() => navigate(`/u/${u.user_id}`)}
-                className="flex w-full items-center gap-3 rounded-lg p-2 hover:bg-secondary"
-                style={{ animation: 'fadeSlideUp 0.5s cubic-bezier(0.16,1,0.3,1) both', animationDelay: `${0.15 + i * 0.04}s` }}
-              >
-                <Avatar className="h-10 w-10">
-                  <AvatarImage src={avatarUrl(u)} />
-                  <AvatarFallback>{u.pseudo?.[0]?.toUpperCase() ?? '?'}</AvatarFallback>
-                </Avatar>
-                <div className="text-left">
-                  <p className="text-sm font-medium">{u.pseudo}</p>
-                  {u.bio && <p className="truncate text-xs text-muted-foreground">{u.bio}</p>}
-                </div>
-              </button>
-            ))}
-          </div>
-        </section>
+      {!searched && (
+        <p className="text-center text-sm text-muted-foreground mt-8">Tape un mot-clé pour commencer la recherche</p>
       )}
-
       {songs.length > 0 && (
-        <section style={{ animation: 'fadeIn 0.5s ease-out both', animationDelay: '0.2s' }}>
-          <h2 className="mb-2 text-sm font-bold text-muted-foreground">Morceaux</h2>
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4">
-            {songs.map((s, i) => (
-              <div key={s.id} style={{ animation: 'scaleIn 0.5s cubic-bezier(0.16,1,0.3,1) both', animationDelay: `${0.3 + i * 0.04}s` }}>
-                <SongCard song={s} onPlay={() => playSongFromList(s, songs)} />
-              </div>
-            ))}
+        <section className="mb-6">
+          <h2 className="flex items-center gap-2 text-lg font-bold mb-3"><Music2 className="h-5 w-5" />Musiques</h2>
+          <div className="grid grid-cols-2 gap-3">
+            {songs.map((s) => (<SongCard key={s.id} song={s} onPlay={() => playSongFromList(s, songs)} />))}
           </div>
         </section>
       )}
-
-      {q && songs.length === 0 && users.length === 0 && (
-        <p className="text-center text-sm text-muted-foreground" style={{ animation: 'fadeIn 0.5s ease-out both', animationDelay: '0.15s' }}>
-          Aucun résultat
-        </p>
+      {searched && songs.length === 0 && users.length === 0 && (
+        <p className="text-center text-sm text-muted-foreground mt-8">Aucun résultat pour "{term}"</p>
       )}
     </div>
   );

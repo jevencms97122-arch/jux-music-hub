@@ -1,24 +1,37 @@
-import { supabase } from '@/integrations/supabase/client';
+import { pb, getPbUrl } from './pocketbase';
 import { isMediaServerConfigured, uploadMedia, type MediaKind } from './mediaServer';
 
-/** URL publique d'un fichier dans un bucket Supabase Storage. */
-export function publicUrl(bucket: 'songs' | 'covers' | 'avatars', path: string): string {
-  if (!path) return '';
-  if (path.startsWith('http')) return path;
-  const { data } = supabase.storage.from(bucket).getPublicUrl(path);
-  return data.publicUrl;
+/** URL publique d'un fichier depuis PocketBase */
+export function publicUrl(collectionName: string, recordId: string, filename: string): string {
+  if (!filename) return '';
+  if (filename.startsWith('http')) return filename;
+  return pb.files.getUrl({ id: recordId, collectionName } as any, filename);
 }
 
-export function songCoverUrl(song: { cover_url?: string | null }): string {
-  return song.cover_url ? publicUrl('covers', song.cover_url) : '/placeholder.svg';
+export function songCoverUrl(song: { cover_url?: string | null; id?: string; collectionId?: string; collectionName?: string }): string {
+  if (!song.cover_url) return '/placeholder.svg';
+  if (song.cover_url.startsWith('http')) return song.cover_url;
+  if (song.collectionName && song.id) {
+    return publicUrl(song.collectionName, song.id, song.cover_url);
+  }
+  return `/placeholder.svg`;
 }
 
-export function songAudioUrl(song: { audio_url: string }): string {
-  return publicUrl('songs', song.audio_url);
+export function songAudioUrl(song: { audio_url: string; id?: string; collectionName?: string }): string {
+  if (song.audio_url.startsWith('http')) return song.audio_url;
+  if (song.collectionName && song.id) {
+    return publicUrl(song.collectionName, song.id, song.audio_url);
+  }
+  return song.audio_url;
 }
 
-export function avatarUrl(profile: { avatar_url?: string | null }): string {
-  return profile.avatar_url ? publicUrl('avatars', profile.avatar_url) : '';
+export function avatarUrl(profile: { avatar_url?: string | null; id?: string; collectionName?: string }): string {
+  if (!profile.avatar_url) return '';
+  if (profile.avatar_url.startsWith('http')) return profile.avatar_url;
+  if (profile.collectionName && profile.id) {
+    return publicUrl(profile.collectionName, profile.id, profile.avatar_url);
+  }
+  return profile.avatar_url;
 }
 
 /** Extrait l'ID YouTube depuis n'importe quel format de lien YouTube */
@@ -40,7 +53,6 @@ function generateUUID(): string {
   if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
     return crypto.randomUUID();
   }
-  // Fallback pour les environnements sans crypto.randomUUID
   return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
     const r = (Math.random() * 16) | 0;
     const v = c === 'x' ? r : (r & 0x3) | 0x8;
@@ -48,23 +60,7 @@ function generateUUID(): string {
   });
 }
 
-/** Upload un fichier dans le bucket donné, sous user_id/<filename>. Retourne le chemin stocké. */
-export async function uploadFile(
-  bucket: 'songs' | 'covers' | 'avatars',
-  userId: string,
-  file: File,
-): Promise<string> {
-  const ext = file.name.split('.').pop() || 'bin';
-  const path = `${userId}/${generateUUID()}.${ext}`;
-  const { error } = await supabase.storage.from(bucket).upload(path, file, {
-    cacheControl: '3600',
-    upsert: false,
-  });
-  if (error) throw error;
-  return path;
-}
-
-const BUCKET_TO_KIND: Record<'songs' | 'covers' | 'avatars', MediaKind> = {
+const BUCKET_TO_KIND: Record<string, MediaKind> = {
   songs: 'audio',
   covers: 'cover',
   avatars: 'avatar',
@@ -72,30 +68,35 @@ const BUCKET_TO_KIND: Record<'songs' | 'covers' | 'avatars', MediaKind> = {
 
 /**
  * Upload "smart" : envoie vers le serveur média externe si VITE_MEDIA_BASE_URL
- * est défini, sinon fallback Supabase Storage.
- *
- * Retourne :
- * - une URL HTTPS complète (cas serveur externe) — à stocker telle quelle en DB
- * - un chemin relatif au bucket (cas Supabase) — résolu par `publicUrl()` à l'affichage
- *
- * Les helpers `songCoverUrl`, `songAudioUrl`, `avatarUrl` gèrent déjà les deux
- * formes (passthrough si la valeur commence par `http`).
+ * est défini, sinon URL directe (PocketBase gère les fichiers).
  */
 export async function uploadFileSmart(
-  bucket: 'songs' | 'covers' | 'avatars',
+  bucket: 'songs' | 'covers' | 'avatars' | string,
   userId: string,
   file: File,
 ): Promise<string> {
   if (isMediaServerConfigured()) {
-    return uploadMedia(BUCKET_TO_KIND[bucket], file, userId);
+    return uploadMedia(BUCKET_TO_KIND[bucket] || 'audio', file, userId);
   }
-  return uploadFile(bucket, userId, file);
+  // Fallback: upload direct vers PocketBase via la collection media
+  return uploadMedia(BUCKET_TO_KIND[bucket] || 'audio', file, userId);
 }
 
 export async function deleteFile(
-  bucket: 'songs' | 'covers' | 'avatars',
+  bucket: string,
   path: string,
 ): Promise<void> {
   if (!path || path.startsWith('http')) return;
-  await supabase.storage.from(bucket).remove([path]);
+  // PocketBase: we can't easily delete by path, best-effort
+  try {
+    // Try to find and delete from media collection
+    const records = await pb.collection('media').getList(1, 50, {
+      filter: `file = "${path}"`,
+    });
+    for (const record of records.items) {
+      await pb.collection('media').delete(record.id);
+    }
+  } catch (e) {
+    console.error('deleteFile error:', e);
+  }
 }

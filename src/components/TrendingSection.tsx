@@ -2,7 +2,7 @@ import { useRef, useState, useEffect } from 'react';
 import { Flame, ChevronLeft, ChevronRight, Video, User } from 'lucide-react';
 import { usePlayer } from '@/contexts/PlayerContext';
 import { songCoverUrl, avatarUrl } from '@/lib/storage';
-import { supabase } from '@/integrations/supabase/client';
+import { pb } from '@/lib/pocketbase';
 import CachedImage from '@/components/CachedImage';
 import type { Song, Profile } from '@/types/music';
 
@@ -21,12 +21,16 @@ export default function TrendingSection({ trending }: Props) {
     if (trending.length === 0) return;
     const userIds = [...new Set(trending.map((s) => s.uploaded_by))];
     (async () => {
-      const { data } = await supabase
-        .from('profiles')
-        .select('*')
-        .in('user_id', userIds);
       const map: Record<string, Profile> = {};
-      (data ?? []).forEach((p: any) => { map[p.user_id] = p as Profile; });
+      for (const uid of userIds) {
+        try {
+          const result = await pb.collection('profiles').getList(1, 1, { filter: `user_id = "${uid}"`, requestKey: null });
+          if (result.items[0]) {
+            const r = result.items[0];
+            map[uid] = { id: r.id, user_id: r.get('user_id'), pseudo: r.get('pseudo'), first_name: r.get('first_name'), last_name: r.get('last_name'), avatar_url: r.get('avatar') ? '' : null, bio: r.get('bio'), profile_completed: r.get('profile_completed'), created_at: r.get('created') || r.created, updated_at: r.get('updated') || r.updated } as Profile;
+          }
+        } catch {}
+      }
       setProfilesMap(map);
     })();
   }, [trending]);

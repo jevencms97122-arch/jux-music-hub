@@ -1,13 +1,10 @@
 import React, { createContext, useContext, useEffect, useState, useCallback } from 'react';
-import { supabase } from '@/integrations/supabase/client';
-import type { Session, User } from '@supabase/supabase-js';
+import { pb } from '@/lib/pocketbase';
 import type { Profile, PBUser } from '@/types/music';
-import { avatarUrl } from '@/lib/storage';
+import type { RecordModel } from 'pocketbase';
 
 interface AuthContextType {
   user: PBUser | null;
-  session: Session | null;
-  authUser: User | null;
   profile: Profile | null;
   loading: boolean;
   signIn: (email: string, password: string) => Promise<void>;
@@ -19,14 +16,29 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | null>(null);
 
-function profileToPBUser(p: Profile, email: string): PBUser {
+function recordToProfile(r: RecordModel): Profile {
+  return {
+    id: r.id,
+    user_id: r.get('user_id') || r.id,
+    pseudo: r.get('pseudo') || null,
+    first_name: r.get('first_name') || null,
+    last_name: r.get('last_name') || null,
+    avatar_url: r.get('avatar') ? pb.files.getUrl(r, r.get('avatar')) : null,
+    bio: r.get('bio') || null,
+    profile_completed: r.get('profile_completed') ?? false,
+    created_at: r.get('created') || r.created,
+    updated_at: r.get('updated') || r.updated,
+  };
+}
+
+function profileToPBUser(p: Profile): PBUser {
   return {
     id: p.user_id,
-    email,
+    email: pb.authStore.model?.email || '',
     pseudo: p.pseudo ?? '',
     firstName: p.first_name ?? '',
     lastName: p.last_name ?? '',
-    avatar: p.avatar_url ? avatarUrl(p) : '',
+    avatar: p.avatar_url ?? '',
     profileCompleted: p.profile_completed,
     profilCompleted: p.profile_completed,
     collectionId: 'profiles',
@@ -35,96 +47,137 @@ function profileToPBUser(p: Profile, email: string): PBUser {
 }
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
-  const [session, setSession] = useState<Session | null>(null);
-  const [authUser, setAuthUser] = useState<User | null>(null);
   const [profile, setProfile] = useState<Profile | null>(null);
   const [user, setUser] = useState<PBUser | null>(null);
   const [loading, setLoading] = useState(true);
 
-  const loadProfile = useCallback(async (uid: string, email: string) => {
-    const { data, error } = await supabase
-      .from('profiles')
-      .select('*')
-      .eq('user_id', uid)
-      .maybeSingle();
-    if (error) {
-      console.error('loadProfile', error);
-      return;
-    }
-    if (data) {
-      setProfile(data as Profile);
-      setUser(profileToPBUser(data as Profile, email));
+  const loadProfile = useCallback(async (userId: string) => {
+    try {
+      const records = await pb.collection('profiles').getList(1, 1, {
+        filter: `user_id = "${userId}"`,
+      });
+      
+      if (records.items.length > 0) {
+        const p = recordToProfile(records.items[0]);
+        setProfile(p);
+        setUser(profileToPBUser(p));
+      } else {
+        // Créer un profil par défaut
+        const newProfile = await pb.collection('profiles').create({
+          user_id: userId,
+          pseudo: pb.authStore.model?.email?.split('@')[0] || 'user',
+          profile_completed: false,
+        });
+        const p = recordToProfile(newProfile);
+        setProfile(p);
+        setUser(profileToPBUser(p));
+      }
+    } catch (e) {
+      console.error('loadProfile', e);
     }
   }, []);
 
   const refreshUser = useCallback(async () => {
-    if (!authUser) return;
-    await loadProfile(authUser.id, authUser.email ?? '');
-  }, [authUser, loadProfile]);
+    if (!pb.authStore.isValid || !pb.authStore.model?.id) return;
+    try {
+      const records = await pb.collection('profiles').getList(1, 1, {
+        filter: `user_id = "${pb.authStore.model.id}"`,
+      });
+      if (records.items.length > 0) {
+        const p = recordToProfile(records.items[0]);
+        setProfile(p);
+        setUser(profileToPBUser(p));
+      }
+    } catch (e) {
+      console.error('refreshUser', e);
+    }
+  }, []);
 
   useEffect(() => {
-    // 1) Listener d'abord (recommandation Supabase)
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_evt, sess) => {
-      setSession(sess);
-      setAuthUser(sess?.user ?? null);
-      if (sess?.user) {
-        // Defer pour éviter deadlock
-        setTimeout(() => loadProfile(sess.user.id, sess.user.email ?? ''), 0);
+    // Check existing auth
+    if (pb.authStore.isValid && pb.authStore.model?.id) {
+      loadProfile(pb.authStore.model.id).finally(() => setLoading(false));
+    } else {
+      setLoading(false);
+    }
+
+    // Listen for auth changes
+    const unsub = pb.authStore.onChange((token, model) => {
+      if (model?.id) {
+        loadProfile(model.id);
       } else {
         setProfile(null);
         setUser(null);
       }
     });
 
-    // 2) Puis check session existante
-    supabase.auth.getSession().then(({ data: { session: sess } }) => {
-      setSession(sess);
-      setAuthUser(sess?.user ?? null);
-      if (sess?.user) {
-        loadProfile(sess.user.id, sess.user.email ?? '').finally(() => setLoading(false));
-      } else {
-        setLoading(false);
-      }
-    });
-
-    return () => subscription.unsubscribe();
+    return () => {
+      unsub();
+    };
   }, [loadProfile]);
 
   const signIn = async (email: string, password: string) => {
-    const { error } = await supabase.auth.signInWithPassword({ email, password });
-    if (error) throw error;
+    const authData = await pb.collection('users').authWithPassword(email, password);
+    if (authData.record?.id) {
+      await loadProfile(authData.record.id);
+    }
   };
 
   const signUp = async (email: string, password: string) => {
-    const { error } = await supabase.auth.signUp({
+    // Créer d'abord l'utilisateur dans PocketBase
+    const newUser = await pb.collection('users').create({
       email,
       password,
-      options: { emailRedirectTo: `${window.location.origin}/jux` },
+      passwordConfirm: password,
     });
-    if (error) throw error;
+    
+    // Authentifier
+    await pb.collection('users').authWithPassword(email, password);
+    
+    // Créer le profil automatiquement
+    if (newUser.id) {
+      await pb.collection('profiles').create({
+        user_id: newUser.id,
+        pseudo: email.split('@')[0],
+        profile_completed: false,
+      });
+      await loadProfile(newUser.id);
+    }
   };
 
   const logout = async () => {
-    await supabase.auth.signOut();
+    pb.authStore.clear();
     setProfile(null);
     setUser(null);
-    setAuthUser(null);
-    setSession(null);
     window.location.href = '/';
   };
 
   const updateProfile = async (data: Partial<Profile>) => {
-    if (!authUser) throw new Error('Non connecté');
-    const { error } = await supabase
-      .from('profiles')
-      .update(data)
-      .eq('user_id', authUser.id);
-    if (error) throw error;
+    if (!pb.authStore.isValid || !pb.authStore.model?.id) throw new Error('Non connecté');
+    
+    // Trouver le record de profil
+    const records = await pb.collection('profiles').getList(1, 1, {
+      filter: `user_id = "${pb.authStore.model.id}"`,
+    });
+    
+    if (records.items.length === 0) throw new Error('Profil non trouvé');
+    
+    const record = records.items[0];
+    const updateData: Record<string, any> = {};
+    
+    if (data.pseudo !== undefined) updateData.pseudo = data.pseudo;
+    if (data.first_name !== undefined) updateData.first_name = data.first_name;
+    if (data.last_name !== undefined) updateData.last_name = data.last_name;
+    if (data.bio !== undefined) updateData.bio = data.bio;
+    if (data.avatar_url !== undefined) updateData.avatar = data.avatar_url;
+    if (data.profile_completed !== undefined) updateData.profile_completed = data.profile_completed;
+    
+    await pb.collection('profiles').update(record.id, updateData);
     await refreshUser();
   };
 
   return (
-    <AuthContext.Provider value={{ user, session, authUser, profile, loading, signIn, signUp, logout, updateProfile, refreshUser }}>
+    <AuthContext.Provider value={{ user, profile, loading, signIn, signUp, logout, updateProfile, refreshUser }}>
       {children}
     </AuthContext.Provider>
   );

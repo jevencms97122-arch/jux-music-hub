@@ -1,51 +1,61 @@
 import { useEffect, useState } from 'react';
-import { supabase } from '@/integrations/supabase/client';
+import { pb } from '@/lib/pocketbase';
 import { useAuth } from '@/contexts/AuthContext';
-import { usePlayer } from '@/contexts/PlayerContext';
 import SongCard from '@/components/SongCard';
+import { usePlayer } from '@/contexts/PlayerContext';
+import { Button } from '@/components/ui/button';
+import { useNavigate } from 'react-router-dom';
+import { ArrowLeft, Heart } from 'lucide-react';
 import type { Song } from '@/types/music';
-import { useSeo } from '@/lib/useSeo';
+
+function recordToSong(r: any): Song {
+  return {
+    id: r.id, title: r.get('title') || '', author: r.get('author') || '', audio_url: r.get('audio_url') || '',
+    cover_url: r.get('cover_url') || null, video_url: r.get('video_url') || null, genre: r.get('genre') || null,
+    uploaded_by: r.get('uploaded_by') || '', duration: r.get('duration') || 0, play_count: r.get('play_count') ?? 0,
+    weekly_play_count: r.get('weekly_play_count') ?? 0, likes_count: r.get('likes_count') ?? 0,
+    created_at: r.get('created') || r.created, updated_at: r.get('updated') || r.updated,
+    collectionId: r.collectionId, collectionName: r.collectionName,
+  };
+}
 
 export default function Favorites() {
-  useSeo({
-    title: 'Favoris — Jux-Music',
-    description: 'Retrouve tous les titres que tu as aimés sur Jux-Music.',
-    path: '/favorites',
-  });
-  const { authUser } = useAuth();
+  const { user } = useAuth();
   const { playSongFromList } = usePlayer();
+  const navigate = useNavigate();
   const [songs, setSongs] = useState<Song[]>([]);
-  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    if (!authUser) return;
+    if (!user) return;
     (async () => {
-      const { data: likes } = await supabase
-        .from('song_likes')
-        .select('song_id')
-        .eq('user_id', authUser.id);
-      const ids = (likes ?? []).map((l) => l.song_id);
-      if (ids.length === 0) { setSongs([]); setLoading(false); return; }
-      const { data } = await supabase.from('songs').select('*').in('id', ids);
-      setSongs((data ?? []) as Song[]);
-      setLoading(false);
+      const likes = await pb.collection('song_likes').getList(1, 200, { filter: `user_id = "${user.id}"`, sort: '-created', requestKey: null });
+      const ids = likes.items.map((r: any) => r.get('song_id')).filter(Boolean);
+      if (ids.length === 0) { setSongs([]); return; }
+      const songsList: Song[] = [];
+      for (let i = 0; i < ids.length; i += 50) {
+        const batch = ids.slice(i, i + 50);
+        const filters = batch.map((id: string) => `id = "${id}"`).join(' || ');
+        const res = await pb.collection('songs').getList(1, 50, { filter: filters, requestKey: null });
+        songsList.push(...res.items.map(recordToSong));
+      }
+      setSongs(songsList);
     })();
-  }, [authUser]);
+  }, [user]);
 
   return (
-    <div className="min-h-screen px-4 py-6 pb-40">
-      <h1 className="mb-4 text-xl font-bold" style={{ animation: 'fadeSlideUp 0.6s cubic-bezier(0.16,1,0.3,1) both' }}>Titres likés</h1>
-      {loading ? (
-        <p className="text-sm text-muted-foreground" style={{ animation: 'fadeIn 0.5s ease-out both', animationDelay: '0.1s' }}>Chargement...</p>
-      ) : songs.length === 0 ? (
-        <p className="text-sm text-muted-foreground" style={{ animation: 'fadeIn 0.5s ease-out both', animationDelay: '0.1s' }}>Aucun titre liké pour l'instant.</p>
+    <div className="relative min-h-screen pb-40 p-4">
+      <header className="flex items-center gap-3 mb-6">
+        <Button variant="ghost" size="icon" onClick={() => navigate(-1)}><ArrowLeft className="h-5 w-5" /></Button>
+        <h1 className="text-xl font-bold">Mes favoris</h1>
+      </header>
+      {songs.length === 0 ? (
+        <div className="flex flex-col items-center justify-center mt-20 text-muted-foreground">
+          <Heart className="h-12 w-12 mb-4" />
+          <p>Aucun favori pour l'instant</p>
+        </div>
       ) : (
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4">
-          {songs.map((s, i) => (
-            <div key={s.id} style={{ animation: 'scaleIn 0.5s cubic-bezier(0.16,1,0.3,1) both', animationDelay: `${0.1 + i * 0.04}s` }}>
-              <SongCard song={s} onPlay={() => playSongFromList(s, songs)} />
-            </div>
-          ))}
+        <div className="grid grid-cols-2 gap-3">
+          {songs.map((s) => (<SongCard key={s.id} song={s} onPlay={() => playSongFromList(s, songs)} />))}
         </div>
       )}
     </div>

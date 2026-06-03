@@ -1,12 +1,13 @@
-import { useState } from 'react';
-import { supabase } from '@/integrations/supabase/client';
+import { useState, useRef } from 'react';
+import { pb } from '@/lib/pocketbase';
 import { useAuth } from '@/contexts/AuthContext';
-import { usePlayer } from '@/contexts/PlayerContext';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
-import { Slider } from '@/components/ui/slider';
-import { Textarea } from '@/components/ui/textarea';
+import { Input } from '@/components/ui/input';
+import { Play, Send, Music2 } from 'lucide-react';
 import { toast } from 'sonner';
+import { usePlayer } from '@/contexts/PlayerContext';
+import type { Song } from '@/types/music';
 
 interface Props {
   open: boolean;
@@ -14,51 +15,47 @@ interface Props {
 }
 
 export default function CreateStoryModal({ open, onOpenChange }: Props) {
-  const { authUser } = useAuth();
-  const { currentSong, duration } = usePlayer();
-  const [start, setStart] = useState(0);
+  const { user } = useAuth();
+  const { currentSong, currentTime } = usePlayer();
   const [comment, setComment] = useState('');
-  const [saving, setSaving] = useState(false);
 
-  const submit = async () => {
-    if (!authUser || !currentSong) return;
-    setSaving(true);
-    const { error } = await supabase.from('stories').insert({
-      user_id: authUser.id,
-      song_id: currentSong.id,
-      start_time: start,
-      end_time: Math.min(start + 15, duration || start + 15),
-      comment: comment.trim() || null,
-    });
-    setSaving(false);
-    if (error) { toast.error(error.message); return; }
-    toast.success('Story publiée');
-    onOpenChange(false);
-    setComment('');
+  const create = async () => {
+    if (!user || !currentSong) { toast.error('Aucune musique en cours'); return; }
+    try {
+      const endTime = Math.min(currentTime + 15, currentSong.duration ?? 120);
+      await pb.collection('stories').create({
+        user_id: user.id,
+        song_id: currentSong.id,
+        start_time: currentTime,
+        end_time: endTime,
+        comment: comment.trim() || null,
+        expires_at: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
+      });
+      toast.success('Story publiée !');
+      onOpenChange(false);
+      setComment('');
+    } catch (e: any) { toast.error(e.message); }
   };
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent>
-        <DialogHeader><DialogTitle>Publier une story</DialogTitle></DialogHeader>
-        {!currentSong ? (
-          <p className="text-sm text-muted-foreground">Lance une musique d'abord.</p>
-        ) : (
-          <div className="space-y-4">
-            <div>
-              <p className="text-sm font-medium">{currentSong.title}</p>
-              <p className="text-xs text-muted-foreground">{currentSong.author}</p>
+        <DialogHeader><DialogTitle>Créer une story</DialogTitle></DialogHeader>
+        <div className="space-y-4">
+          {currentSong ? (
+            <div className="flex items-center gap-3 rounded-xl bg-card p-3">
+              <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-gradient-primary"><Music2 className="h-6 w-6 text-primary-foreground" /></div>
+              <div className="min-w-0 flex-1">
+                <p className="font-semibold truncate">{currentSong.title}</p>
+                <p className="text-xs text-muted-foreground">{currentSong.author}</p>
+              </div>
             </div>
-            <div>
-              <p className="mb-2 text-xs text-muted-foreground">Début : {Math.floor(start)}s — Durée : 15s</p>
-              <Slider value={[start]} max={Math.max(0, (duration || 0) - 15)} step={1} onValueChange={(v) => setStart(v[0])} />
-            </div>
-            <Textarea placeholder="Commentaire (optionnel)" value={comment} onChange={(e) => setComment(e.target.value)} maxLength={200} />
-            <Button className="w-full" onClick={submit} disabled={saving}>
-              {saving ? 'Publication...' : 'Publier'}
-            </Button>
-          </div>
-        )}
+          ) : <p className="text-sm text-muted-foreground">Lance une musique d'abord</p>}
+          <Input placeholder="Ajouter un commentaire..." value={comment} onChange={(e) => setComment(e.target.value)} />
+          <Button className="w-full" onClick={create} disabled={!currentSong}>
+            <Send className="h-4 w-4 mr-2" /> Publier la story
+          </Button>
+        </div>
       </DialogContent>
     </Dialog>
   );

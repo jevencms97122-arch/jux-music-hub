@@ -17,7 +17,8 @@ import type { Song } from '@/types/music';
 import { toast } from 'sonner';
 import VolumeControl from './VolumeControl';
 import PlaybackRateControl from './PlaybackRateControl';
-import { isAndroidNative } from '@/lib/platform';
+import { detectPlatform } from '@/lib/platform';
+const isAndroidNative = () => detectPlatform() === 'android-app';
 
 export default function PlayerPage() {
   const { user } = useAuth();

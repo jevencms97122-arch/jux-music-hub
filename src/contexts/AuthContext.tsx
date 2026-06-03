@@ -17,20 +17,21 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | null>(null);
 
-function recordToProfile(r: RecordModel): Profile {
+function recordToProfile(r: any): Profile {
   return {
     id: r.id,
-    user_id: r.get('user_id') || r.id,
-    pseudo: r.get('pseudo') || null,
-    first_name: r.get('first_name') || null,
-    last_name: r.get('last_name') || null,
-    avatar_url: r.get('avatar') ? pb.files.getUrl(r, r.get('avatar')) : null,
-    bio: r.get('bio') || null,
-    profile_completed: r.get('profile_completed') ?? false,
-    created_at: r.get('created') || r.created,
-    updated_at: r.get('updated') || r.updated,
+    user_id: r.user_id || r.id,
+    pseudo: r.pseudo || null,
+    first_name: r.first_name || null,
+    last_name: r.last_name || null,
+    avatar_url: r.avatar ? pb.files.getUrl(r, r.avatar) : null,
+    bio: r.bio || null,
+    profile_completed: r.profile_completed ?? false,
+    created_at: r.created,
+    updated_at: r.updated,
   };
 }
+
 
 function profileToPBUser(p: Profile): PBUser {
   return {

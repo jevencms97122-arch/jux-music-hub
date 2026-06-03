@@ -66,6 +66,15 @@ export function detectPlatform(): JuxPlatform {
   return 'web';
 }
 
+export function isAndroidNative(): boolean {
+  return detectPlatform() === 'android-app';
+}
+
+export function isDesktopNative(): boolean {
+  return detectPlatform() === 'windows-app';
+}
+
+
 export interface DownloadPayload {
   id: string;
   title: string;

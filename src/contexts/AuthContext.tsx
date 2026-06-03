@@ -5,6 +5,7 @@ import type { RecordModel } from 'pocketbase';
 
 interface AuthContextType {
   user: PBUser | null;
+  authUser: PBUser | null;
   profile: Profile | null;
   loading: boolean;
   signIn: (email: string, password: string) => Promise<void>;
@@ -177,7 +178,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   return (
-    <AuthContext.Provider value={{ user, profile, loading, signIn, signUp, logout, updateProfile, refreshUser }}>
+    <AuthContext.Provider value={{ user, authUser: user, profile, loading, signIn, signUp, logout, updateProfile, refreshUser }}>
       {children}
     </AuthContext.Provider>
   );

@@ -113,7 +113,7 @@ export default function ProfilePage() {
         </section>
       )}
 
-      <NativeAppSettings open={showSettings} onOpenChange={setShowSettings} />
+      <NativeAppSettings />
     </div>
   );
 }

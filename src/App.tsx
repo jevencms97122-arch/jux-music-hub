@@ -19,7 +19,21 @@ import MiniPlayer from '@/components/MiniPlayer';
 import PlayerPage from '@/components/PlayerPage';
 import BottomNav from '@/components/BottomNav';
 import UpdateChecker from '@/components/UpdateChecker';
+import WebDeprecatedScreen from '@/components/WebDeprecatedScreen';
+import { detectPlatform } from '@/lib/platform';
 import { Toaster } from '@/components/ui/sonner';
+
+function shouldShowWebDeprecated(): boolean {
+  if (typeof window === 'undefined') return false;
+  if (detectPlatform() !== 'web') return false;
+  if (window.location.protocol !== 'https:') return false;
+  const host = window.location.hostname;
+  // Keep Lovable editor/preview usable
+  if (host.endsWith('.lovableproject.com')) return false;
+  if (host.endsWith('.lovableproject-dev.com')) return false;
+  if (host.startsWith('id-preview--') || host.startsWith('preview--')) return false;
+  return true;
+}
 
 const pageVariants = {
   initial: { opacity: 0, y: 8 },

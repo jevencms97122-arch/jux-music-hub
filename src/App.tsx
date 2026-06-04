@@ -202,6 +202,9 @@ function AppWithTheme() {
 }
 
 export default function App() {
+  if (shouldShowWebDeprecated()) {
+    return <WebDeprecatedScreen />;
+  }
   return (
     <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
       <ThemeProvider>

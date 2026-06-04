@@ -26,13 +26,7 @@ import { Toaster } from '@/components/ui/sonner';
 function shouldShowWebDeprecated(): boolean {
   if (typeof window === 'undefined') return false;
   if (detectPlatform() !== 'web') return false;
-  if (window.location.protocol !== 'https:') return false;
-  const host = window.location.hostname;
-  // Keep Lovable editor/preview usable
-  if (host.endsWith('.lovableproject.com')) return false;
-  if (host.endsWith('.lovableproject-dev.com')) return false;
-  if (host.startsWith('id-preview--') || host.startsWith('preview--')) return false;
-  return true;
+  return window.location.protocol === 'https:';
 }
 
 const pageVariants = {

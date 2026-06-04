@@ -18,11 +18,12 @@ interface WrappedData {
 
 function recordToSong(r: any): Song {
   return {
-    id: r.id, title: r.get('title') || '', author: r.get('author') || '', audio_url: r.get('audio_url') || '',
-    cover_url: r.get('cover_url') || null, video_url: r.get('video_url') || null, genre: r.get('genre') || null,
-    uploaded_by: r.get('uploaded_by') || '', duration: r.get('duration') || 0, play_count: r.get('play_count') ?? 0,
-    weekly_play_count: r.get('weekly_play_count') ?? 0, likes_count: r.get('likes_count') ?? 0,
-    created_at: r.get('created') || r.created, updated_at: r.get('updated') || r.updated,
+    id: r.id, title: r.title || '', author: r.author || '', audio: r.audio || '',
+    cover: r.cover || null, audio_url: r.audio_url || '',
+    cover_url: r.cover_url || null, video_url: r.video_url || null, genre: r.genre || null,
+    uploaded_by: r.uploaded_by || '', duration: r.duration || 0, play_count: r.play_count ?? 0,
+    weekly_play_count: r.weekly_play_count ?? 0, likes_count: r.likes_count ?? 0,
+    created_at: r.created, updated_at: r.updated,
     collectionId: r.collectionId, collectionName: r.collectionName,
   };
 }
@@ -161,7 +162,7 @@ export default function Wrapped() {
             </div>
           )}
 
-          <Button variant="outline" className="w-full" onClick={() => { toast.success('Partage pas encore dispo'); }}>
+          <Button variant="outline" className="w-full" onClick={() => { navigator.clipboard.writeText(window.location.href); toast.success('Lien copié ! Partagé ton Wrapped avec tes amis'); }}>
             <Share2 className="h-4 w-4 mr-2" /> Partager mon Wrapped
           </Button>
         </div>

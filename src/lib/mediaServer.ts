@@ -1,26 +1,20 @@
 /**
- * Upload/suppression de fichiers vers un serveur média externe (PocketBase ou
- * tout endpoint compatible) configurable via VITE_MEDIA_BASE_URL.
- *
- * Si VITE_MEDIA_BASE_URL n'est pas défini, les helpers retournent null pour
- * laisser le code appelant retomber sur Supabase Storage.
- *
- * IMPORTANT: le serveur DOIT être accessible en HTTPS — sinon les navigateurs
- * bloqueront le contenu (mixed content) depuis https://juxmusicfree.lovable.app.
- *
- * ─ Côté PocketBase, créer une collection `media` (modifiable via
- *   VITE_MEDIA_COLLECTION) avec les champs :
- *   - kind   (text)
- *   - owner_id (text)
- *   - file   (file, single)
- *   et listRule / viewRule / createRule = "" (public).
- *
- * ─ CORS : autoriser https://juxmusicfree.lovable.app et *.lovableproject.com
+ * Upload/suppression de fichiers vers un serveur média externe (optionnel).
+ * 
+ * Si VITE_MEDIA_BASE_URL est défini, on utilise ce serveur externe pour stocker
+ * les fichiers audio/covers/avatars.
+ * 
+ * Si non défini, les fichiers sont gérés directement par PocketBase via les
+ * champs file des collections dédiées (songs.audio, songs.cover, profiles.avatar).
+ * 
+ * IMPORTANT: Cette logique média externe est un héritage de l'ancienne collection
+ * "media". Pour toute nouvelle utilisation, préférer l'upload direct vers les
+ * collections PocketBase (songs, profiles) avec les champs file.
  */
 
 export type MediaKind = 'audio' | 'cover' | 'avatar';
 
-const DEFAULT_MEDIA_BASE_URL = 'https://ethical-flying-specified-dividend.trycloudflare.com';
+const DEFAULT_MEDIA_BASE_URL = '';
 const BASE = (import.meta.env.VITE_MEDIA_BASE_URL || DEFAULT_MEDIA_BASE_URL).replace(/\/+$/, '');
 const COLLECTION = import.meta.env.VITE_MEDIA_COLLECTION || 'media';
 
@@ -42,14 +36,15 @@ interface PocketBaseRecord {
   id: string;
   collectionId: string;
   collectionName: string;
-  // PocketBase file fields are usually arrays of filenames; accept string or string[]
   file: string | string[];
   [k: string]: any;
 }
 
 /**
- * Upload un fichier vers le serveur média.
- * Retourne l'URL HTTPS complète et publique à stocker en DB.
+ * Upload un fichier vers le serveur média externe.
+ * Retourne l'URL complète du fichier.
+ * NOTE: Cette fonction est réservée à la rétrocompatibilité.
+ * Pour les nouveaux uploads, utiliser directement les champs file des collections.
  */
 export async function uploadMedia(
   kind: MediaKind,
@@ -83,7 +78,6 @@ export async function uploadMedia(
     throw new Error('Réponse serveur média invalide');
   }
 
-  // PocketBase may return the file field as an array of filenames.
   let filename: string | null = null;
   if (Array.isArray(record.file)) filename = record.file[0] ?? null;
   else if (typeof record.file === 'string') filename = record.file;
@@ -92,14 +86,12 @@ export async function uploadMedia(
     throw new Error('Impossible de déterminer le nom de fichier renvoyé par le serveur média');
   }
 
-  // URL publique PocketBase : /api/files/<collection>/<recordId>/<filename>
   return `${BASE}/api/files/${COLLECTION}/${record.id}/${filename}`;
 }
 
 /** Supprime un fichier média à partir de son URL publique. Best-effort. */
 export async function deleteMedia(url: string): Promise<void> {
   if (!BASE || !url || !url.startsWith(BASE)) return;
-  // Pattern : <BASE>/api/files/<collection>/<recordId>/<filename>
   const match = url.match(/\/api\/files\/([^/]+)\/([^/]+)\//);
   if (!match) return;
   const [, collection, recordId] = match;

@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useRef, useEffect, useCallback } from 'react';
-import { pb } from '@/lib/pocketbase';
+import { pb, getPbUrl } from '@/lib/pocketbase';
 import { songAudioUrl, songCoverUrl } from '@/lib/storage';
 import { useAuth } from '@/contexts/AuthContext';
 import { extractDominantHsl, applyAccentHsl } from '@/lib/dominantColor';
@@ -14,6 +14,8 @@ import type { Song } from '@/types/music';
 import { getPlayableAudioUrl, ensureCachedForPlayback, initOfflineManager } from '@/lib/offlineManager';
 
 export type TransitionMode = 'linear' | 'hardCut' | 'exponential' | 'logarithmic' | 'sine' | 'sCurve' | 'elastic' | 'cubicEaseInOut' | 'quartEaseInOut' | 'tempoShift';
+
+export type ConnectionStatus = 'stable' | 'slow' | 'unstable';
 
 export interface ListenSessionRow {
   id: string;
@@ -45,6 +47,7 @@ interface PlayerContextType {
   isSessionHost: boolean;
   isSessionGuest: boolean;
   allParticipantsReady: boolean;
+  connectionStatus: ConnectionStatus;
   refreshSession: () => Promise<void>;
   setActiveSession: (s: ListenSessionRow | null) => void;
   stopAudio: () => void;
@@ -96,19 +99,21 @@ export const TRANSITION_MODES: { value: TransitionMode; label: string; descripti
 function recordToSong(r: any): Song {
   return {
     id: r.id,
-    title: r.get('title') || '',
-    author: r.get('author') || '',
-    audio_url: r.get('audio_url') || '',
-    cover_url: r.get('cover_url') || null,
-    video_url: r.get('video_url') || null,
-    genre: r.get('genre') || null,
-    uploaded_by: r.get('uploaded_by') || '',
-    duration: r.get('duration') || 0,
-    play_count: r.get('play_count') ?? 0,
-    weekly_play_count: r.get('weekly_play_count') ?? 0,
-    likes_count: r.get('likes_count') ?? 0,
-    created_at: r.get('created') || r.created,
-    updated_at: r.get('updated') || r.updated,
+    title: r.title || '',
+    author: r.author || '',
+    audio: r.audio || '',
+    cover: r.cover || null,
+    audio_url: r.audio_url || '',
+    cover_url: r.cover_url || null,
+    video_url: r.video_url || null,
+    genre: r.genre || null,
+    uploaded_by: r.uploaded_by || '',
+    duration: r.duration || 0,
+    play_count: r.play_count ?? 0,
+    weekly_play_count: r.weekly_play_count ?? 0,
+    likes_count: r.likes_count ?? 0,
+    created_at: r.created,
+    updated_at: r.updated,
     collectionId: r.collectionId,
     collectionName: r.collectionName,
   };
@@ -144,6 +149,7 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
     const mode = localStorage.getItem(TRANSITION_MODE_KEY) as TransitionMode | null;
     return (mode && TRANSITION_MODES.some(m => m.value === mode)) ? mode : 'linear';
   });
+  const [connectionStatus, setConnectionStatus] = useState<ConnectionStatus>('stable');
 
   const videoReadyRef = useRef(false);
   const signalVideoReady = useCallback(() => { videoReadyRef.current = true; }, []);
@@ -494,9 +500,38 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
   }, [authUser]);
   useEffect(() => { broadcastSongRef.current = broadcastSong; }, [broadcastSong]);
 
+  // Ping PocketBase toutes les 3 secondes pour vérifier la qualité de la connexion
+  const checkConnectionStatus = useCallback(async () => {
+    const url = getPbUrl();
+    const start = performance.now();
+    try {
+      const resp = await fetch(`${url}/api/health`, { method: 'HEAD', cache: 'no-store' });
+      const elapsed = performance.now() - start;
+      if (resp.ok && elapsed < 300) {
+        setConnectionStatus('stable');
+      } else if (resp.ok) {
+        setConnectionStatus('slow');
+      } else {
+        setConnectionStatus('unstable');
+      }
+    } catch (e: any) {
+      // En cas d'erreur on définit comme instable
+      setConnectionStatus('unstable');
+    }
+  }, []);
+
+  // Intervalle toutes les 3 secondes pour mettre à jour le statut de connexion
+  useEffect(() => {
+    const interval = setInterval(() => {
+      checkConnectionStatus();
+    }, 3000);
+    return () => clearInterval(interval);
+  }, [checkConnectionStatus]);
+
   const playSong = useCallback((song: Song) => {
     if (isSessionGuestRef.current) { toast.info("Seul l'hôte peut changer la musique de la session"); return; }
     setCurrentSong(song); setQueue([song]); setQueueIndex(0); setPlayedSongIds(new Set([song.id])); setIsPlayerOpen(true);
+    checkConnectionStatus();
     loadAndPlay(song);
     if (sessionRef.current && authUser && sessionRef.current.host_id === authUser.id) broadcastSong(song);
     // Auto-queue likes
@@ -527,9 +562,10 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
     if (isSessionGuestRef.current) { toast.info("Seul l'hôte peut changer la musique de la session"); return; }
     const idx = Math.max(0, list.findIndex((s) => s.id === song.id));
     setQueue(list); setQueueIndex(idx); setCurrentSong(song); setPlayedSongIds(new Set([song.id])); setIsPlayerOpen(true);
+    checkConnectionStatus();
     loadAndPlay(song);
     if (sessionRef.current && authUser && sessionRef.current.host_id === authUser.id) broadcastSong(song);
-  }, [loadAndPlay, authUser, broadcastSong]);
+  }, [loadAndPlay, authUser, broadcastSong, checkConnectionStatus]);
 
   const togglePlay = useCallback(() => {
     const a = getActive();
@@ -713,7 +749,7 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
   return (
     <PlayerContext.Provider value={{
       currentSong, isPlaying, currentTime, duration, volume, queue, queueIndex, isShuffled, repeatMode, isPlayerOpen, playbackRate, crossfadeSeconds, transitionMode,
-      activeSession, isSessionHost, isSessionGuest, allParticipantsReady, refreshSession, setActiveSession, stopAudio, refreshSongStats,
+      activeSession, isSessionHost, isSessionGuest, allParticipantsReady, connectionStatus, refreshSession, setActiveSession, stopAudio, refreshSongStats,
       playSong, playSongFromList, playExternalAudio, togglePlay, next, previous, seek, setVolume, toggleShuffle, cycleRepeat,
       openPlayer, closePlayer, setPlaybackRate, setCrossfadeSeconds, setTransitionMode, addToQueue, startRadio, signalVideoReady,
     }}>

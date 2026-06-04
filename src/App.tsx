@@ -14,17 +14,7 @@ import Upload from '@/pages/Upload';
 import ProfileSetup from '@/pages/ProfileSetup';
 import ProfilePage from '@/pages/ProfilePage';
 import ProfileEdit from '@/pages/ProfileEdit';
-import Playlists from '@/pages/Playlists';
-import PlaylistDetail from '@/pages/PlaylistDetail';
-import Social from '@/pages/Social';
 import UserProfile from '@/pages/UserProfile';
-import Search from '@/pages/Search';
-import Favorites from '@/pages/Favorites';
-import Notifications from '@/pages/Notifications';
-import CarMode from '@/pages/CarMode';
-import ListenTogether from '@/pages/ListenTogether';
-import Wrapped from '@/pages/Wrapped';
-import CollabDetail from '@/pages/CollabDetail';
 import MiniPlayer from '@/components/MiniPlayer';
 import PlayerPage from '@/components/PlayerPage';
 import BottomNav from '@/components/BottomNav';
@@ -129,13 +119,13 @@ function AppContent() {
 
   const profileCompleted = profile?.profile_completed ?? false;
 
-  const pathToActive: Record<string, 'home' | 'social' | 'playlists' | 'profile'> = {
+  const pathToActive: Record<string, 'home' | 'profile'> = {
     '/jux': 'home',
-    '/social': 'social',
-    '/playlists': 'playlists',
     '/profile': 'profile',
     '/profile-edit': 'profile',
     '/upload': 'profile',
+    '/profile/setup': 'profile',
+    '/profile-setup': 'profile',
     '/wrapped': 'profile',
   };
   const active = pathToActive[location.pathname] || 'home';
@@ -154,22 +144,10 @@ function AppContent() {
               <Route path="/jux" element={guard(<Home />)} />
               <Route path="/home" element={<Navigate to="/jux" replace />} />
               <Route path="/upload" element={guard(<Upload />)} />
-              <Route path="/playlists" element={guard(<Playlists />)} />
-              <Route path="/playlist/:id" element={guard(<PlaylistDetail />)} />
-              <Route path="/social" element={guard(<Social />)} />
-              <Route path="/listen-together" element={guard(<ListenTogether />)} />
               <Route path="/u/:userId" element={guard(<UserProfile />)} />
-              <Route path="/search" element={guard(<Search />)} />
-              <Route path="/favorites" element={guard(<Favorites />)} />
-              <Route path="/notifications" element={guard(<Notifications />)} />
-              <Route path="/car" element={guard(<CarMode />)} />
-              <Route path="/car-mode" element={<Navigate to="/car" replace />} />
-              <Route path="/collab/:username" element={guard(<CollabDetail />)} />
-              <Route path="/wrapped" element={guard(<Wrapped />)} />
               <Route path="/profile" element={guard(<ProfilePage />)} />
-              <Route path="/profile/edit" element={<Navigate to="/profile-edit" replace />} />
-              <Route path="/profile/setup" element={<Navigate to="/profile-setup" replace />} />
               <Route path="/profile-edit" element={guard(<ProfileEdit onBack={() => navigate('/profile')} />)} />
+              <Route path="/profile/setup" element={<Navigate to="/profile-setup" replace />} />
               <Route path="*" element={<Navigate to="/jux" replace />} />
             </Routes>
           </AnimatePresence>

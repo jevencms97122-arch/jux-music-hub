@@ -8,14 +8,35 @@ import { useNavigate } from 'react-router-dom';
 import { ArrowLeft, Heart } from 'lucide-react';
 import type { Song } from '@/types/music';
 
+function getField(r: any, key: string): any {
+  // PocketBase records often expose values via r.get('field')
+  if (r && typeof r.get === 'function') return r.get(key);
+  return r?.[key];
+}
+
 function recordToSong(r: any): Song {
+  const title = getField(r, 'title') ?? getField(r, 'song_title') ?? r?.title ?? '';
+  const author = getField(r, 'author') ?? getField(r, 'song_author') ?? r?.author ?? '';
+
   return {
-    id: r.id, title: r.get('title') || '', author: r.get('author') || '', audio_url: r.get('audio_url') || '',
-    cover_url: r.get('cover_url') || null, video_url: r.get('video_url') || null, genre: r.get('genre') || null,
-    uploaded_by: r.get('uploaded_by') || '', duration: r.get('duration') || 0, play_count: r.get('play_count') ?? 0,
-    weekly_play_count: r.get('weekly_play_count') ?? 0, likes_count: r.get('likes_count') ?? 0,
-    created_at: r.get('created') || r.created, updated_at: r.get('updated') || r.updated,
-    collectionId: r.collectionId, collectionName: r.collectionName,
+    id: getField(r, 'id') ?? r.id,
+    title: String(title ?? ''),
+    author: String(author ?? ''),
+    audio: getField(r, 'audio') ?? '',
+    cover: getField(r, 'cover') ?? null,
+    audio_url: getField(r, 'audio_url') ?? '',
+    cover_url: getField(r, 'cover_url') ?? null,
+    video_url: getField(r, 'video_url') ?? null,
+    genre: getField(r, 'genre') ?? null,
+    uploaded_by: getField(r, 'uploaded_by') ?? '',
+    duration: getField(r, 'duration') ?? 0,
+    play_count: (getField(r, 'play_count') ?? 0) as number,
+    weekly_play_count: (getField(r, 'weekly_play_count') ?? 0) as number,
+    likes_count: (getField(r, 'likes_count') ?? 0) as number,
+    created_at: getField(r, 'created') ?? getField(r, 'created_at') ?? r.created,
+    updated_at: getField(r, 'updated') ?? getField(r, 'updated_at') ?? r.updated,
+    collectionId: getField(r, 'collectionId') ?? r.collectionId,
+    collectionName: getField(r, 'collectionName') ?? r.collectionName,
   };
 }
 

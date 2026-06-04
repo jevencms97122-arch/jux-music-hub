@@ -1,8 +1,8 @@
 import { useAuth } from '@/contexts/AuthContext';
 import { Button } from '@/components/ui/button';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
-import { Pencil, Upload as UploadIcon, LogOut, Sparkles, Award, Music2, Settings } from 'lucide-react';
+import { Pencil, Upload as UploadIcon, LogOut, Sparkles, Award, Music2, Settings, PlusCircle } from 'lucide-react';
 import { avatarUrl } from '@/lib/storage';
 import { useEffect, useState } from 'react';
 import { getBadges, type Badge } from '@/lib/badges';
@@ -19,11 +19,12 @@ import TransitionSettings from '@/components/TransitionSettings';
 
 function recordToSong(r: any): Song {
   return {
-    id: r.id, title: r.get('title') || '', author: r.get('author') || '', audio_url: r.get('audio_url') || '',
-    cover_url: r.get('cover_url') || null, video_url: r.get('video_url') || null, genre: r.get('genre') || null,
-    uploaded_by: r.get('uploaded_by') || '', duration: r.get('duration') || 0, play_count: r.get('play_count') ?? 0,
-    weekly_play_count: r.get('weekly_play_count') ?? 0, likes_count: r.get('likes_count') ?? 0,
-    created_at: r.get('created') || r.created, updated_at: r.get('updated') || r.updated,
+    id: r.id, title: r.title || '', author: r.author || '', audio: r.audio || '',
+    cover: r.cover || null, audio_url: r.audio_url || '',
+    cover_url: r.cover_url || null, video_url: r.video_url || null, genre: r.genre || null,
+    uploaded_by: r.uploaded_by || '', duration: r.duration || 0, play_count: r.play_count ?? 0,
+    weekly_play_count: r.weekly_play_count ?? 0, likes_count: r.likes_count ?? 0,
+    created_at: r.created, updated_at: r.updated,
     collectionId: r.collectionId, collectionName: r.collectionName,
   };
 }
@@ -31,6 +32,7 @@ function recordToSong(r: any): Song {
 export default function ProfilePage() {
   const { profile, user, logout } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
   const { playSongFromList } = usePlayer();
 
   const [badges, setBadges] = useState<Badge[]>([]);
@@ -41,6 +43,8 @@ export default function ProfilePage() {
 
   useEffect(() => {
     if (!user) return;
+    // Réinitialiser les songs avant le chargement
+    setSongs([]);
 
     getBadges(user.id).then(setBadges);
     getUserStats(user.id).then((s: any) => setStreak(s?.get('current_streak') ?? 0));
@@ -54,7 +58,7 @@ export default function ProfilePage() {
       setSongs(songRes.items.map(recordToSong));
       setCounts({ followers: followersRes.totalItems, following: followingRes.totalItems });
     })();
-  }, [user]);
+  }, [user, location.pathname]);
 
   const unlocked = badges.filter((b) => b.unlocked);
 
@@ -73,7 +77,6 @@ export default function ProfilePage() {
               <div><div className="text-lg font-bold">{counts.following}</div><div className="text-xs text-muted-foreground">Abonnements</div></div>
             </div>
           </div>
-          <Button variant="ghost" size="icon" onClick={() => setShowSettings(true)}><Settings className="h-5 w-5" /></Button>
         </div>
 
         <div className="mt-4">
@@ -83,7 +86,7 @@ export default function ProfilePage() {
 
         <div className="mt-4 flex gap-2">
           <Button size="sm" className="flex-1" onClick={() => navigate('/profile/edit')}><Pencil className="h-4 w-4 mr-1" />Modifier</Button>
-          <Button size="sm" variant="outline" onClick={() => navigate('/wrapped')}><Sparkles className="h-4 w-4 mr-1" />Wrapped</Button>
+          <Button size="sm" variant="outline" onClick={() => navigate('/upload')}><PlusCircle className="h-4 w-4 mr-1" />Publier</Button>
           <Button size="sm" variant="outline" onClick={logout}><LogOut className="h-4 w-4" /></Button>
         </div>
       </header>

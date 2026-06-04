@@ -21,17 +21,25 @@
     --accent-foreground: 0 0% 100%;
     --destructive: 0 84% 60%;
     --destructive-foreground: 0 0% 100%;
-    --border: 0 0% 14%;
-    --input: 0 0% 14%;
+    --border: 0 0% 16%;
+    --input: 0 0% 15%;
     --ring: 12 90% 58%;
-    --radius: 0.875rem;
+    --radius: 1.125rem;
 
     --gradient-primary: linear-gradient(135deg, hsl(12 90% 58%), hsl(18 95% 65%));
-    --gradient-card: linear-gradient(180deg, hsl(0 0% 11%), hsl(0 0% 7%));
-    --gradient-hero: radial-gradient(ellipse at top, hsl(12 90% 58% / 0.18), transparent 60%);
-    --shadow-elegant: 0 10px 40px -10px hsl(12 90% 58% / 0.35);
-    --shadow-card: 0 4px 20px -8px hsl(0 0% 0% / 0.6);
+    --gradient-card: linear-gradient(180deg, hsl(0 0% 12%), hsl(0 0% 7%));
+    --gradient-hero: radial-gradient(ellipse 80% 50% at 50% -10%, hsl(12 90% 58% / 0.22), transparent 70%);
+    --gradient-subtle: linear-gradient(180deg, hsl(0 0% 10% / 0.6), hsl(0 0% 8% / 0.2));
+    --gradient-sheen: linear-gradient(135deg, hsl(0 0% 100% / 0.06), transparent 50%);
+
+    --shadow-elegant: 0 16px 48px -12px hsl(12 90% 58% / 0.4);
+    --shadow-elegant-sm: 0 6px 18px -6px hsl(12 90% 58% / 0.35);
+    --shadow-glow: 0 0 0 1px hsl(12 90% 58% / 0.25), 0 8px 30px -6px hsl(12 90% 58% / 0.45);
+    --shadow-card: 0 8px 28px -10px hsl(0 0% 0% / 0.65);
+    --shadow-soft: 0 2px 12px -4px hsl(0 0% 0% / 0.5);
     --transition-smooth: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    --transition-spring: all 0.45s cubic-bezier(0.34, 1.56, 0.64, 1);
+
 
     --sidebar-background: 0 0% 8%;
     --sidebar-foreground: 0 0% 92%;
@@ -252,6 +260,24 @@
 
 .animate-fade-out {
   animation: fadeOut 0.3s ease-out both;
+}
+
+.animate-slide-in-up {
+  animation: slideInUp 0.35s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.animate-slide-out-down {
+  animation: slideOutDown 0.3s cubic-bezier(0.4, 0, 0.2, 1) both;
+}
+
+@keyframes slideInUp {
+  0% { opacity: 0; transform: translateY(100%); }
+  100% { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes slideOutDown {
+  0% { opacity: 1; transform: translateY(0); }
+  100% { opacity: 0; transform: translateY(100%); }
 }
 
 /* Utility: apply animation via a custom property so we can reuse without repeating the cubic-bezier */

@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { pb } from '@/lib/pocketbase';
 import { useAuth } from '@/contexts/AuthContext';
-import { uploadFileSmart, extractYoutubeId } from '@/lib/storage';
+import { extractYoutubeId } from '@/lib/storage';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { useNavigate } from 'react-router-dom';
@@ -26,24 +26,22 @@ export default function Upload() {
     if (!audioFile && !youtubeUrl.trim()) { toast.error('Ajoute un fichier audio ou une URL YouTube'); return; }
     setUploading(true);
     try {
-      const data: Record<string, any> = { title: title.trim(), author: author.trim(), uploaded_by: user.id };
-      if (genre) data.genre = genre;
+      const formData = new FormData();
+      formData.append('title', title.trim());
+      formData.append('author', author.trim());
+      formData.append('uploaded_by', user.id);
+      if (genre) formData.append('genre', genre);
       if (youtubeUrl.trim()) {
         const id = extractYoutubeId(youtubeUrl.trim());
-        if (id) { data.youtube_id = id; data.audio_url = `https://www.youtube.com/watch?v=${id}`; }
-        else data.video_url = youtubeUrl.trim();
+        if (id) { formData.append('youtube_id', id); formData.append('audio_url', `https://www.youtube.com/watch?v=${id}`); }
+        else formData.append('video_url', youtubeUrl.trim());
       }
-      if (audioFile) {
-        const url = await uploadFileSmart('songs', user.id, audioFile);
-        data.audio_url = url;
-      }
-      if (coverFile) {
-        const url = await uploadFileSmart('covers', user.id, coverFile);
-        data.cover_url = url;
-      }
-      await pb.collection('songs').create(data);
+      if (audioFile) formData.append('audio', audioFile);
+      if (coverFile) formData.append('cover', coverFile);
+      // Envoi unique : PocketBase gère les fichiers attachés aux champs file
+      await pb.collection('songs').create(formData);
       toast.success('Musique uploadée !');
-      navigate('/home');
+      navigate('/jux');
     } catch (e: any) { toast.error(e.message || 'Erreur upload'); }
     setUploading(false);
   };

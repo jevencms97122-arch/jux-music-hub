@@ -8,21 +8,40 @@ export function publicUrl(collectionName: string, recordId: string, filename: st
   return pb.files.getUrl({ id: recordId, collectionName } as any, filename);
 }
 
-export function songCoverUrl(song: { cover_url?: string | null; id?: string; collectionId?: string; collectionName?: string }): string {
-  if (!song.cover_url) return '/placeholder.svg';
-  if (song.cover_url.startsWith('http')) return song.cover_url;
-  if (song.collectionName && song.id) {
-    return publicUrl(song.collectionName, song.id, song.cover_url);
+export function songCoverUrl(song: { cover?: string; cover_url?: string | null; id?: string; collectionId?: string; collectionName?: string }): string {
+  // Nouveau champ file "cover" de PocketBase
+  if (song.cover) {
+    if (song.cover.startsWith('http')) return song.cover;
+    if (song.collectionName && song.id) {
+      return publicUrl(song.collectionName, song.id, song.cover);
+    }
   }
-  return `/placeholder.svg`;
+  // Ancien champ texte "cover_url" (rétrocompatibilité)
+  if (song.cover_url) {
+    if (song.cover_url.startsWith('http')) return song.cover_url;
+    if (song.collectionName && song.id) {
+      return publicUrl(song.collectionName, song.id, song.cover_url);
+    }
+  }
+  return '/placeholder.svg';
 }
 
-export function songAudioUrl(song: { audio_url: string; id?: string; collectionName?: string }): string {
-  if (song.audio_url.startsWith('http')) return song.audio_url;
-  if (song.collectionName && song.id) {
-    return publicUrl(song.collectionName, song.id, song.audio_url);
+export function songAudioUrl(song: { audio?: string; audio_url?: string; id?: string; collectionName?: string }): string {
+  // Nouveau champ file "audio" de PocketBase
+  if (song.audio) {
+    if (song.audio.startsWith('http')) return song.audio;
+    if (song.collectionName && song.id) {
+      return publicUrl(song.collectionName, song.id, song.audio);
+    }
   }
-  return song.audio_url;
+  // Ancien champ texte "audio_url" (rétrocompatibilité)
+  if (song.audio_url) {
+    if (song.audio_url.startsWith('http')) return song.audio_url;
+    if (song.collectionName && song.id) {
+      return publicUrl(song.collectionName, song.id, song.audio_url);
+    }
+  }
+  return '';
 }
 
 export function avatarUrl(profile: { avatar_url?: string | null; id?: string; collectionName?: string }): string {
@@ -60,15 +79,9 @@ function generateUUID(): string {
   });
 }
 
-const BUCKET_TO_KIND: Record<string, MediaKind> = {
-  songs: 'audio',
-  covers: 'cover',
-  avatars: 'avatar',
-};
-
 /**
  * Upload "smart" : envoie vers le serveur média externe si VITE_MEDIA_BASE_URL
- * est défini, sinon URL directe (PocketBase gère les fichiers).
+ * est défini, sinon utilise PocketBase directement via les champs file.
  */
 export async function uploadFileSmart(
   bucket: 'songs' | 'covers' | 'avatars' | string,
@@ -76,27 +89,30 @@ export async function uploadFileSmart(
   file: File,
 ): Promise<string> {
   if (isMediaServerConfigured()) {
-    return uploadMedia(BUCKET_TO_KIND[bucket] || 'audio', file, userId);
+    return uploadMedia(bucket === 'songs' ? 'audio' : bucket === 'covers' ? 'cover' : 'avatar', file, userId);
   }
-  // Fallback: upload direct vers PocketBase via la collection media
-  return uploadMedia(BUCKET_TO_KIND[bucket] || 'audio', file, userId);
+  // Pas de serveur média externe : l'upload se fait via les champs file de PocketBase
+  // directement dans la collection dédiée (songs.audio, songs.cover, profiles.avatar)
+  return '';
 }
 
+/**
+ * Supprime un fichier. Si le serveur média externe est utilisé, on appelle deleteMedia.
+ * Sinon, on ne peut pas supprimer facilement via PocketBase, best-effort via le champ file.
+ */
 export async function deleteFile(
   bucket: string,
   path: string,
 ): Promise<void> {
-  if (!path || path.startsWith('http')) return;
-  // PocketBase: we can't easily delete by path, best-effort
-  try {
-    // Try to find and delete from media collection
-    const records = await pb.collection('media').getList(1, 50, {
-      filter: `file = "${path}"`,
-    });
-    for (const record of records.items) {
-      await pb.collection('media').delete(record.id);
-    }
-  } catch (e) {
-    console.error('deleteFile error:', e);
+  if (!path || path.startsWith('http')) {
+    // Fichier hébergé sur le serveur média externe — on tente de le supprimer
+    try {
+      const { deleteMedia } = await import('./mediaServer');
+      await deleteMedia(path);
+    } catch { /* best-effort */ }
+    return;
   }
+  // Fichier PocketBase géré directement via les champs file des collections dédiées
+  // PocketBase nettoie automatiquement les fichiers orphelins.
+  // Pas besoin d'action manuelle.
 }

@@ -31,8 +31,10 @@ export interface Song {
   id: string;
   title: string;
   author: string;
-  audio_url: string;
-  cover_url: string | null;
+  audio?: string;
+  cover?: string;
+  audio_url?: string;
+  cover_url?: string | null;
   video_url: string | null;
   genre: string | null;
   uploaded_by: string;

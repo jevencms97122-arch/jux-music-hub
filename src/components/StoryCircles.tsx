@@ -4,8 +4,6 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { useAuth } from '@/contexts/AuthContext';
 import { useNavigate } from 'react-router-dom';
 import StoryViewer from './StoryViewer';
-import CreateStoryModal from './CreateStoryModal';
-import { Plus } from 'lucide-react';
 
 export default function StoryCircles() {
   const { user } = useAuth();
@@ -13,7 +11,6 @@ export default function StoryCircles() {
   const [stories, setStories] = useState<any[]>([]);
   const [profileMap, setProfileMap] = useState<Record<string, any>>({});
   const [viewingIndex, setViewingIndex] = useState(-1);
-  const [createOpen, setCreateOpen] = useState(false);
 
   useEffect(() => {
     (async () => {
@@ -41,14 +38,7 @@ export default function StoryCircles() {
   return (
     <>
       <div className="flex gap-3 overflow-x-auto px-4 pb-4 scrollbar-hide">
-        {user && (
-          <button onClick={() => setCreateOpen(true)} className="flex flex-col items-center gap-1 flex-shrink-0">
-            <div className="flex h-16 w-16 items-center justify-center rounded-full border-2 border-dashed border-muted-foreground/40">
-              <Plus className="h-6 w-6 text-muted-foreground" />
-            </div>
-            <span className="text-[10px] text-muted-foreground">Ajouter</span>
-          </button>
-        )}
+        {/* Cut A-only: suppression du bouton "Ajouter une story" */}
         {Object.entries(grouped).map(([userId, userStories]: [string, any[]]) => {
           const profile = profileMap[userId];
           return (
@@ -72,7 +62,6 @@ export default function StoryCircles() {
       {viewingIndex >= 0 && (
         <StoryViewer stories={stories} initialIndex={viewingIndex} onClose={() => setViewingIndex(-1)} />
       )}
-      <CreateStoryModal open={createOpen} onOpenChange={setCreateOpen} />
     </>
   );
 }

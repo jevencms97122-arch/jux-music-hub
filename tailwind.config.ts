@@ -66,10 +66,15 @@ export default {
         "gradient-primary": "var(--gradient-primary)",
         "gradient-card": "var(--gradient-card)",
         "gradient-hero": "var(--gradient-hero)",
+        "gradient-subtle": "var(--gradient-subtle)",
+        "gradient-sheen": "var(--gradient-sheen)",
       },
       boxShadow: {
         elegant: "var(--shadow-elegant)",
+        "elegant-sm": "var(--shadow-elegant-sm)",
+        glow: "var(--shadow-glow)",
         card: "var(--shadow-card)",
+        soft: "var(--shadow-soft)",
       },
       keyframes: {
         "accordion-down": {

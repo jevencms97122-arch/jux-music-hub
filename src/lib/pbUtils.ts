@@ -1,7 +1,7 @@
-/**
+﻿/**
  * Utilitaires pour le SDK PocketBase v0.26+.
  * Dans les nouvelles versions, les champs sont accessibles directement
- * via r.title plutôt que r.get('title').
+ * via r.title plutôt que r.title.
  * Cette fonction gère les deux formats pour la transition.
  */
 export function field<T>(record: any, key: string, defaultValue?: T): T | undefined {

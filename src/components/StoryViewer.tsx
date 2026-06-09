@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+﻿import { useEffect, useRef, useState } from 'react';
 import { pb } from '@/lib/pocketbase';
 import { useAuth } from '@/contexts/AuthContext';
 import { songCoverUrl, songAudioUrl } from '@/lib/storage';
@@ -63,7 +63,7 @@ export default function StoryViewer({ stories, initialIndex = 0, onClose }: Prop
       </div>
       <div className="flex h-full items-center justify-center">
         <div className="text-center">
-          <p className="text-lg font-bold text-white">{story.get('comment') || ''}</p>
+          <p className="text-lg font-bold text-white">{story.comment || ''}</p>
           <p className="text-sm text-white/70 mt-2">Story musicale</p>
         </div>
       </div>

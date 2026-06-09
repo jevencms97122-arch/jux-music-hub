@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+﻿import { useEffect, useState } from 'react';
 import { pb } from '@/lib/pocketbase';
 import { useAuth } from '@/contexts/AuthContext';
 import { Button } from '@/components/ui/button';
@@ -15,27 +15,30 @@ export default function Playlists() {
   const [myPlaylists, setMyPlaylists] = useState<Playlist[]>([]);
   const [likedPlaylists, setLikedPlaylists] = useState<Playlist[]>([]);
   const [publicPlaylists, setPublicPlaylists] = useState<Playlist[]>([]);
+  const [likedSongsCount, setLikedSongsCount] = useState(0);
   const [createOpen, setCreateOpen] = useState(false);
   const [title, setTitle] = useState('');
 
   const load = async () => {
     if (!user) return;
     try {
-      const [mine, likes] = await Promise.all([
+      const [mine, likes, songLikes] = await Promise.all([
         pb.collection('playlists').getList(1, 50, { filter: `owner_id = "${user.id}"`, sort: '-created', requestKey: null }),
         pb.collection('playlist_likes').getList(1, 200, { filter: `user_id = "${user.id}"`, requestKey: null }),
+        pb.collection('song_likes').getList(1, 1, { filter: `user_id = "${user.id}"`, requestKey: null }),
       ]);
-      setMyPlaylists(mine.items.map((r: any) => ({ id: r.id, title: r.get('title'), description: r.get('description'), is_public: r.get('is_public'), owner_id: r.get('owner_id'), view_count: r.get('view_count'), play_count: r.get('play_count'), likes_count: r.get('likes_count'), thumbnail_mode: r.get('thumbnail_mode'), created_at: r.get('created') || r.created, updated_at: r.get('updated') || r.updated })) as Playlist[]);
+      setLikedSongsCount(songLikes.totalItems);
+      setMyPlaylists(mine.items.map((r: any) => ({ id: r.id, title: r.title, description: r.description, is_public: r.is_public, owner_id: r.owner_id, view_count: r.view_count, play_count: r.play_count, likes_count: r.likes_count, thumbnail_mode: r.thumbnail_mode, created_at: r.created || r.created, updated_at: r.updated || r.updated })) as Playlist[]);
       
-      const likedIds = likes.items.map((r: any) => r.get('playlist_id')).filter(Boolean);
+      const likedIds = likes.items.map((r: any) => r.playlist_id).filter(Boolean);
       if (likedIds.length > 0) {
         const filters = likedIds.map((id: string) => `id = "${id}"`).join(' || ');
         const res = await pb.collection('playlists').getList(1, 50, { filter: filters, requestKey: null });
-        setLikedPlaylists(res.items.map((r: any) => ({ id: r.id, title: r.get('title'), description: r.get('description'), is_public: r.get('is_public'), owner_id: r.get('owner_id'), view_count: r.get('view_count'), play_count: r.get('play_count'), likes_count: r.get('likes_count'), thumbnail_mode: r.get('thumbnail_mode'), created_at: r.get('created') || r.created, updated_at: r.get('updated') || r.updated })) as Playlist[]);
+        setLikedPlaylists(res.items.map((r: any) => ({ id: r.id, title: r.title, description: r.description, is_public: r.is_public, owner_id: r.owner_id, view_count: r.view_count, play_count: r.play_count, likes_count: r.likes_count, thumbnail_mode: r.thumbnail_mode, created_at: r.created || r.created, updated_at: r.updated || r.updated })) as Playlist[]);
       }
       
       const pubs = await pb.collection('playlists').getList(1, 30, { filter: 'is_public = true', sort: '-likes_count', requestKey: null });
-      setPublicPlaylists(pubs.items.map((r: any) => ({ id: r.id, title: r.get('title'), description: r.get('description'), is_public: r.get('is_public'), owner_id: r.get('owner_id'), view_count: r.get('view_count'), play_count: r.get('play_count'), likes_count: r.get('likes_count'), thumbnail_mode: r.get('thumbnail_mode'), created_at: r.get('created') || r.created, updated_at: r.get('updated') || r.updated })) as Playlist[]);
+      setPublicPlaylists(pubs.items.map((r: any) => ({ id: r.id, title: r.title, description: r.description, is_public: r.is_public, owner_id: r.owner_id, view_count: r.view_count, play_count: r.play_count, likes_count: r.likes_count, thumbnail_mode: r.thumbnail_mode, created_at: r.created || r.created, updated_at: r.updated || r.updated })) as Playlist[]);
     } catch {}
   };
 
@@ -71,22 +74,30 @@ export default function Playlists() {
         </Dialog>
       </header>
 
-      {myPlaylists.length > 0 && (
-        <section className="mb-6">
-          <h2 className="text-lg font-bold mb-3 flex items-center gap-2"><ListMusic className="h-5 w-5" />Mes playlists</h2>
-          <div className="space-y-2">
-            {myPlaylists.map((p) => (
-              <button key={p.id} onClick={() => navigate(`/playlist/${p.id}`)} className="flex w-full items-center gap-3 rounded-xl bg-card/50 p-3 text-left hover:bg-card">
-                <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-gradient-primary"><ListMusic className="h-6 w-6 text-primary-foreground" /></div>
-                <div className="min-w-0 flex-1">
-                  <p className="font-semibold truncate">{p.title}</p>
-                  <p className="text-xs text-muted-foreground">{p.is_public ? 'Publique' : 'Privée'} · {p.likes_count} likes</p>
-                </div>
-              </button>
-            ))}
-          </div>
-        </section>
-      )}
+      <section className="mb-6">
+        <h2 className="text-lg font-bold mb-3 flex items-center gap-2"><ListMusic className="h-5 w-5" />Mes playlists</h2>
+        <div className="space-y-2">
+          {/* Playlist virtuelle "Titres likés" — toujours présente, privée, non modifiable */}
+          <button onClick={() => navigate('/favorites')} className="flex w-full items-center gap-3 rounded-xl bg-card/50 p-3 text-left hover:bg-card">
+            <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-red-500/20">
+              <Heart className="h-6 w-6 fill-red-400 text-red-400" />
+            </div>
+            <div className="min-w-0 flex-1">
+              <p className="font-semibold truncate">Titres likés</p>
+              <p className="text-xs text-muted-foreground">Privée · {likedSongsCount} {likedSongsCount === 1 ? 'titre' : 'titres'}</p>
+            </div>
+          </button>
+          {myPlaylists.map((p) => (
+            <button key={p.id} onClick={() => navigate(`/playlist/${p.id}`)} className="flex w-full items-center gap-3 rounded-xl bg-card/50 p-3 text-left hover:bg-card">
+              <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-gradient-primary"><ListMusic className="h-6 w-6 text-primary-foreground" /></div>
+              <div className="min-w-0 flex-1">
+                <p className="font-semibold truncate">{p.title}</p>
+                <p className="text-xs text-muted-foreground">{p.is_public ? 'Publique' : 'Privée'} · {p.likes_count} likes</p>
+              </div>
+            </button>
+          ))}
+        </div>
+      </section>
 
       {likedPlaylists.length > 0 && (
         <section className="mb-6">

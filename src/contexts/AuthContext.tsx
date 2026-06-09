@@ -11,7 +11,7 @@ interface AuthContextType {
   signIn: (email: string, password: string) => Promise<void>;
   signUp: (email: string, password: string) => Promise<void>;
   logout: () => Promise<void>;
-  updateProfile: (data: Partial<Profile>) => Promise<void>;
+  updateProfile: (data: Partial<Profile>, avatarFile?: File) => Promise<void>;
   refreshUser: () => Promise<void>;
 }
 
@@ -154,41 +154,32 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     window.location.href = '/';
   };
 
-  const updateProfile = async (data: Partial<Profile>) => {
+  const updateProfile = async (data: Partial<Profile>, avatarFile?: File) => {
     if (!pb.authStore.isValid || !pb.authStore.model?.id) throw new Error('Non connecté');
-    
-    // Trouver le record de profil
+
     const records = await pb.collection('profiles').getList(1, 1, {
       filter: `user_id = "${pb.authStore.model.id}"`,
     });
-    
-    if (records.items.length === 0) throw new Error('Profil non trouvé');
-    
-    const record = records.items[0];
-    const updateData: Record<string, any> = {};
-    
-    if (data.pseudo !== undefined) updateData.pseudo = data.pseudo;
-    if (data.first_name !== undefined) updateData.first_name = data.first_name;
-    if (data.last_name !== undefined) updateData.last_name = data.last_name;
-    if (data.bio !== undefined) updateData.bio = data.bio;
-    // Ne pas envoyer avatar_url si c'est une URL HTTP (champ file attend un binaire dans PocketBase)
-    if (data.avatar_url !== undefined && data.avatar_url !== null && !data.avatar_url.startsWith('http')) {
-      updateData.avatar = data.avatar_url;
-    }
-    if (data.profile_completed !== undefined) updateData.profile_completed = data.profile_completed;
 
-    
-    await pb.collection('profiles').update(record.id, updateData);
-    
-    // Mettre à jour l'état local immédiatement (synchronisé) pour éviter le délai React
-    setProfile(prev => {
-      if (!prev) return prev;
-      const updated = { ...prev, ...data };
-      setUser(profileToPBUser(updated));
-      return updated;
-    });
-    
-    await refreshUser();
+    if (records.items.length === 0) throw new Error('Profil non trouvé');
+
+    const record = records.items[0];
+
+    // Utiliser FormData pour pouvoir envoyer un fichier binaire
+    const formData = new FormData();
+    if (data.pseudo !== undefined) formData.append('pseudo', data.pseudo ?? '');
+    if (data.first_name !== undefined) formData.append('first_name', data.first_name ?? '');
+    if (data.last_name !== undefined) formData.append('last_name', data.last_name ?? '');
+    if (data.bio !== undefined) formData.append('bio', data.bio ?? '');
+    if (data.profile_completed !== undefined) formData.append('profile_completed', String(data.profile_completed));
+    if (avatarFile) formData.append('avatar', avatarFile);
+
+    const updated = await pb.collection('profiles').update(record.id, formData);
+
+    // Mettre à jour l'état local immédiatement avec les données fraîches
+    const p = recordToProfile(updated);
+    setProfile(p);
+    setUser(profileToPBUser(p));
   };
 
   return (

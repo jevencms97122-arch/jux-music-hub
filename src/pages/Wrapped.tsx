@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+﻿import { useEffect, useState } from 'react';
 import { pb } from '@/lib/pocketbase';
 import { useAuth } from '@/contexts/AuthContext';
 import { useNavigate } from 'react-router-dom';
@@ -49,7 +49,7 @@ export default function Wrapped() {
       });
 
       const counts = new Map<string, number>();
-      historyRes.items.forEach((h: any) => counts.set(h.get('song_id'), (counts.get(h.get('song_id')) ?? 0) + 1));
+      historyRes.items.forEach((h: any) => counts.set(h.song_id, (counts.get(h.song_id) ?? 0) + 1));
 
       const songIds = [...counts.keys()];
       let topSongs: Array<{ song: Song; count: number }> = [];

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+﻿import { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { pb } from '@/lib/pocketbase';
 import { useAuth } from '@/contexts/AuthContext';
@@ -42,7 +42,7 @@ export default function UserProfile() {
   const load = async () => {
     if (!userId) return;
     const pRecord = await pbGetFirst('profiles', `user_id = "${userId}"`);
-    setProfile(pRecord ? { id: pRecord.id, user_id: pRecord.get('user_id'), pseudo: pRecord.get('pseudo'), first_name: pRecord.get('first_name'), last_name: pRecord.get('last_name'), avatar_url: pRecord.get('avatar') ? 'avatar' : null, bio: pRecord.get('bio'), profile_completed: pRecord.get('profile_completed'), created_at: pRecord.get('created') || pRecord.created, updated_at: pRecord.get('updated') || pRecord.updated } as Profile : null);
+    setProfile(pRecord ? { id: pRecord.id, user_id: pRecord.user_id, pseudo: pRecord.pseudo, first_name: pRecord.first_name, last_name: pRecord.last_name, avatar: pRecord.avatar ?? null, avatar_url: pRecord.avatar_url ?? null, bio: pRecord.bio, profile_completed: pRecord.profile_completed, collectionName: pRecord.collectionName, collectionId: pRecord.collectionId, created_at: pRecord.created, updated_at: pRecord.updated } : null);
 
     const songRes = await pb.collection('songs').getList(1, 100, { filter: `uploaded_by = "${userId}"`, sort: '-created', requestKey: null });
     setSongs(songRes.items.map(recordToSong));
@@ -54,11 +54,11 @@ export default function UserProfile() {
     setCounts({ followers: fers.totalItems, following: fing.totalItems });
 
     const statsData = await getUserStats(userId);
-    setStreak(statsData?.get('current_streak') ?? 0);
+    setStreak(statsData?.current_streak ?? 0);
 
     if (user && user.id !== userId) {
       const fRecord = await pbGetFirst('follows', `follower_id = "${user.id}" && following_id = "${userId}"`);
-      setFollowStatus(fRecord?.get('status') || 'none');
+      setFollowStatus(fRecord?.status || 'none');
     }
   };
 

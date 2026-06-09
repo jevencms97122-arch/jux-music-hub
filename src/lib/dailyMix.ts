@@ -1,4 +1,4 @@
-import { pb } from './pocketbase';
+﻿import { pb } from './pocketbase';
 import type { Song } from '@/types/music';
 
 function recordToSong(r: any): Song {
@@ -33,7 +33,7 @@ export async function generateDailyMix(userId: string): Promise<Song[]> {
       sort: '-listened_at',
     });
 
-    const songIds = Array.from(new Set(historyRes.items.map((h: any) => h.get('song_id'))));
+    const songIds = Array.from(new Set(historyRes.items.map((h: any) => h.song_id)));
 
     let listened: Song[] = [];
     if (songIds.length > 0) {

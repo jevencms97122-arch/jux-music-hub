@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+﻿import { useEffect, useState } from 'react';
 import { pb } from '@/lib/pocketbase';
 import { useAuth } from '@/contexts/AuthContext';
 import { getUserStats } from '@/lib/streaks';
@@ -22,7 +22,7 @@ export default function Notifications() {
 
   const markAllRead = async () => {
     for (const n of notifications) {
-      if (!n.get('is_read')) await pb.collection('notifications').update(n.id, { is_read: true });
+      if (!n.is_read) await pb.collection('notifications').update(n.id, { is_read: true });
     }
     load();
   };
@@ -46,11 +46,11 @@ export default function Notifications() {
       ) : (
         <div className="space-y-2">
           {notifications.map((n: any) => (
-            <div key={n.id} className={`flex items-start gap-3 rounded-xl p-3 ${n.get('is_read') ? 'bg-card/30' : 'bg-card'}`}>
+            <div key={n.id} className={`flex items-start gap-3 rounded-xl p-3 ${n.is_read ? 'bg-card/30' : 'bg-card'}`}>
               <div className="flex-1 min-w-0">
-                <p className="text-sm font-semibold">{n.get('title')}</p>
-                {n.get('body') && <p className="text-xs text-muted-foreground">{n.get('body')}</p>}
-                <p className="text-[10px] text-muted-foreground mt-1">{new Date(n.get('created') || n.created).toLocaleDateString()}</p>
+                <p className="text-sm font-semibold">{n.title}</p>
+                {n.body && <p className="text-xs text-muted-foreground">{n.body}</p>}
+                <p className="text-[10px] text-muted-foreground mt-1">{new Date(n.created || n.created).toLocaleDateString()}</p>
               </div>
               <Button variant="ghost" size="icon" className="shrink-0" onClick={() => del(n.id)}><Trash2 className="h-4 w-4" /></Button>
             </div>

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+﻿import { useEffect, useState } from 'react';
 import { pb } from '@/lib/pocketbase';
 import { useAuth } from '@/contexts/AuthContext';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
@@ -21,7 +21,7 @@ export default function AddToPlaylistModal({ open, onOpenChange, songId }: Props
     if (!open || !user) return;
     (async () => {
       const result = await pb.collection('playlists').getList(1, 50, { filter: `owner_id = "${user.id}"`, sort: '-created', requestKey: null });
-      setPlaylists(result.items.map((r: any) => ({ id: r.id, title: r.get('title'), description: r.get('description'), is_public: r.get('is_public'), owner_id: r.get('owner_id'), view_count: r.get('view_count'), play_count: r.get('play_count'), likes_count: r.get('likes_count'), thumbnail_mode: r.get('thumbnail_mode'), created_at: r.get('created') || r.created, updated_at: r.get('updated') || r.updated })) as Playlist[]);
+      setPlaylists(result.items.map((r: any) => ({ id: r.id, title: r.title, description: r.description, is_public: r.is_public, owner_id: r.owner_id, view_count: r.view_count, play_count: r.play_count, likes_count: r.likes_count, thumbnail_mode: r.thumbnail_mode, created_at: r.created || r.created, updated_at: r.updated || r.updated })) as Playlist[]);
     })();
   }, [open, user]);
 

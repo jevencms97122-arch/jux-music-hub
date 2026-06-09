@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+﻿import { useEffect, useState } from 'react';
 import { pb } from '@/lib/pocketbase';
 import { useAuth } from '@/contexts/AuthContext';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
@@ -6,6 +6,8 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Send, Trash2, User } from 'lucide-react';
 import { toast } from 'sonner';
+import { avatarUrl } from '@/lib/storage';
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 
 interface Props {
   open: boolean;
@@ -19,20 +21,24 @@ export default function CommentsModal({ open, onOpenChange, songId }: Props) {
   const [text, setText] = useState('');
   const [profileMap, setProfileMap] = useState<Record<string, any>>({});
 
+  const loadComments = async () => {
+    if (!songId) return;
+    const res = await pb.collection('song_comments').getList(1, 100, { filter: `song_id = "${songId}"`, sort: '-created', requestKey: null });
+    setComments(res.items);
+    const userIds = [...new Set(res.items.map((r: any) => r.user_id))].filter(Boolean) as string[];
+    const map: Record<string, any> = {};
+    await Promise.all(userIds.map(async (uid) => {
+      try {
+        const prof = await pb.collection('profiles').getList(1, 1, { filter: `user_id = "${uid}"`, requestKey: null });
+        if (prof.items[0]) map[uid] = prof.items[0];
+      } catch {}
+    }));
+    setProfileMap(map);
+  };
+
   useEffect(() => {
     if (!open || !songId) return;
-    (async () => {
-      const res = await pb.collection('song_comments').getList(1, 100, { filter: `song_id = "${songId}"`, sort: '-created', requestKey: null });
-      setComments(res.items);
-      const userIds = [...new Set(res.items.map((r: any) => r.get('user_id')))].filter(Boolean);
-      for (const uid of userIds) {
-        try {
-          const prof = await pb.collection('profiles').getList(1, 1, { filter: `user_id = "${uid}"`, requestKey: null });
-          if (prof.items[0]) profileMap[uid] = prof.items[0];
-        } catch {}
-      }
-      setProfileMap({...profileMap});
-    })();
+    loadComments();
   }, [open, songId]);
 
   const addComment = async () => {
@@ -40,8 +46,7 @@ export default function CommentsModal({ open, onOpenChange, songId }: Props) {
     try {
       await pb.collection('song_comments').create({ song_id: songId, user_id: user.id, content: text.trim() });
       setText('');
-      const res = await pb.collection('song_comments').getList(1, 100, { filter: `song_id = "${songId}"`, sort: '-created', requestKey: null });
-      setComments(res.items);
+      await loadComments();
     } catch (e: any) { toast.error(e.message); }
   };
 
@@ -57,12 +62,15 @@ export default function CommentsModal({ open, onOpenChange, songId }: Props) {
           {comments.length === 0 && <p className="text-sm text-muted-foreground">Aucun commentaire</p>}
           {comments.map((c: any) => (
             <div key={c.id} className="flex items-start gap-2 rounded-lg bg-card/50 p-2">
-              <div className="flex h-8 w-8 items-center justify-center rounded-full bg-secondary"><User className="h-4 w-4" /></div>
+              <Avatar className="h-8 w-8 flex-shrink-0">
+                <AvatarImage src={profileMap[c.user_id] ? avatarUrl(profileMap[c.user_id]) : ''} alt="" />
+                <AvatarFallback><User className="h-4 w-4" /></AvatarFallback>
+              </Avatar>
               <div className="flex-1 min-w-0">
-                <p className="text-xs font-medium">{profileMap[c.get('user_id')]?.get('pseudo') || 'Anonyme'}</p>
-                <p className="text-sm">{c.get('content')}</p>
+                <p className="text-xs font-medium">{profileMap[c.user_id]?.pseudo || 'Anonyme'}</p>
+                <p className="text-sm">{c.content}</p>
               </div>
-              {user?.id === c.get('user_id') && (
+              {user?.id === c.user_id && (
                 <Button variant="ghost" size="icon" className="shrink-0" onClick={() => deleteComment(c.id)}><Trash2 className="h-3 w-3" /></Button>
               )}
             </div>

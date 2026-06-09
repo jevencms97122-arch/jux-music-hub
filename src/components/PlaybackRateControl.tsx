@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'react';
 import { usePlayer } from '@/contexts/PlayerContext';
 import { Minus, Plus } from 'lucide-react';
+import { overlaySignal } from '@/lib/gamepadOverlaySignal';
 
 interface PlaybackRateControlProps {
   open: boolean;
@@ -14,6 +15,9 @@ const RATE_MAX = 2;
 export default function PlaybackRateControl({ open, onClose }: PlaybackRateControlProps) {
   const { playbackRate, setPlaybackRate } = usePlayer();
   const panelRef = useRef<HTMLDivElement>(null);
+
+  // Signal gamepad hook that this overlay is open
+  useEffect(() => { overlaySignal.open(); return () => overlaySignal.close(); }, []);
 
   // Fermer en cliquant à l'extérieur
   useEffect(() => {

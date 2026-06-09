@@ -1,6 +1,4 @@
 import { useMemo } from 'react';
-import { Switch } from '@/components/ui/switch';
-import { Palette } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
   Sheet,
@@ -22,7 +20,7 @@ export default function ThemeSelectorSheet({
   triggerLabel: React.ReactNode;
   triggerClassName?: string;
 }) {
-  const { themes, currentTheme, setTheme, dynamicColorEnabled, setDynamicColorEnabled } = useTheme();
+  const { themes, currentTheme, setTheme } = useTheme();
 
   const hasAnimation = currentTheme.backgroundAnimation != null;
 
@@ -115,22 +113,6 @@ export default function ThemeSelectorSheet({
             />
           </div>
 
-          {/* Option : couleur dynamique depuis la cover de la musique */}
-          <div className="mt-4 flex items-center justify-between rounded-xl border bg-secondary/40 p-4">
-            <div className="flex items-center gap-3">
-              <Palette className="h-5 w-5 text-muted-foreground" />
-              <div>
-                <div className="text-sm font-semibold">Couleur dynamique</div>
-                <div className="text-xs text-muted-foreground">
-                  Adapte les couleurs à la cover de la musique
-                </div>
-              </div>
-            </div>
-            <Switch
-              checked={dynamicColorEnabled}
-              onCheckedChange={setDynamicColorEnabled}
-            />
-          </div>
         </div>
       </SheetContent>
     </Sheet>

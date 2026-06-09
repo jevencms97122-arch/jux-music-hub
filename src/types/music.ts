@@ -6,9 +6,12 @@ export interface Profile {
   pseudo: string | null;
   first_name: string | null;
   last_name: string | null;
+  avatar: string | null;
   avatar_url: string | null;
   bio: string | null;
   profile_completed: boolean;
+  collectionName?: string;
+  collectionId?: string;
   created_at: string;
   updated_at: string;
 }

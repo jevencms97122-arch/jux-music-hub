@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+﻿import { useEffect, useState } from 'react';
 import { pb } from '@/lib/pocketbase';
 import { useAuth } from '@/contexts/AuthContext';
 import SongCard from '@/components/SongCard';
@@ -9,7 +9,7 @@ import { ArrowLeft, Heart } from 'lucide-react';
 import type { Song } from '@/types/music';
 
 function getField(r: any, key: string): any {
-  // PocketBase records often expose values via r.get('field')
+  // PocketBase records often expose values via r.field
   if (r && typeof r.get === 'function') return r.get(key);
   return r?.[key];
 }
@@ -50,7 +50,7 @@ export default function Favorites() {
     if (!user) return;
     (async () => {
       const likes = await pb.collection('song_likes').getList(1, 200, { filter: `user_id = "${user.id}"`, sort: '-created', requestKey: null });
-      const ids = likes.items.map((r: any) => r.get('song_id')).filter(Boolean);
+      const ids = likes.items.map((r: any) => r.song_id).filter(Boolean);
       if (ids.length === 0) { setSongs([]); return; }
       const songsList: Song[] = [];
       for (let i = 0; i < ids.length; i += 50) {

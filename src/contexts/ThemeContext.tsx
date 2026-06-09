@@ -7,15 +7,11 @@ type ThemeContextValue = {
   themes: AppTheme[];
   currentTheme: AppTheme;
   setTheme: (id: string) => void;
-  /** Si true, la couleur dominante de la cover est appliquée aux éléments de la page */
-  dynamicColorEnabled: boolean;
-  setDynamicColorEnabled: (v: boolean) => void;
 };
 
 const ThemeContext = createContext<ThemeContextValue | null>(null);
 
 const STORAGE_KEY = 'app_theme_id';
-const DYNAMIC_COLOR_KEY = 'app_dynamic_color';
 
 function readSavedThemeId(): string {
   try {
@@ -25,14 +21,6 @@ function readSavedThemeId(): string {
     // ignore
   }
   return APP_THEMES[0]?.id ?? 'dark-classique';
-}
-
-function readDynamicColorEnabled(): boolean {
-  try {
-    return localStorage.getItem(DYNAMIC_COLOR_KEY) === 'true';
-  } catch {
-    return false;
-  }
 }
 
 /**
@@ -104,9 +92,7 @@ function applyThemeToCssVars(theme: AppTheme) {
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
   const themes = useMemo(() => APP_THEMES, []);
 
-  // Initialise depuis localStorage directement dans le state (pas dans un effect)
   const [currentThemeId, setCurrentThemeId] = useState<string>(readSavedThemeId);
-  const [dynamicColorEnabled, setDynamicColorEnabled] = useState<boolean>(readDynamicColorEnabled);
   const wasAnimatedRef = useRef(false);
 
   const currentTheme = useMemo(() => {
@@ -125,6 +111,8 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
       primary: currentTheme.hsl.primary,
       accent: currentTheme.hsl.accent,
       ring: currentTheme.hsl.ring,
+      sidebarPrimary: currentTheme.hsl.sidebar.primary,
+      sidebarRing: currentTheme.hsl.sidebar.ring,
     });
 
     try {
@@ -133,15 +121,6 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
       // ignore
     }
   }, [currentTheme]);
-
-  // Sauvegarde dynamicColorEnabled dans localStorage
-  useEffect(() => {
-    try {
-      localStorage.setItem(DYNAMIC_COLOR_KEY, dynamicColorEnabled ? 'true' : 'false');
-    } catch {
-      // ignore
-    }
-  }, [dynamicColorEnabled]);
 
   // Pause/resume background animations based on page visibility
   useEffect(() => {
@@ -185,20 +164,9 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     notifyRestart();
   }, [themes, notifyRestart]);
 
-  const handleSetDynamicColor = useCallback((v: boolean) => {
-    setDynamicColorEnabled(v);
-    notifyRestart();
-  }, [notifyRestart]);
-
   const value = useMemo<ThemeContextValue>(
-    () => ({
-      themes,
-      currentTheme,
-      setTheme,
-      dynamicColorEnabled,
-      setDynamicColorEnabled: handleSetDynamicColor,
-    }),
-    [themes, currentTheme, setTheme, dynamicColorEnabled, handleSetDynamicColor],
+    () => ({ themes, currentTheme, setTheme }),
+    [themes, currentTheme, setTheme],
   );
 
   return <ThemeContext.Provider value={value}>{children}</ThemeContext.Provider>;

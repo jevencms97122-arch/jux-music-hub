@@ -5,7 +5,7 @@ import { isMediaServerConfigured, uploadMedia, type MediaKind } from './mediaSer
 export function publicUrl(collectionName: string, recordId: string, filename: string): string {
   if (!filename) return '';
   if (filename.startsWith('http')) return filename;
-  return pb.files.getUrl({ id: recordId, collectionName } as any, filename);
+  return pb.files.getURL({ id: recordId, collectionName } as any, filename);
 }
 
 export function songCoverUrl(song: { cover?: string; cover_url?: string | null; id?: string; collectionId?: string; collectionName?: string }): string {
@@ -44,13 +44,14 @@ export function songAudioUrl(song: { audio?: string; audio_url?: string; id?: st
   return '';
 }
 
-export function avatarUrl(profile: { avatar_url?: string | null; id?: string; collectionName?: string }): string {
-  if (!profile.avatar_url) return '';
-  if (profile.avatar_url.startsWith('http')) return profile.avatar_url;
-  if (profile.collectionName && profile.id) {
-    return publicUrl(profile.collectionName, profile.id, profile.avatar_url);
-  }
-  return profile.avatar_url;
+export function avatarUrl(profile: { avatar?: string | null; avatar_url?: string | null; id?: string; collectionId?: string; collectionName?: string }): string {
+  // Champ file "avatar" (PocketBase natif)
+  const file = profile.avatar || profile.avatar_url;
+  if (!file) return '';
+  if (file.startsWith('http')) return file;
+  const col = profile.collectionName || 'profiles';
+  if (profile.id) return publicUrl(col, profile.id, file);
+  return file;
 }
 
 /** Extrait l'ID YouTube depuis n'importe quel format de lien YouTube */

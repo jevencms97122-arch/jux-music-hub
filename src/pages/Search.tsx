@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+﻿import { useState, useEffect, useCallback } from 'react';
 import { pb } from '@/lib/pocketbase';
 import { usePlayer } from '@/contexts/PlayerContext';
 import { songCoverUrl, avatarUrl } from '@/lib/storage';
@@ -45,7 +45,7 @@ export default function Search() {
         }),
       ]);
       setSongs(songRes.items.map(recordToSong));
-      setUsers(userRes.items.map((r: any) => ({ id: r.id, user_id: r.get('user_id'), pseudo: r.get('pseudo'), avatar_url: r.get('avatar') ? URL.createObjectURL(new Blob()) : null })));
+      setUsers(userRes.items.map((r: any) => ({ id: r.id, user_id: r.user_id, pseudo: r.pseudo, avatar_url: r.avatar ? URL.createObjectURL(new Blob()) : null })));
     } catch { setSongs([]); setUsers([]); }
   }, [term]);
 

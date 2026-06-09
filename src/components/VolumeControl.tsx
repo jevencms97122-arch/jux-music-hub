@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'react';
 import { usePlayer } from '@/contexts/PlayerContext';
 import { Volume2, Volume1, VolumeX } from 'lucide-react';
+import { overlaySignal } from '@/lib/gamepadOverlaySignal';
 
 interface VolumeControlProps {
   open: boolean;
@@ -10,6 +11,9 @@ interface VolumeControlProps {
 export default function VolumeControl({ open, onClose }: VolumeControlProps) {
   const { volume, setVolume } = usePlayer();
   const panelRef = useRef<HTMLDivElement>(null);
+
+  // Signal gamepad hook that this overlay is open
+  useEffect(() => { overlaySignal.open(); return () => overlaySignal.close(); }, []);
 
   // Fermer en cliquant à l'extérieur
   useEffect(() => {

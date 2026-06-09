@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useRef, useEffect, useCallback } from 'react';
+﻿import React, { createContext, useContext, useState, useRef, useEffect, useCallback } from 'react';
 import { pb, getPbUrl } from '@/lib/pocketbase';
 import { songAudioUrl, songCoverUrl } from '@/lib/storage';
 import { useAuth } from '@/contexts/AuthContext';
@@ -8,7 +8,6 @@ import { setMediaSessionMetadata, setMediaSessionHandlers, setMediaSessionPositi
 import { sendNowPlayingToNative, clearNowPlayingOnNative, onNativeCommand, resolveCoverUrl } from '@/lib/androidMediaBridge';
 import type { NativeCommandEvent } from '@/lib/androidMediaBridge';
 import { toast } from 'sonner';
-import { useTheme } from '@/contexts/ThemeContext';
 import { updatePresence, clearPresence } from '@/lib/userPresence';
 import type { Song } from '@/types/music';
 import { getPlayableAudioUrl, ensureCachedForPlayback, initOfflineManager } from '@/lib/offlineManager';
@@ -76,6 +75,7 @@ interface PlayerContextType {
   addToQueue: (song: Song) => void;
   startRadio: (seed: Song) => Promise<void>;
   signalVideoReady: () => void;
+  getAnalyserNode: () => AnalyserNode | null;
 }
 
 const PlayerContext = createContext<PlayerContextType | null>(null);
@@ -124,6 +124,8 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
   const audioARef = useRef<HTMLAudioElement | null>(null);
   const audioBRef = useRef<HTMLAudioElement | null>(null);
   const activeRef = useRef<'A' | 'B'>('A');
+  const audioCtxRef = useRef<AudioContext | null>(null);
+  const analyserRef = useRef<AnalyserNode | null>(null);
   const crossfadingRef = useRef(false);
   const crossfadeIntervalRef = useRef<number | null>(null);
   const userRef = useRef(authUser);
@@ -287,6 +289,20 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
     const create = () => { const a = new Audio(); a.preload = 'auto'; (a as any).preservesPitch = false; (a as any).mozPreservesPitch = false; (a as any).webkitPreservesPitch = false; a.crossOrigin = 'anonymous'; return a; };
     audioARef.current = create();
     audioBRef.current = create();
+
+    // Web Audio API — analyser for reactive visualisations
+    try {
+      const ctx = new AudioContext();
+      const analyser = ctx.createAnalyser();
+      analyser.fftSize = 512;
+      analyser.smoothingTimeConstant = 0.82;
+      analyser.connect(ctx.destination);
+      ctx.createMediaElementSource(audioARef.current).connect(analyser);
+      ctx.createMediaElementSource(audioBRef.current).connect(analyser);
+      audioCtxRef.current = ctx;
+      analyserRef.current = analyser;
+    } catch {}
+
     const onTime = (e: Event) => {
       const a = getActive();
       if (e.target !== a) return;
@@ -304,7 +320,7 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
       setIsPlaying(true);
       const au = userRef.current;
       const cs = currentSongRef.current;
-      if (au && cs) updatePresence({ userId: au.id, isListening: true, songId: cs.id, songTitle: cs.title, songAuthor: cs.author });
+      if (au && cs) updatePresence({ userId: au.id, isListening: true, songId: cs.id, songTitle: cs.title, songAuthor: cs.author, songCoverUrl: songCoverUrl(cs) });
     };
     const onPause = (e: Event) => { if (e.target !== getActive()) return; if (!crossfadingRef.current) setIsPlaying(false); };
     [audioARef.current, audioBRef.current].forEach((a) => { a.addEventListener('timeupdate', onTime); a.addEventListener('loadedmetadata', onDur); a.addEventListener('ended', onEnd); a.addEventListener('play', onPlay); a.addEventListener('pause', onPause); });
@@ -344,14 +360,12 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => { setMediaSessionMetadata(currentSong); }, [currentSong]);
   useEffect(() => { setMediaSessionPlaybackState(currentSong ? (isPlaying ? 'playing' : 'paused') : 'none'); }, [isPlaying, currentSong]);
 
-  const { dynamicColorEnabled } = useTheme();
   useEffect(() => {
     if (!currentSong) { applyAccentHsl(null); return; }
-    if (!dynamicColorEnabled) { applyAccentHsl(null); return; }
     let cancelled = false;
     extractDominantHsl(songCoverUrl(currentSong)).then((hsl) => { if (!cancelled) applyAccentHsl(hsl); });
     return () => { cancelled = true; };
-  }, [currentSong, dynamicColorEnabled]);
+  }, [currentSong]);
 
   useEffect(() => { setMediaSessionHandlers({ play: () => getActive()?.play(), pause: () => getActive()?.pause(), next: () => next(), previous: () => previous(), seek: (t) => seek(t) }); }, [queue, queueIndex, repeatMode, isShuffled]);
   useEffect(() => { setMediaSessionPosition(duration, currentTime, playbackRate); }, [duration, currentTime, playbackRate]);
@@ -381,7 +395,7 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
     try {
       const record = await pbGetFirst('songs', `id = "${songId}"`);
       if (record) {
-        const data = { play_count: record.get('play_count') ?? 0, likes_count: record.get('likes_count') ?? 0 };
+        const data = { play_count: record.play_count ?? 0, likes_count: record.likes_count ?? 0 };
         setCurrentSong((cur) => cur?.id === songId ? { ...cur, ...data } : cur);
         setQueue((q) => q.map((s) => s.id === songId ? { ...s, ...data } : s));
       }
@@ -393,7 +407,7 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
     try {
       const record = await pbGetFirst('songs', `id = "${songId}"`);
       if (record) {
-        const current = record.get('play_count') ?? 0;
+        const current = record.play_count ?? 0;
         await pb.collection('songs').update(record.id, { play_count: current + 1 });
         setCurrentSong((cur) => cur?.id === songId ? { ...cur, play_count: current + 1 } : cur);
         setQueue((q) => q.map((s) => s.id === songId ? { ...s, play_count: current + 1 } : s));
@@ -405,7 +419,7 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
     try {
       const record = await pbGetFirst('songs', `id = "${songId}"`);
       if (record) {
-        const current = record.get('weekly_play_count') ?? 0;
+        const current = record.weekly_play_count ?? 0;
         await pb.collection('songs').update(record.id, { weekly_play_count: current + 1 });
         setCurrentSong((cur) => cur?.id === songId ? { ...cur, weekly_play_count: current + 1 } : cur);
         setQueue((q) => q.map((s) => s.id === songId ? { ...s, weekly_play_count: current + 1 } : s));
@@ -425,7 +439,7 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
     pb.collection('listen_history').create({ user_id: authUser.id, song_id: song.id, listened_at: new Date().toISOString() }).catch(() => {});
     
     updateStreak(authUser.id);
-    updatePresence({ userId: authUser.id, isListening: true, songId: song.id, songTitle: song.title, songAuthor: song.author });
+    updatePresence({ userId: authUser.id, isListening: true, songId: song.id, songTitle: song.title, songAuthor: song.author, songCoverUrl: songCoverUrl(song) });
     
     incrementPlayCount(song.id);
     weeklyListenStartRef.current.set(song.id, 0);
@@ -469,7 +483,7 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
     a.addEventListener('playing', applyRate, { once: true });
     const inSessionAsHost = !!(sessionRef.current && authUser && sessionRef.current.host_id === authUser.id);
     if (!autoPlay || inSessionAsHost) { pendingSessionAutoplayRef.current = !!inSessionAsHost; a.load(); return; }
-    try { await a.play(); a.playbackRate = playbackRate; recordPlay(song); ensureCachedForPlayback(song).catch(() => {}); } catch (e) { console.error('Audio play failed', e); }
+    try { if (audioCtxRef.current?.state === 'suspended') await audioCtxRef.current.resume().catch(() => {}); await a.play(); a.playbackRate = playbackRate; recordPlay(song); ensureCachedForPlayback(song).catch(() => {}); } catch (e) { console.error('Audio play failed', e); }
   }, [playbackRate, volume, recordPlay, authUser]);
 
   const loadAndPlayExternalAudio = useCallback(async (payload: { videoId: string; title: string; author: string; coverUrl: string; audioUrl: string; autoPlay?: boolean }) => {
@@ -530,6 +544,7 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
 
   const playSong = useCallback((song: Song) => {
     if (isSessionGuestRef.current) { toast.info("Seul l'hôte peut changer la musique de la session"); return; }
+    if (audioCtxRef.current?.state === 'suspended') audioCtxRef.current.resume().catch(() => {});
     setCurrentSong(song); setQueue([song]); setQueueIndex(0); setPlayedSongIds(new Set([song.id])); setIsPlayerOpen(true);
     checkConnectionStatus();
     loadAndPlay(song);
@@ -541,7 +556,7 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
           const likeRecords = await pb.collection('song_likes').getList(1, 1, { filter: `user_id = "${authUser.id}" && song_id = "${song.id}"`, requestKey: null });
           if (likeRecords.items.length === 0) return;
           const allLikes = await pb.collection('song_likes').getList(1, 200, { filter: `user_id = "${authUser.id}"`, requestKey: null });
-          const otherIds = allLikes.items.map((l: any) => l.get('song_id')).filter((id: string) => id !== song.id);
+          const otherIds = allLikes.items.map((l: any) => l.song_id).filter((id: string) => id !== song.id);
           if (otherIds.length === 0) return;
           // Fetch songs by batches
           const songs: Song[] = [];
@@ -560,6 +575,7 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
 
   const playSongFromList = useCallback((song: Song, list: Song[]) => {
     if (isSessionGuestRef.current) { toast.info("Seul l'hôte peut changer la musique de la session"); return; }
+    if (audioCtxRef.current?.state === 'suspended') audioCtxRef.current.resume().catch(() => {});
     const idx = Math.max(0, list.findIndex((s) => s.id === song.id));
     setQueue(list); setQueueIndex(idx); setCurrentSong(song); setPlayedSongIds(new Set([song.id])); setIsPlayerOpen(true);
     checkConnectionStatus();
@@ -571,11 +587,13 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
     const a = getActive();
     if (!a || !currentSong) return;
     if (isSessionGuestRef.current) { toast.info("Seul l'hôte peut contrôler la lecture"); return; }
+    // Resume AudioContext on user gesture (browser autoplay policy)
+    if (audioCtxRef.current?.state === 'suspended') audioCtxRef.current.resume().catch(() => {});
     const shouldPlay = a.paused;
     pendingSessionAutoplayRef.current = false;
     if (shouldPlay) {
       a.play().catch(console.error);
-      if (authUser) updatePresence({ userId: authUser.id, isListening: true, songId: currentSong.id, songTitle: currentSong.title, songAuthor: currentSong.author });
+      if (authUser) updatePresence({ userId: authUser.id, isListening: true, songId: currentSong.id, songTitle: currentSong.title, songAuthor: currentSong.author, songCoverUrl: songCoverUrl(currentSong) });
     } else { a.pause(); if (authUser) clearPresence(authUser.id); }
     const s = sessionRef.current;
     if (s && authUser && s.host_id === authUser.id) {
@@ -664,7 +682,7 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
       // For joined sessions, we fetch with participant filter
       const joinedRes = await pb.collection('listen_sessions').getList(1, 1, { filter: `is_active = true`, requestKey: null });
       const joined = joinedRes.items.find((r: any) => {
-        const participants = r.get('participants') as string[] || [];
+        const participants = r.participants as string[] || [];
         return participants.includes(authUser.id);
       });
       setActiveSessionState((joined as unknown as ListenSessionRow) ?? null);
@@ -752,6 +770,7 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
       activeSession, isSessionHost, isSessionGuest, allParticipantsReady, connectionStatus, refreshSession, setActiveSession, stopAudio, refreshSongStats,
       playSong, playSongFromList, playExternalAudio, togglePlay, next, previous, seek, setVolume, toggleShuffle, cycleRepeat,
       openPlayer, closePlayer, setPlaybackRate, setCrossfadeSeconds, setTransitionMode, addToQueue, startRadio, signalVideoReady,
+      getAnalyserNode: () => analyserRef.current,
     }}>
       {children}
     </PlayerContext.Provider>

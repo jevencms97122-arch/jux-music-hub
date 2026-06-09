@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from 'react';
+﻿import { useEffect, useState, useCallback } from 'react';
 import { pb } from '@/lib/pocketbase';
 import { useAuth } from '@/contexts/AuthContext';
 import { useNavigate, useSearchParams } from 'react-router-dom';
@@ -24,7 +24,7 @@ const fetchProfiles = async (ids: string[]) => {
   for (const uid of ids) {
     try {
       const r = await pbGetFirst('profiles', `user_id = "${uid}"`);
-      if (r) result.push({ id: r.id, user_id: r.get('user_id'), pseudo: r.get('pseudo'), first_name: r.get('first_name'), last_name: r.get('last_name'), avatar_url: r.get('avatar') ? 'avatar' : null, bio: r.get('bio'), profile_completed: r.get('profile_completed'), created_at: r.get('created') || r.created, updated_at: r.get('updated') || r.updated } as Profile);
+      if (r) result.push({ id: r.id, user_id: r.user_id, pseudo: r.pseudo, first_name: r.first_name, last_name: r.last_name, avatar_url: r.avatar ? 'avatar' : null, bio: r.bio, profile_completed: r.profile_completed, created_at: r.created || r.created, updated_at: r.updated || r.updated } as Profile);
     } catch {}
   }
   return result;
@@ -44,10 +44,10 @@ export default function ListenTogether() {
 
   const loadHostInfo = useCallback(async (s: ListenSessionRow) => {
     const p = await pbGetFirst('profiles', `user_id = "${s.host_id}"`);
-    setHost(p ? { id: p.id, user_id: p.get('user_id'), pseudo: p.get('pseudo'), first_name: p.get('first_name'), last_name: p.get('last_name'), avatar_url: p.get('avatar') ? 'avatar' : null, bio: p.get('bio'), profile_completed: p.get('profile_completed'), created_at: p.get('created') || p.created, updated_at: p.get('updated') || p.updated } as Profile : null);
+    setHost(p ? { id: p.id, user_id: p.user_id, pseudo: p.pseudo, first_name: p.first_name, last_name: p.last_name, avatar_url: p.avatar ? 'avatar' : null, bio: p.bio, profile_completed: p.profile_completed, created_at: p.created || p.created, updated_at: p.updated || p.updated } as Profile : null);
     if (s.song_id) {
       const songRec = await pbGetFirst('songs', `id = "${s.song_id}"`);
-      setHostSong(songRec ? { id: songRec.id, title: songRec.get('title'), author: songRec.get('author'), audio_url: songRec.get('audio_url'), cover_url: songRec.get('cover_url'), video_url: songRec.get('video_url'), genre: songRec.get('genre'), uploaded_by: songRec.get('uploaded_by'), play_count: songRec.get('play_count'), likes_count: songRec.get('likes_count'), created_at: songRec.get('created') || songRec.created, updated_at: songRec.get('updated') || songRec.updated } as Song : null);
+      setHostSong(songRec ? { id: songRec.id, title: songRec.title, author: songRec.author, audio_url: songRec.audio_url, cover_url: songRec.cover_url, video_url: songRec.video_url, genre: songRec.genre, uploaded_by: songRec.uploaded_by, play_count: songRec.play_count, likes_count: songRec.likes_count, created_at: songRec.created || songRec.created, updated_at: songRec.updated || songRec.updated } as Song : null);
     } else setHostSong(null);
     if (s.participants?.length) setParticipantsProfiles(await fetchProfiles(s.participants));
     else setParticipantsProfiles([]);
@@ -62,14 +62,14 @@ export default function ListenTogether() {
     try {
       const s = await pbGetFirst('listen_sessions', `code = "${code}" && is_active = true`);
       if (!s) { toast.error('Session introuvable'); return; }
-      const participants = s.get('participants') as string[] || [];
-      const ready = s.get('ready_participants') as string[] || [];
+      const participants = s.participants as string[] || [];
+      const ready = s.ready_participants as string[] || [];
       if (participants.includes(user.id)) { toast.info('Tu es déjà dans cette session'); return; }
       await pb.collection('listen_sessions').update(s.id, {
         participants: [...participants, user.id],
         ready_participants: [...ready, user.id],
       });
-      setActiveSession({ id: s.id, host_id: s.get('host_id'), song_id: s.get('song_id'), current_time_seconds: s.get('current_time_seconds'), is_playing: s.get('is_playing'), participants: [...participants, user.id], ready_participants: [...ready, user.id], is_active: true, code: s.get('code') } as ListenSessionRow);
+      setActiveSession({ id: s.id, host_id: s.host_id, song_id: s.song_id, current_time_seconds: s.current_time_seconds, is_playing: s.is_playing, participants: [...participants, user.id], ready_participants: [...ready, user.id], is_active: true, code: s.code } as ListenSessionRow);
       refreshSession();
       navigate('/listen-together');
     } catch { toast.error('Code invalide'); }
@@ -114,7 +114,7 @@ export default function ListenTogether() {
     } catch {}
   };
 
-  const codeParam = searchParams.get('code');
+  const codeParam = searchParams.code;
   useEffect(() => { if (codeParam) { doJoin(codeParam); navigate('/listen-together', { replace: true }); } }, [codeParam]);
   useEffect(() => { if (user) fetchProfiles(([] as any)).then(() => {}); loadHostInfo; }, [user]);
 
@@ -122,7 +122,7 @@ export default function ListenTogether() {
     if (!user) return;
     (async () => {
       const outF = await pb.collection('follows').getList(1, 200, { filter: `follower_id = "${user.id}" && status = "accepted"`, requestKey: null });
-      const ids = outF.items.map((f: any) => f.get('following_id'));
+      const ids = outF.items.map((f: any) => f.following_id);
       setFollowing(await fetchProfiles(ids));
     })();
   }, [user]);

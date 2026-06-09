@@ -1,4 +1,4 @@
-import { pb } from './pocketbase';
+﻿import { pb } from './pocketbase';
 
 export interface Badge {
   id: string;
@@ -27,13 +27,13 @@ export async function getBadges(userId: string): Promise<Badge[]> {
 
     const stats = statsRes.items[0];
     const uploads = songsRes.items ?? [];
-    const totalUploadPlays = uploads.reduce((s, u: any) => s + (u.get('play_count') ?? 0), 0);
+    const totalUploadPlays = uploads.reduce((s, u: any) => s + (u.play_count ?? 0), 0);
     const followersCount = followersRes.totalItems ?? 0;
     const likesCount = likesRes.totalItems ?? 0;
     const playlistsCount = playlistsRes.totalItems ?? 0;
-    const currentStreak = stats?.get('current_streak') ?? 0;
-    const longestStreak = stats?.get('longest_streak') ?? 0;
-    const totalListens = stats?.get('total_listens') ?? 0;
+    const currentStreak = stats?.current_streak ?? 0;
+    const longestStreak = stats?.longest_streak ?? 0;
+    const totalListens = stats?.total_listens ?? 0;
 
     return [
       { id: 'first-upload', name: 'Premier morceau', emoji: '🎵', description: 'Upload ton premier titre', unlocked: uploads.length >= 1 },

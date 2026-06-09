@@ -1,4 +1,4 @@
-import { pb } from './pocketbase';
+﻿import { pb } from './pocketbase';
 
 /** Met à jour la série d'écoute quotidienne de l'utilisateur. */
 export async function updateStreak(userId: string): Promise<void> {
@@ -21,11 +21,11 @@ export async function updateStreak(userId: string): Promise<void> {
     }
 
     const existing = records.items[0];
-    const lastDate = existing.get('last_listen_date') as string;
+    const lastDate = existing.last_listen_date as string;
 
     if (lastDate === today) {
       await pb.collection('user_stats').update(existing.id, {
-        total_listens: (existing.get('total_listens') ?? 0) + 1,
+        total_listens: (existing.total_listens ?? 0) + 1,
       });
       return;
     }
@@ -34,15 +34,15 @@ export async function updateStreak(userId: string): Promise<void> {
     yesterday.setDate(yesterday.getDate() - 1);
     const yesterdayStr = yesterday.toISOString().split('T')[0];
 
-    const currentStreak = existing.get('current_streak') ?? 0;
-    const longestStreak = existing.get('longest_streak') ?? 0;
+    const currentStreak = existing.current_streak ?? 0;
+    const longestStreak = existing.longest_streak ?? 0;
     const newStreak = lastDate === yesterdayStr ? currentStreak + 1 : 1;
     const newLongestStreak = Math.max(newStreak, longestStreak);
 
     await pb.collection('user_stats').update(existing.id, {
       current_streak: newStreak,
       longest_streak: newLongestStreak,
-      total_listens: (existing.get('total_listens') ?? 0) + 1,
+      total_listens: (existing.total_listens ?? 0) + 1,
       last_listen_date: today,
     });
   } catch (e) {

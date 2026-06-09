@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+﻿import { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { pb } from '@/lib/pocketbase';
 import { useAuth } from '@/contexts/AuthContext';
@@ -6,7 +6,11 @@ import { usePlayer } from '@/contexts/PlayerContext';
 import { songCoverUrl } from '@/lib/storage';
 import SongCard from '@/components/SongCard';
 import { Button } from '@/components/ui/button';
-import { ArrowLeft, Play, Heart, Trash2, ListMusic, Plus, Users, Share2 } from 'lucide-react';
+import { Input } from '@/components/ui/input';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import { Avatar, AvatarFallback } from '@/components/ui/avatar';
+import { ArrowLeft, Play, Heart, Trash2, ListMusic, Plus, Users, UserPlus, X, Settings2, Globe, Lock } from 'lucide-react';
 import { toast } from 'sonner';
 import type { Song, Playlist, Profile } from '@/types/music';
 
@@ -31,7 +35,14 @@ export default function PlaylistDetail() {
   const [songs, setSongs] = useState<Song[]>([]);
   const [liked, setLiked] = useState(false);
   const [collaborators, setCollaborators] = useState<any[]>([]);
+  const [collabRecords, setCollabRecords] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [collabOpen, setCollabOpen] = useState(false);
+  const [collabSearch, setCollabSearch] = useState('');
+  const [collabResults, setCollabResults] = useState<any[]>([]);
+  const [collabRole, setCollabRole] = useState('viewer');
+  const [showSettings, setShowSettings] = useState(false);
+  const [settingsPublic, setSettingsPublic] = useState(false);
 
   const pbGetFirst = async (collection: string, filter: string) => {
     try { const r = await pb.collection(collection).getList(1, 1, { filter, requestKey: null }); return r.items[0] || null; } catch { return null; }
@@ -42,10 +53,10 @@ export default function PlaylistDetail() {
     (async () => {
       try {
         const p = await pb.collection('playlists').getOne(id);
-        setPlaylist({ id: p.id, title: p.get('title'), description: p.get('description'), is_public: p.get('is_public'), owner_id: p.get('owner_id'), view_count: p.get('view_count'), play_count: p.get('play_count'), likes_count: p.get('likes_count'), thumbnail_mode: p.get('thumbnail_mode'), created_at: p.get('created') || p.created, updated_at: p.get('updated') || p.updated } as Playlist);
+        setPlaylist({ id: p.id, title: p.title, description: p.description, is_public: p.is_public, owner_id: p.owner_id, view_count: p.view_count, play_count: p.play_count, likes_count: p.likes_count, thumbnail_mode: p.thumbnail_mode, created_at: p.created || p.created, updated_at: p.updated || p.updated } as Playlist);
         
         const ps = await pb.collection('playlist_songs').getList(1, 100, { filter: `playlist_id = "${id}"`, sort: 'position', requestKey: null });
-        const ids = ps.items.map((r: any) => r.get('song_id')).filter(Boolean);
+        const ids = ps.items.map((r: any) => r.song_id).filter(Boolean);
         
         const songsList: Song[] = [];
         for (let i = 0; i < ids.length; i += 50) {
@@ -62,11 +73,17 @@ export default function PlaylistDetail() {
         }
         
         const collabs = await pb.collection('playlist_collaborators').getList(1, 50, { filter: `playlist_id = "${id}"`, requestKey: null });
-        const userIds = collabs.items.map((r: any) => r.get('user_id')).filter(Boolean);
+        setCollabRecords(collabs.items);
+        const userIds = collabs.items.map((r: any) => r.user_id).filter(Boolean);
         if (userIds.length > 0) {
           const profFilters = userIds.map((uid: string) => `user_id = "${uid}"`).join(' || ');
           const profs = await pb.collection('profiles').getList(1, 50, { filter: profFilters, requestKey: null });
-          setCollaborators(profs.items.map((r: any) => ({ id: r.get('user_id'), pseudo: r.get('pseudo'), avatar_url: r.get('avatar') })));
+          setCollaborators(profs.items.map((r: any) => {
+            const rec = collabs.items.find((c: any) => c.user_id === r.user_id);
+            return { id: r.user_id, pseudo: r.pseudo, avatar_url: r.avatar, role: rec?.role ?? 'viewer', collabId: rec?.id };
+          }));
+        } else {
+          setCollaborators([]);
         }
       } catch { navigate('/playlists'); }
       setLoading(false);
@@ -104,11 +121,77 @@ export default function PlaylistDetail() {
     try { await pb.collection('playlists').delete(id); navigate('/playlists'); } catch {}
   };
 
+  const searchCollab = async () => {
+    if (!collabSearch.trim()) return;
+    try {
+      const res = await pb.collection('profiles').getList(1, 10, {
+        filter: `pseudo ~ "${collabSearch.trim()}"`,
+        requestKey: null,
+      });
+      setCollabResults(res.items.map((r: any) => ({ user_id: r.user_id, pseudo: r.pseudo })));
+    } catch {}
+  };
+
+  const addCollab = async (targetUserId: string) => {
+    if (!id) return;
+    const already = collaborators.find((c) => c.id === targetUserId);
+    if (already) { toast.error('Déjà collaborateur'); return; }
+    try {
+      await pb.collection('playlist_collaborators').create({ playlist_id: id, user_id: targetUserId, role: collabRole });
+      toast.success('Collaborateur ajouté');
+      setCollabSearch('');
+      setCollabResults([]);
+      const collabs = await pb.collection('playlist_collaborators').getList(1, 50, { filter: `playlist_id = "${id}"`, requestKey: null });
+      const userIds = collabs.items.map((r: any) => r.user_id).filter(Boolean);
+      if (userIds.length > 0) {
+        const profFilters = userIds.map((uid: string) => `user_id = "${uid}"`).join(' || ');
+        const profs = await pb.collection('profiles').getList(1, 50, { filter: profFilters, requestKey: null });
+        setCollaborators(profs.items.map((r: any) => {
+          const rec = collabs.items.find((c: any) => c.user_id === r.user_id);
+          return { id: r.user_id, pseudo: r.pseudo, avatar_url: r.avatar, role: rec?.role ?? 'viewer', collabId: rec?.id };
+        }));
+      }
+    } catch (e: any) { toast.error(e.message); }
+  };
+
+  const removeCollab = async (collabId: string, userId: string) => {
+    try {
+      await pb.collection('playlist_collaborators').delete(collabId);
+      setCollaborators((c) => c.filter((x) => x.id !== userId));
+      toast.success('Collaborateur retiré');
+    } catch {}
+  };
+
+  const isAdmin = user?.id === playlist?.owner_id ||
+    collabRecords.some((c: any) => c.user_id === user?.id && c.role === 'admin');
+
+  const openSettings = () => {
+    setSettingsPublic(playlist?.is_public ?? false);
+    setShowSettings(true);
+  };
+
+  const saveSettings = async () => {
+    if (!id) return;
+    try {
+      await pb.collection('playlists').update(id, { is_public: settingsPublic });
+      setPlaylist((prev) => prev ? { ...prev, is_public: settingsPublic } : prev);
+      setShowSettings(false);
+      toast.success('Paramètres sauvegardés');
+    } catch {
+      toast.error('Erreur lors de la sauvegarde');
+    }
+  };
+
   return (
     <div className="relative min-h-screen pb-40 p-4">
       <header className="flex items-center gap-3 mb-6">
         <Button variant="ghost" size="icon" onClick={() => navigate(-1)}><ArrowLeft className="h-5 w-5" /></Button>
         <h1 className="text-xl font-bold truncate flex-1">{playlist.title}</h1>
+        {isAdmin && (
+          <Button variant="ghost" size="icon" onClick={openSettings}>
+            <Settings2 className="h-5 w-5" />
+          </Button>
+        )}
         <Button variant="ghost" size="icon" onClick={toggleLike}><Heart className={`h-5 w-5 ${liked ? 'fill-red-500 text-red-500' : ''}`} /></Button>
         {user?.id === playlist.owner_id && <Button variant="ghost" size="icon" onClick={deletePlaylist}><Trash2 className="h-5 w-5 text-destructive" /></Button>}
       </header>
@@ -128,14 +211,104 @@ export default function PlaylistDetail() {
         </Button>
       )}
 
-      {collaborators.length > 0 && (
-        <div className="mb-4">
-          <p className="text-sm font-semibold mb-2 flex items-center gap-2"><Users className="h-4 w-4" />Collaborateurs</p>
-          <div className="flex gap-2 flex-wrap">
-            {collaborators.map((c: any) => (<span key={c.id} className="text-xs bg-secondary rounded-full px-2 py-1">{c.pseudo || 'Anonyme'}</span>))}
-          </div>
+      <div className="mb-4">
+        <div className="flex items-center justify-between mb-2">
+          <p className="text-sm font-semibold flex items-center gap-2"><Users className="h-4 w-4" />Collaborateurs {collaborators.length > 0 && `(${collaborators.length})`}</p>
+          {user?.id === playlist.owner_id && (
+            <Dialog open={collabOpen} onOpenChange={setCollabOpen}>
+              <DialogTrigger asChild>
+                <Button size="sm" variant="outline"><UserPlus className="h-3.5 w-3.5 mr-1" />Inviter</Button>
+              </DialogTrigger>
+              <DialogContent>
+                <DialogHeader><DialogTitle>Gérer les collaborateurs</DialogTitle></DialogHeader>
+                <div className="space-y-4">
+                  <div className="flex gap-2">
+                    <Input
+                      placeholder="Pseudo de l'utilisateur..."
+                      value={collabSearch}
+                      onChange={(e) => setCollabSearch(e.target.value)}
+                      onKeyDown={(e) => e.key === 'Enter' && searchCollab()}
+                    />
+                    <Button size="icon" onClick={searchCollab}><UserPlus className="h-4 w-4" /></Button>
+                  </div>
+                  <Select value={collabRole} onValueChange={setCollabRole}>
+                    <SelectTrigger><SelectValue placeholder="Rôle" /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="viewer">Lecteur</SelectItem>
+                      <SelectItem value="editor">Éditeur</SelectItem>
+                      <SelectItem value="admin">Admin</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  {collabResults.length > 0 && (
+                    <div className="space-y-1 max-h-40 overflow-y-auto">
+                      {collabResults.map((r: any) => (
+                        <div key={r.user_id} className="flex items-center gap-2 rounded-lg bg-card/50 px-3 py-2">
+                          <Avatar className="h-7 w-7"><AvatarFallback>{r.pseudo?.[0] || '?'}</AvatarFallback></Avatar>
+                          <span className="flex-1 text-sm">{r.pseudo}</span>
+                          <Button size="sm" onClick={() => addCollab(r.user_id)}>Ajouter</Button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  {collaborators.length > 0 && (
+                    <div className="space-y-1">
+                      <p className="text-xs text-muted-foreground font-medium">Collaborateurs actuels</p>
+                      {collaborators.map((c: any) => (
+                        <div key={c.id} className="flex items-center gap-2 rounded-lg bg-card/50 px-3 py-2">
+                          <Avatar className="h-7 w-7"><AvatarFallback>{c.pseudo?.[0] || '?'}</AvatarFallback></Avatar>
+                          <span className="flex-1 text-sm">{c.pseudo || 'Anonyme'}</span>
+                          <span className="text-xs text-muted-foreground capitalize">{c.role}</span>
+                          <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => removeCollab(c.collabId, c.id)}>
+                            <X className="h-3.5 w-3.5 text-destructive" />
+                          </Button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </DialogContent>
+            </Dialog>
+          )}
         </div>
-      )}
+        {collaborators.length > 0 && (
+          <div className="flex gap-2 flex-wrap">
+            {collaborators.map((c: any) => (
+              <span key={c.id} className="flex items-center gap-1 text-xs bg-secondary rounded-full px-2 py-1">
+                {c.pseudo || 'Anonyme'}
+                <span className="text-muted-foreground">· {c.role === 'editor' ? 'Éditeur' : c.role === 'admin' ? 'Admin' : 'Lecteur'}</span>
+              </span>
+            ))}
+          </div>
+        )}
+      </div>
+
+      <Dialog open={showSettings} onOpenChange={setShowSettings}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader><DialogTitle>Paramètres de la playlist</DialogTitle></DialogHeader>
+          <div className="space-y-4 pt-1">
+            <button
+              onClick={() => setSettingsPublic(!settingsPublic)}
+              className="flex w-full items-center justify-between rounded-xl border border-border bg-card/50 px-4 py-3 text-left transition-colors hover:bg-card"
+            >
+              <div className="flex items-center gap-3">
+                {settingsPublic
+                  ? <Globe className="h-4 w-4 text-primary flex-shrink-0" />
+                  : <Lock className="h-4 w-4 text-muted-foreground flex-shrink-0" />}
+                <div>
+                  <p className="text-sm font-medium">{settingsPublic ? 'Publique' : 'Privée'}</p>
+                  <p className="text-xs text-muted-foreground">
+                    {settingsPublic ? 'Visible par tout le monde' : 'Visible uniquement par les collaborateurs'}
+                  </p>
+                </div>
+              </div>
+              <div className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${settingsPublic ? 'bg-primary' : 'bg-secondary'}`}>
+                <span className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${settingsPublic ? 'translate-x-6' : 'translate-x-1'}`} />
+              </div>
+            </button>
+            <Button className="w-full" onClick={saveSettings}>Enregistrer</Button>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       <div className="space-y-2">
         {songs.map((s, i) => (

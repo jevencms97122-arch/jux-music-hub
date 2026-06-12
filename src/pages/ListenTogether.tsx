@@ -67,7 +67,7 @@ export default function ListenTogether() {
       await pb.collection('listen_sessions').update(s.id, {
         participants: [...participants, user.id],
       });
-      setActiveSession({ id: s.id, host_id: s.host_id, song_id: s.song_id, position: s.position ?? 0, is_playing: s.is_playing, participants: [...participants, user.id], is_active: true, code: s.code } as ListenSessionRow);
+      setActiveSession({ id: s.id, host_id: s.host_id, song_id: s.song_id, position: s.position ?? 0, tempo: s.tempo || 1, is_playing: s.is_playing, participants: [...participants, user.id], is_active: true, code: s.code } as ListenSessionRow);
       refreshSession();
       navigate('/listen-together');
     } catch { toast.error('Code invalide'); }
@@ -78,10 +78,10 @@ export default function ListenTogether() {
     try {
       const code = generateSessionCode();
       const newS = await pb.collection('listen_sessions').create({
-        host_id: user.id, code, is_active: true, is_playing: false, position: 0,
+        host_id: user.id, code, is_active: true, is_playing: false, position: 0, tempo: 1,
         participants: [user.id],
       });
-      setActiveSession({ id: newS.id, host_id: user.id, song_id: null, position: 0, is_playing: false, participants: [user.id], is_active: true, code } as ListenSessionRow);
+      setActiveSession({ id: newS.id, host_id: user.id, song_id: null, position: 0, tempo: 1, is_playing: false, participants: [user.id], is_active: true, code } as ListenSessionRow);
       refreshSession();
       toast.success('Session créée ! Code : ' + code);
     } catch (e: any) { toast.error(e.message); }

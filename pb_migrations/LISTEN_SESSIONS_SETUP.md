@@ -10,6 +10,7 @@ Collection **Base** nommée exactement `listen_sessions`.
 | `code` | Plain text | — |
 | `song_id` | Plain text | — |
 | `position` | Number | — (secondes dans le titre en cours) |
+| `tempo` | Number | — (vitesse de lecture, 1 = normal, 0.96 = 96 %) |
 | `is_playing` | Bool | — |
 | `is_active` | Bool | — |
 | `participants` | JSON | — (tableau d'IDs utilisateurs) |
@@ -42,3 +43,5 @@ Pour **Delete** (optionnel, seul l'hôte peut supprimer) :
 - Les invités suivent en temps réel (subscribe) : ils chargent `song_id`, se calent sur
   `position`, et obéissent à `is_playing`. Ils ignorent toute position qui ne correspond
   pas au titre qu'ils ont réellement chargé.
+- Le tempo de l'hôte est diffusé via `tempo` : quand l'hôte le change (ou lance un titre),
+  tous les invités l'appliquent automatiquement. Les invités ne peuvent pas le modifier.

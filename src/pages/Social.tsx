@@ -172,9 +172,9 @@ export default function Social() {
       const code = String(Math.floor(10000000 + Math.random() * 90000000));
       const newS = await pb.collection('listen_sessions').create({
         host_id: user.id, code, is_active: true, is_playing: false,
-        position: 0, participants: [user.id],
+        position: 0, tempo: 1, participants: [user.id],
       });
-      setActiveSession({ id: newS.id, host_id: user.id, song_id: null, position: 0, is_playing: false, participants: [user.id], is_active: true, code } as ListenSessionRow);
+      setActiveSession({ id: newS.id, host_id: user.id, song_id: null, position: 0, tempo: 1, is_playing: false, participants: [user.id], is_active: true, code } as ListenSessionRow);
       refreshSession();
       setInvitedIds(new Set());
       setShowSessionSheet(true);

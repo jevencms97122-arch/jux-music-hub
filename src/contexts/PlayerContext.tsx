@@ -23,6 +23,7 @@ export interface ListenSessionRow {
   song_id: string | null;
   is_playing: boolean;
   position: number;
+  tempo: number;
   participants: string[];
   is_active: boolean;
 }
@@ -543,7 +544,7 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
     const s = sessionRef.current;
     if (!s || !authUser || s.host_id !== authUser.id) return;
     // Host joue immédiatement et signale is_playing: true — les guests suivent en temps réel
-    queueSessionWrite({ song_id: song.id, position: 0, is_playing: true });
+    queueSessionWrite({ song_id: song.id, position: 0, is_playing: true, tempo: playbackRateRef.current });
   }, [authUser, queueSessionWrite]);
   useEffect(() => { broadcastSongRef.current = broadcastSong; }, [broadcastSong]);
 
@@ -728,7 +729,13 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
   const cycleRepeat = useCallback(() => setRepeatMode((m) => m === 'off' ? 'all' : m === 'all' ? 'one' : 'off'), []);
   const openPlayer = useCallback(() => setIsPlayerOpen(true), []);
   const closePlayer = useCallback(() => setIsPlayerOpen(false), []);
-  const setPlaybackRate = useCallback((r: number) => setPlaybackRateState(Math.max(0.5, Math.min(2, r))), []);
+  const setPlaybackRate = useCallback((r: number) => {
+    if (isSessionGuestRef.current) { toast.info("Seul l'hôte peut changer le tempo de la session"); return; }
+    const v = Math.max(0.5, Math.min(2, r));
+    setPlaybackRateState(v);
+    const s = sessionRef.current;
+    if (s && userRef.current && s.host_id === userRef.current.id) queueSessionWrite({ tempo: v });
+  }, [queueSessionWrite]);
   const addToQueue = useCallback((song: Song) => {
     setQueue((q) => [...q, song]);
     if (originalQueueRef.current.length > 0) originalQueueRef.current = [...originalQueueRef.current, song];
@@ -793,6 +800,7 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
             song_id: r.song_id ?? null,
             is_playing: r.is_playing,
             position: r.position ?? 0,
+            tempo: r.tempo || 1,
             participants: r.participants ?? [],
             is_active: r.is_active,
           });
@@ -905,6 +913,14 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
       if (drift > 8) a.currentTime = cur.position;
     }
   }, [isSessionGuest, activeSession?.position]);
+
+  // Guest: suivre le tempo défini par l'hôte (l'effet existant sur playbackRate
+  // l'applique ensuite aux deux éléments audio)
+  useEffect(() => {
+    if (!isSessionGuest || !activeSession) return;
+    const t = activeSession.tempo || 1;
+    setPlaybackRateState((prev) => (Math.abs(prev - t) > 0.001 ? Math.max(0.5, Math.min(2, t)) : prev));
+  }, [isSessionGuest, activeSession?.tempo]);
 
   // Host sync time — toutes les 3s, sert uniquement à la correction de drift guest (seuil 8s)
   // Le play/pause se propage via subscribe temps-réel immédiatement

@@ -7,12 +7,13 @@ import { useReactiveBg } from '@/hooks/useReactiveBg';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import {
   Play, Pause, SkipBack, SkipForward, Shuffle, Repeat,
-  Volume2, ChevronDown, Music2, Wifi, WifiOff, AlertCircle, ListPlus, Gauge, Heart, MoreHorizontal, MessageSquare
+  Volume2, ChevronDown, Music2, Wifi, WifiOff, AlertCircle, ListPlus, Gauge, Heart, MoreHorizontal, MessageSquare, ListMusic, Disc3, Repeat2
 } from 'lucide-react';
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import CommentsModal from '@/components/CommentsModal';
 import { useNavigate } from 'react-router-dom';
 import type { Song } from '@/types/music';
+import { recordToSong } from '@/lib/pbUtils';
 import { toast } from 'sonner';
 import VolumeControl from './VolumeControl';
 import PlaybackRateControl from './PlaybackRateControl';
@@ -26,7 +27,7 @@ export default function PlayerPage() {
   const { user } = useAuth();
   const navigate = useNavigate();
   const {
-    currentSong, isPlaying, currentTime, duration, queue, queueIndex,
+    currentSong, isPlaying, isBuffering, currentTime, duration, queue, queueIndex,
     playSong, togglePlay, next, previous, seek, setVolume, volume,
     closePlayer, isShuffled, toggleShuffle, repeatMode, cycleRepeat,
     playbackRate, isPlayerOpen, connectionStatus, getAnalyserNode,
@@ -43,16 +44,56 @@ export default function PlayerPage() {
   const [showAddToPlaylist, setShowAddToPlaylist] = useState(false);
   const [showMenu, setShowMenu] = useState(false);
   const [showComments, setShowComments] = useState(false);
+  const [showQueue, setShowQueue] = useState(false);
+  const [showSimilar, setShowSimilar] = useState(false);
+  const [similarByGenre, setSimilarByGenre] = useState<Song[]>([]);
+  const [similarByAuthor, setSimilarByAuthor] = useState<Song[]>([]);
+  const [similarLoading, setSimilarLoading] = useState(false);
+  const [similarTab, setSimilarTab] = useState<'genre' | 'author'>('genre');
   const [closing, setClosing] = useState(false);
   const [opening, setOpening] = useState(false);
   const [songChangeAnim, setSongChangeAnim] = useState(false);
   const [isLiked, setIsLiked] = useState(false);
   const [likeId, setLikeId] = useState<string | null>(null);
+  const [isReposted, setIsReposted] = useState(false);
+  const [repostId, setRepostId] = useState<string | null>(null);
+  const [reposters, setReposters] = useState<{ id: string; pseudo: string; avatar_url: string | null; user_id: string }[]>([]);
+  const [showReposters, setShowReposters] = useState(false);
   const prevSongIdRef = useRef<string | null>(null);
   const progressRef = useRef<HTMLDivElement>(null);
   const bgRef = useRef<HTMLDivElement>(null);
   const rafRef = useRef<number>(0);
   const { enabled: reactiveBg } = useReactiveBg();
+
+  const toSong = recordToSong;
+
+  const openSimilar = useCallback(async () => {
+    if (!currentSong) return;
+    setShowSimilar(true);
+    setSimilarLoading(true);
+    setSimilarTab('genre');
+    setSimilarByGenre([]);
+    setSimilarByAuthor([]);
+    try {
+      const [genreRes, authorRes] = await Promise.all([
+        currentSong.genre
+          ? pb.collection('songs').getList(1, 20, {
+              filter: `genre = "${currentSong.genre}" && id != "${currentSong.id}"`,
+              sort: '-play_count', requestKey: null,
+            })
+          : Promise.resolve({ items: [] }),
+        currentSong.author
+          ? pb.collection('songs').getList(1, 20, {
+              filter: `author = "${currentSong.author}" && id != "${currentSong.id}"`,
+              sort: '-play_count', requestKey: null,
+            })
+          : Promise.resolve({ items: [] }),
+      ]);
+      setSimilarByGenre((genreRes as any).items.map(toSong));
+      setSimilarByAuthor((authorRes as any).items.map(toSong));
+    } catch {}
+    setSimilarLoading(false);
+  }, [currentSong]);
 
   // Opening animation fires ONLY when the player transitions from closed → open
   useEffect(() => {
@@ -73,6 +114,65 @@ export default function PlayerPage() {
       else { setIsLiked(false); setLikeId(null); }
     }).catch(() => { setIsLiked(false); setLikeId(null); });
   }, [currentSong?.id, user]);
+
+  // Load repost status + reposters (only followed users) when song changes
+  useEffect(() => {
+    if (!currentSong?.id) { setIsReposted(false); setRepostId(null); setReposters([]); return; }
+    (async () => {
+      try {
+        // Fetch my repost status + all reposters + my following list in parallel
+        const [myRepost, allReposts, followingRes] = await Promise.all([
+          user
+            ? pb.collection('repost').getList(1, 1, { filter: `user_id = "${user.id}" && song_id = "${currentSong.id}"`, requestKey: null })
+            : Promise.resolve({ items: [] }),
+          pb.collection('repost').getList(1, 50, { filter: `song_id = "${currentSong.id}"`, requestKey: null }),
+          user
+            ? pb.collection('follows').getList(1, 200, { filter: `follower_id = "${user.id}" && status = "accepted"`, requestKey: null })
+            : Promise.resolve({ items: [] }),
+        ]);
+
+        const myR = (myRepost as any).items;
+        setIsReposted(myR.length > 0);
+        setRepostId(myR.length > 0 ? myR[0].id : null);
+
+        const allR = (allReposts as any).items as any[];
+        if (allR.length === 0) { setReposters([]); return; }
+
+        // Keep only reposters that the current user follows
+        const followedIds = new Set((followingRes as any).items.map((f: any) => f.following_id) as string[]);
+        const filteredR = allR.filter((r: any) => followedIds.has(r.user_id));
+        if (filteredR.length === 0) { setReposters([]); return; }
+
+        const userIds = [...new Set(filteredR.map((r: any) => r.user_id))] as string[];
+        const filter = userIds.map((id) => `user_id = "${id}"`).join(' || ');
+        const profiles = await pb.collection('profiles').getList(1, 50, { filter, requestKey: null });
+        setReposters(profiles.items.map((p: any) => ({
+          id: p.id, pseudo: p.pseudo || '?', user_id: p.user_id,
+          avatar_url: p.avatar ? `${pb.baseUrl}/api/files/${p.collectionId}/${p.id}/${p.avatar}` : null,
+        })));
+      } catch { setIsReposted(false); setRepostId(null); setReposters([]); }
+    })();
+  }, [currentSong?.id, user]);
+
+  const toggleRepost = async () => {
+    if (!currentSong || !user) return;
+    if (isReposted && repostId) {
+      setIsReposted(false); setRepostId(null);
+      setReposters((prev) => prev.filter((r) => r.user_id !== user.id));
+      await pb.collection('repost').delete(repostId).catch(() => { setIsReposted(true); setRepostId(repostId); });
+    } else {
+      setIsReposted(true);
+      const rec = await pb.collection('repost').create({ song_id: currentSong.id, user_id: user.id }).catch(() => { setIsReposted(false); return null; });
+      if (rec) {
+        setRepostId(rec.id);
+        if (user) {
+          const myProfile = await pb.collection('profiles').getList(1, 1, { filter: `user_id = "${user.id}"`, requestKey: null }).catch(() => ({ items: [] }));
+          const p = (myProfile as any).items[0];
+          if (p) setReposters((prev) => [...prev, { id: p.id, pseudo: p.pseudo || '?', user_id: p.user_id, avatar_url: p.avatar ? `${pb.baseUrl}/api/files/${p.collectionId}/${p.id}/${p.avatar}` : null }]);
+        }
+      }
+    }
+  };
 
   const toggleLike = async () => {
     if (!currentSong || !user) return;
@@ -314,10 +414,13 @@ export default function PlayerPage() {
           <button
             onClick={togglePlay}
             className="flex h-16 w-16 items-center justify-center rounded-2xl bg-gradient-primary text-primary-foreground shadow-elegant hover:shadow-glow active:scale-95 transition-all duration-150"
+            aria-label={isBuffering ? 'Chargement' : isPlaying ? 'Pause' : 'Play'}
           >
-            {isPlaying
-              ? <Pause className="h-7 w-7 fill-current" />
-              : <Play className="h-7 w-7 fill-current ml-0.5" />}
+            {isBuffering
+              ? <div className="h-7 w-7 rounded-full border-[3px] border-primary-foreground/30 border-t-primary-foreground animate-spin" />
+              : isPlaying
+                ? <Pause className="h-7 w-7 fill-current" />
+                : <Play className="h-7 w-7 fill-current ml-0.5" />}
           </button>
 
           <button
@@ -343,13 +446,196 @@ export default function PlayerPage() {
           </button>
         </div>
 
-        <div className="pb-2" />
+        {/* Reposters — compact pill */}
+        {reposters.length > 0 && (
+          <div className="px-6 pb-3">
+            <button
+              onClick={() => setShowReposters(true)}
+              className="flex items-center gap-2 rounded-xl bg-white/[0.06] hover:bg-white/[0.10] transition-colors px-3 py-2 w-full"
+            >
+              <Repeat2 className="h-3.5 w-3.5 text-primary shrink-0" />
+              {/* Stacked avatars (max 3) */}
+              <div className="flex items-center shrink-0">
+                {reposters.slice(0, 3).map((r, i) => (
+                  <div
+                    key={r.id}
+                    className="h-5 w-5 rounded-full border border-background overflow-hidden bg-muted flex items-center justify-center text-[8px] font-bold"
+                    style={{ marginLeft: i > 0 ? '-6px' : '0' }}
+                  >
+                    {r.avatar_url
+                      ? <img src={r.avatar_url} alt="" className="h-full w-full object-cover" />
+                      : r.pseudo[0].toUpperCase()
+                    }
+                  </div>
+                ))}
+              </div>
+              <span className="text-[11px] text-muted-foreground flex-1 text-left">
+                {reposters.length === 1
+                  ? <><span className="text-foreground font-medium">{reposters[0].pseudo}</span> a republié</>
+                  : <><span className="text-foreground font-medium">{reposters.length} personnes</span> ont republié</>
+                }
+              </span>
+              <ChevronDown className="h-3.5 w-3.5 text-muted-foreground -rotate-90 shrink-0" />
+            </button>
+          </div>
+        )}
+        {reposters.length === 0 && <div className="pb-2" />}
       </div>
 
       <VolumeControl open={showVolume} onClose={() => setShowVolume(false)} />
       <PlaybackRateControl open={showPlaybackRate} onClose={() => setShowPlaybackRate(false)} />
       <AddToPlaylistModal open={showAddToPlaylist} onOpenChange={setShowAddToPlaylist} songId={currentSong.id} />
       <CommentsModal open={showComments} onOpenChange={setShowComments} songId={currentSong.id} />
+
+      {/* File d'attente */}
+      <Sheet open={showQueue} onOpenChange={setShowQueue}>
+        <SheetContent side="bottom" className="rounded-t-3xl pb-safe max-h-[70vh] overflow-y-auto">
+          <SheetHeader className="mb-4">
+            <SheetTitle>File d'attente</SheetTitle>
+          </SheetHeader>
+          {queue.length === 0 ? (
+            <p className="text-center text-sm text-muted-foreground py-8">La file d'attente est vide.</p>
+          ) : (
+            <div className="space-y-1">
+              {queue.map((song, idx) => (
+                <button
+                  key={`${song.id}-${idx}`}
+                  onClick={() => { playSong(song); setShowQueue(false); }}
+                  className={cn(
+                    'flex w-full items-center gap-3 rounded-2xl px-3 py-2.5 transition-colors text-left',
+                    idx === queueIndex
+                      ? 'bg-primary/10 text-primary'
+                      : 'hover:bg-white/[0.06]'
+                  )}
+                >
+                  <div className="flex items-center justify-center w-6 shrink-0">
+                    {idx === queueIndex ? (
+                      <Music2 className="h-4 w-4 text-primary" />
+                    ) : (
+                      <span className="text-xs text-muted-foreground">{idx + 1}</span>
+                    )}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className={cn('text-sm font-medium truncate', idx === queueIndex && 'text-primary')}>{song.title}</p>
+                    <p className="text-xs text-muted-foreground truncate">{song.author}</p>
+                  </div>
+                </button>
+              ))}
+            </div>
+          )}
+        </SheetContent>
+      </Sheet>
+
+      {/* Chansons similaires */}
+      <Sheet open={showSimilar} onOpenChange={setShowSimilar}>
+        <SheetContent side="bottom" className="rounded-t-3xl pb-safe max-h-[75vh] overflow-y-auto">
+          <SheetHeader className="mb-4">
+            <SheetTitle>Chansons similaires</SheetTitle>
+          </SheetHeader>
+          {/* Onglets */}
+          <div className="flex gap-2 mb-4">
+            <button
+              onClick={() => setSimilarTab('genre')}
+              className={cn('flex-1 rounded-xl py-2 text-sm font-medium transition-colors', similarTab === 'genre' ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground hover:text-foreground')}
+            >
+              <span className="flex items-center justify-center gap-1.5"><Disc3 className="h-4 w-4" />Même genre</span>
+            </button>
+            <button
+              onClick={() => setSimilarTab('author')}
+              className={cn('flex-1 rounded-xl py-2 text-sm font-medium transition-colors', similarTab === 'author' ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground hover:text-foreground')}
+            >
+              <span className="flex items-center justify-center gap-1.5"><Music2 className="h-4 w-4" />Même artiste</span>
+            </button>
+          </div>
+
+          {similarLoading && (
+            <p className="text-center text-sm text-muted-foreground py-8">Chargement...</p>
+          )}
+          {!similarLoading && similarTab === 'genre' && (
+            <>
+              {!currentSong?.genre ? (
+                <div className="flex flex-col items-center py-8 gap-2 text-muted-foreground">
+                  <Disc3 className="h-10 w-10 opacity-25" />
+                  <p className="text-sm">Indisponible — aucun genre associé à ce titre.</p>
+                </div>
+              ) : similarByGenre.length === 0 ? (
+                <p className="text-center text-xs text-muted-foreground py-8">Aucun autre titre pour le genre "{currentSong.genre}".</p>
+              ) : (
+                <div className="grid grid-cols-2 gap-3 pb-2">
+                  {similarByGenre.map((s) => (
+                    <div key={s.id} className="flex flex-col gap-1 rounded-2xl bg-card p-2 cursor-pointer active:scale-95 transition-transform"
+                      onClick={() => { playSong(s); setShowSimilar(false); }}>
+                      {songCoverUrl(s) ? (
+                        <img src={songCoverUrl(s)} alt={s.title} className="w-full aspect-square rounded-xl object-cover" />
+                      ) : (
+                        <div className="w-full aspect-square rounded-xl bg-muted flex items-center justify-center">
+                          <Music2 className="h-8 w-8 text-muted-foreground/40" />
+                        </div>
+                      )}
+                      <p className="text-xs font-semibold truncate mt-1 px-1">{s.title}</p>
+                      <p className="text-xs text-muted-foreground truncate px-1">{s.author}</p>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </>
+          )}
+          {!similarLoading && similarTab === 'author' && (
+            <>
+              {similarByAuthor.length === 0 ? (
+                <p className="text-center text-xs text-muted-foreground py-8">Aucun autre titre de "{currentSong?.author}".</p>
+              ) : (
+                <div className="grid grid-cols-2 gap-3 pb-2">
+                  {similarByAuthor.map((s) => (
+                    <div key={s.id} className="flex flex-col gap-1 rounded-2xl bg-card p-2 cursor-pointer active:scale-95 transition-transform"
+                      onClick={() => { playSong(s); setShowSimilar(false); }}>
+                      {songCoverUrl(s) ? (
+                        <img src={songCoverUrl(s)} alt={s.title} className="w-full aspect-square rounded-xl object-cover" />
+                      ) : (
+                        <div className="w-full aspect-square rounded-xl bg-muted flex items-center justify-center">
+                          <Music2 className="h-8 w-8 text-muted-foreground/40" />
+                        </div>
+                      )}
+                      <p className="text-xs font-semibold truncate mt-1 px-1">{s.title}</p>
+                      <p className="text-xs text-muted-foreground truncate px-1">{s.author}</p>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </>
+          )}
+        </SheetContent>
+      </Sheet>
+
+      {/* Qui a republié */}
+      <Sheet open={showReposters} onOpenChange={setShowReposters}>
+        <SheetContent side="bottom" className="rounded-t-3xl pb-safe max-h-[60vh] overflow-y-auto">
+          <SheetHeader className="mb-4">
+            <SheetTitle className="flex items-center gap-2">
+              <Repeat2 className="h-4 w-4 text-primary" />
+              Republications
+              <span className="ml-auto text-sm font-normal text-muted-foreground">{reposters.length}</span>
+            </SheetTitle>
+          </SheetHeader>
+          <div className="space-y-1">
+            {reposters.map((r) => (
+              <button
+                key={r.id}
+                onClick={() => { setShowReposters(false); navigate(`/u/${r.user_id}`); }}
+                className="flex w-full items-center gap-3 rounded-2xl px-3 py-2.5 hover:bg-white/[0.06] transition-colors"
+              >
+                <div className="h-10 w-10 rounded-full overflow-hidden bg-muted flex items-center justify-center text-sm font-bold shrink-0">
+                  {r.avatar_url
+                    ? <img src={r.avatar_url} alt="" className="h-full w-full object-cover" />
+                    : r.pseudo[0].toUpperCase()
+                  }
+                </div>
+                <span className="text-sm font-medium">{r.pseudo}</span>
+              </button>
+            ))}
+          </div>
+        </SheetContent>
+      </Sheet>
 
       {/* Menu 3 points */}
       <Sheet open={showMenu} onOpenChange={setShowMenu}>
@@ -358,6 +644,31 @@ export default function PlayerPage() {
             <SheetTitle className="truncate">{currentSong.title}</SheetTitle>
           </SheetHeader>
           <div className="space-y-1">
+            <button
+              onClick={() => { setShowMenu(false); setShowQueue(true); }}
+              className="flex w-full items-center gap-4 rounded-2xl px-4 py-3.5 hover:bg-white/[0.06] transition-colors"
+            >
+              <ListMusic className="h-5 w-5 text-muted-foreground" />
+              <span className="text-sm font-medium">File d'attente</span>
+              {queue.length > 0 && (
+                <span className="ml-auto text-xs text-muted-foreground">{queue.length} titre{queue.length > 1 ? 's' : ''}</span>
+              )}
+            </button>
+            <button
+              onClick={() => { setShowMenu(false); openSimilar(); }}
+              className="flex w-full items-center gap-4 rounded-2xl px-4 py-3.5 hover:bg-white/[0.06] transition-colors"
+            >
+              <Disc3 className="h-5 w-5 text-muted-foreground" />
+              <span className="text-sm font-medium">Chansons similaires</span>
+            </button>
+            <button
+              onClick={() => { setShowMenu(false); toggleRepost(); }}
+              className={cn('flex w-full items-center gap-4 rounded-2xl px-4 py-3.5 transition-colors', isReposted ? 'text-green-400' : 'hover:bg-white/[0.06]')}
+            >
+              <Repeat2 className="h-5 w-5" />
+              <span className="text-sm font-medium">{isReposted ? 'Republié ✓' : 'Republier'}</span>
+              {reposters.length > 0 && <span className="ml-auto text-xs text-muted-foreground">{reposters.length}</span>}
+            </button>
             <button
               onClick={() => { setShowMenu(false); setShowComments(true); }}
               className="flex w-full items-center gap-4 rounded-2xl px-4 py-3.5 hover:bg-white/[0.06] transition-colors"

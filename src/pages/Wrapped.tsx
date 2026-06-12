@@ -1,12 +1,13 @@
-﻿import { useEffect, useState } from 'react';
+﻿import { useEffect, useState, useRef, useCallback } from 'react';
 import { pb } from '@/lib/pocketbase';
 import { useAuth } from '@/contexts/AuthContext';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
-import { ArrowLeft, Share2, Sparkles, Music, Headphones, Heart, Trophy } from 'lucide-react';
+import { ArrowLeft, Share2, Sparkles, Music, Headphones, Heart, Trophy, Download } from 'lucide-react';
 import { songCoverUrl } from '@/lib/storage';
 import { toast } from 'sonner';
 import type { Song } from '@/types/music';
+import { recordToSong } from '@/lib/pbUtils';
 
 interface WrappedData {
   totalListens: number;
@@ -16,25 +17,155 @@ interface WrappedData {
   topArtist: string | null;
 }
 
-function recordToSong(r: any): Song {
-  return {
-    id: r.id, title: r.title || '', author: r.author || '', audio: r.audio || '',
-    cover: r.cover || null, audio_url: r.audio_url || '',
-    cover_url: r.cover_url || null, video_url: r.video_url || null, genre: r.genre || null,
-    uploaded_by: r.uploaded_by || '', duration: r.duration || 0, play_count: r.play_count ?? 0,
-    weekly_play_count: r.weekly_play_count ?? 0, likes_count: r.likes_count ?? 0,
-    created_at: r.created, updated_at: r.updated,
-    collectionId: r.collectionId, collectionName: r.collectionName,
-  };
-}
-
 export default function Wrapped() {
   const navigate = useNavigate();
   const { user, profile } = useAuth();
   const [data, setData] = useState<WrappedData | null>(null);
   const [loading, setLoading] = useState(true);
+  const [generating, setGenerating] = useState(false);
 
   const monthLabel = new Date().toLocaleDateString('fr-FR', { month: 'long', year: 'numeric' });
+
+  const generateCard = useCallback(async () => {
+    if (!data || !profile) return;
+    setGenerating(true);
+    try {
+      const SIZE = 1080;
+      const canvas = document.createElement('canvas');
+      canvas.width = SIZE;
+      canvas.height = SIZE;
+      const ctx = canvas.getContext('2d')!;
+
+      // Fond dégradé violet/noir
+      const grad = ctx.createLinearGradient(0, 0, SIZE, SIZE);
+      grad.addColorStop(0, '#1a0533');
+      grad.addColorStop(0.5, '#2d0f5e');
+      grad.addColorStop(1, '#0a0a1a');
+      ctx.fillStyle = grad;
+      ctx.fillRect(0, 0, SIZE, SIZE);
+
+      // Halo décoratif
+      const halo = ctx.createRadialGradient(SIZE * 0.7, SIZE * 0.2, 0, SIZE * 0.7, SIZE * 0.2, SIZE * 0.5);
+      halo.addColorStop(0, 'rgba(139,92,246,0.35)');
+      halo.addColorStop(1, 'rgba(139,92,246,0)');
+      ctx.fillStyle = halo;
+      ctx.fillRect(0, 0, SIZE, SIZE);
+
+      // Cover de la top song (si dispo)
+      if (data.topSongs[0]) {
+        try {
+          const img = await new Promise<HTMLImageElement>((res, rej) => {
+            const i = new Image();
+            i.crossOrigin = 'anonymous';
+            i.onload = () => res(i);
+            i.onerror = rej;
+            i.src = songCoverUrl(data.topSongs[0].song);
+          });
+          // Cover floutée en arrière-plan (50% opacité)
+          ctx.globalAlpha = 0.12;
+          ctx.drawImage(img, SIZE * 0.5, SIZE * 0.35, SIZE * 0.55, SIZE * 0.55);
+          ctx.globalAlpha = 1;
+
+          // Cover nette en bas à droite
+          const coverSize = 200;
+          const rx = SIZE - coverSize - 60;
+          const ry = SIZE - coverSize - 130;
+          ctx.save();
+          ctx.beginPath();
+          ctx.roundRect(rx, ry, coverSize, coverSize, 20);
+          ctx.clip();
+          ctx.drawImage(img, rx, ry, coverSize, coverSize);
+          ctx.restore();
+        } catch {}
+      }
+
+      // ── Textes ──
+      ctx.textBaseline = 'top';
+
+      // "JUX" logo
+      ctx.font = 'bold 90px system-ui, sans-serif';
+      ctx.fillStyle = '#ffffff';
+      ctx.globalAlpha = 0.95;
+      ctx.fillText('JUX', 60, 60);
+      ctx.globalAlpha = 1;
+
+      // Mois
+      ctx.font = '32px system-ui, sans-serif';
+      ctx.fillStyle = 'rgba(255,255,255,0.6)';
+      ctx.fillText(monthLabel.charAt(0).toUpperCase() + monthLabel.slice(1), 60, 170);
+
+      // Pseudo
+      ctx.font = 'bold 56px system-ui, sans-serif';
+      ctx.fillStyle = '#ffffff';
+      const pseudo = profile.pseudo || 'Musicien';
+      ctx.fillText(pseudo.length > 18 ? pseudo.slice(0, 18) + '…' : pseudo, 60, 230);
+
+      // Séparateur
+      ctx.strokeStyle = 'rgba(139,92,246,0.6)';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(60, 320);
+      ctx.lineTo(460, 320);
+      ctx.stroke();
+
+      // Stats
+      ctx.font = 'bold 100px system-ui, sans-serif';
+      ctx.fillStyle = '#a78bfa';
+      ctx.fillText(String(data.totalListens), 60, 360);
+
+      ctx.font = '34px system-ui, sans-serif';
+      ctx.fillStyle = 'rgba(255,255,255,0.7)';
+      ctx.fillText('écoutes ce mois', 60, 485);
+
+      // Top artist
+      if (data.topArtist) {
+        ctx.font = 'bold 28px system-ui, sans-serif';
+        ctx.fillStyle = 'rgba(255,255,255,0.5)';
+        ctx.fillText('ARTISTE PRÉFÉRÉ', 60, 580);
+        ctx.font = 'bold 44px system-ui, sans-serif';
+        ctx.fillStyle = '#ffffff';
+        const a = data.topArtist.length > 22 ? data.topArtist.slice(0, 22) + '…' : data.topArtist;
+        ctx.fillText(a, 60, 620);
+      }
+
+      // Top genre
+      if (data.topGenre) {
+        ctx.font = 'bold 28px system-ui, sans-serif';
+        ctx.fillStyle = 'rgba(255,255,255,0.5)';
+        ctx.fillText('GENRE FAVORI', 60, 720);
+        ctx.font = 'bold 44px system-ui, sans-serif';
+        ctx.fillStyle = '#a78bfa';
+        ctx.fillText(data.topGenre, 60, 760);
+      }
+
+      // Top song label
+      if (data.topSongs[0]) {
+        ctx.font = 'bold 26px system-ui, sans-serif';
+        ctx.fillStyle = 'rgba(255,255,255,0.45)';
+        ctx.fillText('TOP TITRE', 60, 860);
+        ctx.font = 'bold 38px system-ui, sans-serif';
+        ctx.fillStyle = '#ffffff';
+        const t = data.topSongs[0].song.title;
+        ctx.fillText(t.length > 26 ? t.slice(0, 26) + '…' : t, 60, 898);
+      }
+
+      // Branding bas
+      ctx.font = '24px system-ui, sans-serif';
+      ctx.fillStyle = 'rgba(255,255,255,0.3)';
+      ctx.fillText('Jux-Music disponible sur Jux-Store', 60, SIZE - 72);
+      ctx.fillText('juxstore.lovable.app', 60, SIZE - 36);
+
+      // Téléchargement
+      const link = document.createElement('a');
+      link.download = `jux-wrapped-${new Date().getFullYear()}.png`;
+      link.href = canvas.toDataURL('image/png');
+      link.click();
+      toast.success('Carte téléchargée !');
+    } catch {
+      toast.error('Erreur lors de la génération');
+    }
+    setGenerating(false);
+  }, [data, profile, monthLabel]);
 
   useEffect(() => {
     if (!user) return;
@@ -162,9 +293,15 @@ export default function Wrapped() {
             </div>
           )}
 
-          <Button variant="outline" className="w-full" onClick={() => { navigator.clipboard.writeText(window.location.href); toast.success('Lien copié ! Partagé ton Wrapped avec tes amis'); }}>
-            <Share2 className="h-4 w-4 mr-2" /> Partager mon Wrapped
-          </Button>
+          <div className="flex gap-2">
+            <Button variant="outline" className="flex-1" onClick={() => { navigator.clipboard.writeText(window.location.href); toast.success('Lien copié !'); }}>
+              <Share2 className="h-4 w-4 mr-2" /> Partager
+            </Button>
+            <Button className="flex-1 bg-gradient-primary" onClick={generateCard} disabled={generating}>
+              <Download className="h-4 w-4 mr-2" />
+              {generating ? 'Génération…' : 'Télécharger la carte'}
+            </Button>
+          </div>
         </div>
       )}
     </div>

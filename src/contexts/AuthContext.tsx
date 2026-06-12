@@ -26,6 +26,8 @@ function recordToProfile(r: any): Profile {
     last_name: r.last_name || null,
     avatar_url: r.avatar ? pb.files.getUrl(r, r.avatar) : null,
     bio: r.bio || null,
+    badge: r.badge || null,
+    ban_status: r.ban_status ?? false,
     profile_completed: r.profile_completed ?? false,
     created_at: r.created,
     updated_at: r.updated,

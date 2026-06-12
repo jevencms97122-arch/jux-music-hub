@@ -22,9 +22,8 @@ export interface ListenSessionRow {
   host_id: string;
   song_id: string | null;
   is_playing: boolean;
-  current_time_seconds: number;
+  position: number;
   participants: string[];
-  ready_participants: string[];
   is_active: boolean;
 }
 
@@ -45,8 +44,8 @@ interface PlayerContextType {
   activeSession: ListenSessionRow | null;
   isSessionHost: boolean;
   isSessionGuest: boolean;
-  allParticipantsReady: boolean;
   connectionStatus: ConnectionStatus;
+  isBuffering: boolean;
   refreshSession: () => Promise<void>;
   setActiveSession: (s: ListenSessionRow | null) => void;
   stopAudio: () => void;
@@ -152,6 +151,7 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
     return (mode && TRANSITION_MODES.some(m => m.value === mode)) ? mode : 'linear';
   });
   const [connectionStatus, setConnectionStatus] = useState<ConnectionStatus>('stable');
+  const [isBuffering, setIsBuffering] = useState(false);
 
   const videoReadyRef = useRef(false);
   const signalVideoReady = useCallback(() => { videoReadyRef.current = true; }, []);
@@ -162,8 +162,21 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => { sessionRef.current = activeSession; }, [activeSession]);
   const isSessionHost = !!(activeSession && authUser && activeSession.host_id === authUser.id);
   const isSessionGuest = !!(activeSession && authUser && activeSession.host_id !== authUser.id);
-  const allParticipantsReady = !!activeSession && activeSession.participants.every((p) => activeSession.ready_participants?.includes(p));
   const setActiveSession = useCallback((s: ListenSessionRow | null) => setActiveSessionState(s), []);
+
+  // Toutes les écritures session de l'hôte passent par cette file pour garantir l'ordre d'arrivée
+  // au serveur. Sans ça, le tick de sync (position de l'ANCIENNE musique, ~fin) pouvait arriver
+  // APRÈS le broadcast du nouveau titre → la base disait "nouveau titre à 175s" → les invités
+  // se téléportaient à la quasi-fin puis la musique se terminait → "pause toute seule".
+  const sessionWriteChainRef = useRef<Promise<any>>(Promise.resolve());
+  const queueSessionWrite = useCallback((updates: Record<string, any>) => {
+    const s = sessionRef.current;
+    if (!s) return;
+    const id = s.id;
+    sessionWriteChainRef.current = sessionWriteChainRef.current
+      .then(() => pb.collection('listen_sessions').update(id, updates))
+      .catch(() => {});
+  }, []);
 
   const getActive = () => (activeRef.current === 'A' ? audioARef.current! : audioBRef.current!);
   const getInactive = () => (activeRef.current === 'A' ? audioBRef.current! : audioARef.current!);
@@ -195,7 +208,8 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
   const isShuffledRef = useRef(isShuffled);
   const volumeRef = useRef(volume);
   const playbackRateRef = useRef(playbackRate);
-  const pendingSessionAutoplayRef = useRef(false);
+  const originalQueueRef = useRef<Song[]>([]);
+  // pendingSessionAutoplayRef removed — host plays immediately, no ready-gating
   const sessionGuestRecordedRef = useRef<string | null>(null);
   useEffect(() => { crossfadeSecondsRef.current = crossfadeSeconds; }, [crossfadeSeconds]);
   useEffect(() => { transitionModeRef.current = transitionMode; }, [transitionMode]);
@@ -222,7 +236,6 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
     if (q.length === 0) return;
     let nextIdx: number;
     if (repeatModeRef.current === 'one') return;
-    else if (isShuffledRef.current) nextIdx = Math.floor(Math.random() * q.length);
     else nextIdx = idx + 1;
     if (nextIdx >= q.length) { if (repeatModeRef.current === 'all') nextIdx = 0; else return; }
     const nextSong = q[nextIdx];
@@ -273,12 +286,14 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
           setPlayedSongIds(prev => new Set([...prev, nextSong.id]));
           setIsPlaying(true);
           recordPlayRef.current(nextSong);
-          if (sessionRef.current && authUser && sessionRef.current.host_id === authUser.id) broadcastSongRef.current(nextSong);
+          if (sessionRef.current && authUser && sessionRef.current.host_id === authUser.id) {
+            broadcastSongRef.current(nextSong);
+          }
           crossfadingRef.current = false;
         }
       }, 50) as unknown as number;
     };
-    const onReady = () => { inactive.removeEventListener('canplay', onReady); inactive.play().then(startFade).catch((e) => { console.error('Crossfade play failed', e); crossfadingRef.current = false; }); };
+    const onReady = () => { inactive.removeEventListener('canplay', onReady); inactive.playbackRate = playbackRateRef.current; inactive.play().then(() => { inactive.playbackRate = playbackRateRef.current; startFade(); }).catch((e) => { console.error('Crossfade play failed', e); crossfadingRef.current = false; }); };
     inactive.addEventListener('canplay', onReady);
     inactive.load();
   });
@@ -315,6 +330,8 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
     };
     const onDur = (e: Event) => { if (e.target === getActive()) setDuration(getActive().duration || 0); };
     const onEnd = (e: Event) => { if (e.target !== getActive()) return; if (crossfadingRef.current) return; if (isSessionGuestRef.current) return; nextRef.current(); };
+    const onWaiting = (e: Event) => { if (e.target === getActive()) setIsBuffering(true); };
+    const onPlaying = (e: Event) => { if (e.target === getActive()) setIsBuffering(false); };
     const onPlay = (e: Event) => {
       if (e.target !== getActive()) return;
       setIsPlaying(true);
@@ -322,12 +339,12 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
       const cs = currentSongRef.current;
       if (au && cs) updatePresence({ userId: au.id, isListening: true, songId: cs.id, songTitle: cs.title, songAuthor: cs.author, songCoverUrl: songCoverUrl(cs) });
     };
-    const onPause = (e: Event) => { if (e.target !== getActive()) return; if (!crossfadingRef.current) setIsPlaying(false); };
-    [audioARef.current, audioBRef.current].forEach((a) => { a.addEventListener('timeupdate', onTime); a.addEventListener('loadedmetadata', onDur); a.addEventListener('ended', onEnd); a.addEventListener('play', onPlay); a.addEventListener('pause', onPause); });
+    const onPause = (e: Event) => { if (e.target !== getActive()) return; if (!crossfadingRef.current) { setIsPlaying(false); setIsBuffering(false); } };
+    [audioARef.current, audioBRef.current].forEach((a) => { a.addEventListener('timeupdate', onTime); a.addEventListener('loadedmetadata', onDur); a.addEventListener('ended', onEnd); a.addEventListener('play', onPlay); a.addEventListener('pause', onPause); a.addEventListener('waiting', onWaiting); a.addEventListener('playing', onPlaying); });
     return () => {
       if (crossfadeIntervalRef.current) { clearInterval(crossfadeIntervalRef.current); crossfadeIntervalRef.current = null; }
       crossfadingRef.current = false;
-      [audioARef.current, audioBRef.current].forEach((a) => { if (!a) return; a.pause(); a.removeEventListener('timeupdate', onTime); a.removeEventListener('loadedmetadata', onDur); a.removeEventListener('ended', onEnd); a.removeEventListener('play', onPlay); a.removeEventListener('pause', onPause); });
+      [audioARef.current, audioBRef.current].forEach((a) => { if (!a) return; a.pause(); a.removeEventListener('timeupdate', onTime); a.removeEventListener('loadedmetadata', onDur); a.removeEventListener('ended', onEnd); a.removeEventListener('play', onPlay); a.removeEventListener('pause', onPause); a.removeEventListener('waiting', onWaiting); a.removeEventListener('playing', onPlaying); });
       clearMediaSession();
     };
   }, []);
@@ -427,40 +444,58 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
     } catch (e) { console.error('incrementWeeklyPlayCount', e); }
   }, []);
 
+  const incrementTrendingScore = useCallback(async (songId: string) => {
+    try {
+      const existing = await pbGetFirst('trending_songs', `song_id = "${songId}"`);
+      if (existing) {
+        await pb.collection('trending_songs').update(existing.id, { score: (existing.score ?? 0) + 1 });
+      } else {
+        await pb.collection('trending_songs').create({ song_id: songId, score: 1 });
+      }
+    } catch (e) { console.error('incrementTrendingScore', e); }
+  }, []);
+
   const countedWeeklyRef = useRef<Set<string>>(new Set());
+  const countedTrendingRef = useRef<Set<string>>(new Set());
   const weeklyListenStartRef = useRef<Map<string, number>>(new Map());
   const pauseTimeoutRef = useRef<number | null>(null);
 
   const recordPlay = useCallback((song: Song) => {
     if (!authUser) return;
     if (pauseTimeoutRef.current) { clearTimeout(pauseTimeoutRef.current); pauseTimeoutRef.current = null; }
-    
+
     // Record listen history
     pb.collection('listen_history').create({ user_id: authUser.id, song_id: song.id, listened_at: new Date().toISOString() }).catch(() => {});
-    
+
     updateStreak(authUser.id);
     updatePresence({ userId: authUser.id, isListening: true, songId: song.id, songTitle: song.title, songAuthor: song.author, songCoverUrl: songCoverUrl(song) });
-    
+
     incrementPlayCount(song.id);
     weeklyListenStartRef.current.set(song.id, 0);
     countedWeeklyRef.current.delete(song.id);
+    countedTrendingRef.current.delete(song.id);
   }, [authUser, incrementPlayCount]);
 
   useEffect(() => { recordPlayRef.current = recordPlay; }, [recordPlay]);
 
-  // Weekly play count after 30s
+  // Weekly play count + trending score after 30s
   useEffect(() => {
     if (!currentSong || !authUser) return;
     const songId = currentSong.id;
-    if (countedWeeklyRef.current.has(songId)) return;
     const prev = weeklyListenStartRef.current.get(songId) ?? 0;
     const reached = Math.max(prev, currentTime);
     weeklyListenStartRef.current.set(songId, reached);
     if (reached >= 30) {
-      countedWeeklyRef.current.add(songId);
-      incrementWeeklyPlayCount(songId);
+      if (!countedWeeklyRef.current.has(songId)) {
+        countedWeeklyRef.current.add(songId);
+        incrementWeeklyPlayCount(songId);
+      }
+      if (!countedTrendingRef.current.has(songId)) {
+        countedTrendingRef.current.add(songId);
+        incrementTrendingScore(songId);
+      }
     }
-  }, [currentTime, currentSong, authUser, incrementWeeklyPlayCount]);
+  }, [currentTime, currentSong, authUser, incrementWeeklyPlayCount, incrementTrendingScore]);
 
   const stopAudio = useCallback(() => {
     [audioARef.current, audioBRef.current].forEach((a) => { if (!a) return; try { a.pause(); a.currentTime = 0; } catch {} });
@@ -469,6 +504,7 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
   }, [authUser]);
 
   const loadAndPlay = useCallback(async (song: Song, autoPlay = true) => {
+    setIsBuffering(true);
     if (crossfadeIntervalRef.current) { clearInterval(crossfadeIntervalRef.current); crossfadeIntervalRef.current = null; }
     crossfadingRef.current = false;
     const inactive = getInactive();
@@ -481,8 +517,7 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
     applyRate();
     a.addEventListener('loadedmetadata', applyRate, { once: true });
     a.addEventListener('playing', applyRate, { once: true });
-    const inSessionAsHost = !!(sessionRef.current && authUser && sessionRef.current.host_id === authUser.id);
-    if (!autoPlay || inSessionAsHost) { pendingSessionAutoplayRef.current = !!inSessionAsHost; a.load(); return; }
+    if (!autoPlay) { a.load(); return; }
     try { if (audioCtxRef.current?.state === 'suspended') await audioCtxRef.current.resume().catch(() => {}); await a.play(); a.playbackRate = playbackRate; recordPlay(song); ensureCachedForPlayback(song).catch(() => {}); } catch (e) { console.error('Audio play failed', e); }
   }, [playbackRate, volume, recordPlay, authUser]);
 
@@ -499,19 +534,17 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
     const applyRate = () => { a.playbackRate = playbackRate; }; applyRate();
     a.addEventListener('loadedmetadata', applyRate, { once: true });
     a.addEventListener('playing', applyRate, { once: true });
-    const inSessionAsHost = !!(sessionRef.current && authUser && sessionRef.current.host_id === authUser.id);
     const shouldAutoPlay = payload.autoPlay ?? true;
-    if (!shouldAutoPlay || inSessionAsHost) { pendingSessionAutoplayRef.current = !!inSessionAsHost; a.load(); return; }
+    if (!shouldAutoPlay) { a.load(); return; }
     try { await a.play(); a.playbackRate = playbackRate; } catch (e) { console.error('External audio play failed', e); }
   }, [playbackRate, volume, authUser]);
 
   const broadcastSong = useCallback(async (song: Song) => {
     const s = sessionRef.current;
     if (!s || !authUser || s.host_id !== authUser.id) return;
-    try {
-      await pb.collection('listen_sessions').update(s.id, { song_id: song.id, current_time_seconds: 0, is_playing: false, ready_participants: [authUser.id] });
-    } catch {}
-  }, [authUser]);
+    // Host joue immédiatement et signale is_playing: true — les guests suivent en temps réel
+    queueSessionWrite({ song_id: song.id, position: 0, is_playing: true });
+  }, [authUser, queueSessionWrite]);
   useEffect(() => { broadcastSongRef.current = broadcastSong; }, [broadcastSong]);
 
   // Ping PocketBase toutes les 3 secondes pour vérifier la qualité de la connexion
@@ -534,17 +567,18 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
     }
   }, []);
 
-  // Intervalle toutes les 3 secondes pour mettre à jour le statut de connexion
+  // Intervalle pour mettre à jour le statut de connexion
   useEffect(() => {
     const interval = setInterval(() => {
       checkConnectionStatus();
-    }, 3000);
+    }, 6000);
     return () => clearInterval(interval);
   }, [checkConnectionStatus]);
 
   const playSong = useCallback((song: Song) => {
     if (isSessionGuestRef.current) { toast.info("Seul l'hôte peut changer la musique de la session"); return; }
     if (audioCtxRef.current?.state === 'suspended') audioCtxRef.current.resume().catch(() => {});
+    originalQueueRef.current = [song];
     setCurrentSong(song); setQueue([song]); setQueueIndex(0); setPlayedSongIds(new Set([song.id])); setIsPlayerOpen(true);
     checkConnectionStatus();
     loadAndPlay(song);
@@ -566,8 +600,17 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
             const res = await pb.collection('songs').getList(1, 50, { filter: filters, requestKey: null });
             songs.push(...res.items.map(recordToSong));
           }
-          for (let i = songs.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [songs[i], songs[j]] = [songs[j], songs[i]]; }
-          setQueue((q) => (q.length === 1 && q[0].id === song.id ? [song, ...songs] : q));
+          setQueue((q) => {
+            if (q.length !== 1 || q[0].id !== song.id) return q;
+            const newQueue = [song, ...songs];
+            originalQueueRef.current = newQueue;
+            if (isShuffledRef.current) {
+              const shuffled = [...songs];
+              for (let i = shuffled.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]]; }
+              return [song, ...shuffled];
+            }
+            return newQueue;
+          });
         } catch {}
       })();
     }
@@ -577,6 +620,7 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
     if (isSessionGuestRef.current) { toast.info("Seul l'hôte peut changer la musique de la session"); return; }
     if (audioCtxRef.current?.state === 'suspended') audioCtxRef.current.resume().catch(() => {});
     const idx = Math.max(0, list.findIndex((s) => s.id === song.id));
+    originalQueueRef.current = [...list];
     setQueue(list); setQueueIndex(idx); setCurrentSong(song); setPlayedSongIds(new Set([song.id])); setIsPlayerOpen(true);
     checkConnectionStatus();
     loadAndPlay(song);
@@ -590,16 +634,15 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
     // Resume AudioContext on user gesture (browser autoplay policy)
     if (audioCtxRef.current?.state === 'suspended') audioCtxRef.current.resume().catch(() => {});
     const shouldPlay = a.paused;
-    pendingSessionAutoplayRef.current = false;
     if (shouldPlay) {
       a.play().catch(console.error);
       if (authUser) updatePresence({ userId: authUser.id, isListening: true, songId: currentSong.id, songTitle: currentSong.title, songAuthor: currentSong.author, songCoverUrl: songCoverUrl(currentSong) });
     } else { a.pause(); if (authUser) clearPresence(authUser.id); }
     const s = sessionRef.current;
     if (s && authUser && s.host_id === authUser.id) {
-      pb.collection('listen_sessions').update(s.id, { is_playing: shouldPlay, current_time_seconds: a.currentTime }).catch(() => {});
+      queueSessionWrite({ is_playing: shouldPlay, position: a.currentTime });
     }
-  }, [currentSong, authUser]);
+  }, [currentSong, authUser, queueSessionWrite]);
 
   const findRecommendedSongs = useCallback(async (baseSong: Song): Promise<Song[]> => {
     try {
@@ -624,21 +667,22 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
   const next = useCallback(() => {
     if (queue.length === 0) return;
     if (repeatMode === 'one') { playAtIndex(queueIndex); return; }
-    const nextIdx = isShuffled ? Math.floor(Math.random() * queue.length) : queueIndex + 1;
+    const nextIdx = queueIndex + 1;
     if (nextIdx >= queue.length) {
       if (repeatMode === 'all') { playAtIndex(0); return; }
       if (currentSong) {
         findRecommendedSongs(currentSong).then((rec) => {
           if (rec.length > 0) {
             const song = rec[0]; const len = queue.length;
-            setCurrentSong(song); setQueue((q) => [...q, ...rec]); setQueueIndex(len);
+            originalQueueRef.current = [...originalQueueRef.current, ...rec];
+            setCurrentSong(song); setQueue((q) => [...q, ...(isShuffledRef.current ? rec.slice().sort(() => Math.random() - 0.5) : rec)]); setQueueIndex(len);
             setPlayedSongIds((p) => new Set([...p, song.id])); loadAndPlay(song);
             if (sessionRef.current && authUser && sessionRef.current.host_id === authUser.id) broadcastSong(song);
           } else getActive()?.pause();
         });
       } else getActive()?.pause();
     } else playAtIndex(nextIdx);
-  }, [queue, queueIndex, repeatMode, isShuffled, playAtIndex, currentSong, findRecommendedSongs, loadAndPlay, authUser, broadcastSong]);
+  }, [queue, queueIndex, repeatMode, playAtIndex, currentSong, findRecommendedSongs, loadAndPlay, authUser, broadcastSong]);
 
   const previous = useCallback(() => {
     const a = getActive();
@@ -650,16 +694,45 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
   const seek = useCallback((t: number) => {
     const a = getActive(); if (a) a.currentTime = t;
     const s = sessionRef.current;
-    if (s && authUser && s.host_id === authUser.id) pb.collection('listen_sessions').update(s.id, { current_time_seconds: t }).catch(() => {});
-  }, [authUser]);
+    if (s && authUser && s.host_id === authUser.id) queueSessionWrite({ position: t });
+  }, [authUser, queueSessionWrite]);
 
   const setVolume = useCallback((v: number) => setVolumeState(Math.max(0, Math.min(1, v))), []);
-  const toggleShuffle = useCallback(() => setIsShuffled((s) => !s), []);
+  const toggleShuffle = useCallback(() => {
+    setIsShuffled((prev) => {
+      const newShuffled = !prev;
+      if (newShuffled) {
+        const currentQueue = queueRef.current;
+        const currentIdx = queueIndexRef.current;
+        originalQueueRef.current = [...currentQueue];
+        const played = currentQueue.slice(0, currentIdx + 1);
+        const remaining = currentQueue.slice(currentIdx + 1);
+        for (let i = remaining.length - 1; i > 0; i--) {
+          const j = Math.floor(Math.random() * (i + 1));
+          [remaining[i], remaining[j]] = [remaining[j], remaining[i]];
+        }
+        setQueue([...played, ...remaining]);
+      } else {
+        const original = originalQueueRef.current;
+        const cs = currentSongRef.current;
+        if (original.length > 0 && cs) {
+          const newIdx = original.findIndex((s) => s.id === cs.id);
+          setQueue(original);
+          if (newIdx >= 0) setQueueIndex(newIdx);
+        }
+        originalQueueRef.current = [];
+      }
+      return newShuffled;
+    });
+  }, []);
   const cycleRepeat = useCallback(() => setRepeatMode((m) => m === 'off' ? 'all' : m === 'all' ? 'one' : 'off'), []);
   const openPlayer = useCallback(() => setIsPlayerOpen(true), []);
   const closePlayer = useCallback(() => setIsPlayerOpen(false), []);
   const setPlaybackRate = useCallback((r: number) => setPlaybackRateState(Math.max(0.5, Math.min(2, r))), []);
-  const addToQueue = useCallback((song: Song) => setQueue((q) => [...q, song]), []);
+  const addToQueue = useCallback((song: Song) => {
+    setQueue((q) => [...q, song]);
+    if (originalQueueRef.current.length > 0) originalQueueRef.current = [...originalQueueRef.current, song];
+  }, []);
 
   useEffect(() => { nextRef.current = next; }, [next]);
   useEffect(() => { previousRef.current = previous; }, [previous]);
@@ -670,6 +743,7 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
   const startRadio = useCallback(async (seed: Song) => {
     const rec = await findRecommendedSongs(seed);
     const list = [seed, ...rec];
+    originalQueueRef.current = [...list];
     setQueue(list); setQueueIndex(0); setCurrentSong(seed); setPlayedSongIds(new Set([seed.id])); loadAndPlay(seed);
   }, [findRecommendedSongs, loadAndPlay]);
 
@@ -679,8 +753,8 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
     try {
       const hosted = await pbGetFirst('listen_sessions', `host_id = "${authUser.id}" && is_active = true`);
       if (hosted) { setActiveSessionState(hosted as unknown as ListenSessionRow); return; }
-      // For joined sessions, we fetch with participant filter
-      const joinedRes = await pb.collection('listen_sessions').getList(1, 1, { filter: `is_active = true`, requestKey: null });
+      // For joined sessions, fetch enough results to find the one containing this user
+      const joinedRes = await pb.collection('listen_sessions').getList(1, 20, { filter: `is_active = true`, requestKey: null });
       const joined = joinedRes.items.find((r: any) => {
         const participants = r.participants as string[] || [];
         return participants.includes(authUser.id);
@@ -691,20 +765,56 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => { refreshSession(); }, [refreshSession]);
 
-  // Polling for session changes (PocketBase doesn't have realtime built-in like Supabase)
+  // Polling fallback pour détecter les nouvelles sessions (rejoindre, etc.)
   useEffect(() => {
     if (!authUser) return;
-    const interval = setInterval(() => { refreshSession(); }, 3000);
+    const interval = setInterval(() => { refreshSession(); }, 2000);
     return () => clearInterval(interval);
   }, [authUser, refreshSession]);
 
+  // Souscription temps-réel à la session active — remplace le polling pour la sync
+  useEffect(() => {
+    const s = activeSession;
+    if (!s || !authUser) return;
+    let unsubscribe: (() => void) | undefined;
+    (async () => {
+      try {
+        unsubscribe = await pb.collection('listen_sessions').subscribe(s.id, (e) => {
+          if (e.action !== 'update') return;
+          const r = e.record as any;
+          if (!r.is_active) {
+            setActiveSessionState(null);
+            return;
+          }
+          setActiveSessionState({
+            id: r.id,
+            code: r.code ?? null,
+            host_id: r.host_id,
+            song_id: r.song_id ?? null,
+            is_playing: r.is_playing,
+            position: r.position ?? 0,
+            participants: r.participants ?? [],
+            is_active: r.is_active,
+          });
+        });
+      } catch (err) {
+        console.warn('Session subscribe failed, polling only', err);
+      }
+    })();
+    return () => { if (unsubscribe) unsubscribe(); };
+  }, [activeSession?.id, authUser]);
+
   // Guest: load session song
   const lastLoadedSessionSongRef = useRef<string | null>(null);
+  // ID du titre réellement chargé dans l'élément audio du guest — tant qu'il ne correspond pas
+  // au song_id de la session, les effets play/pause et drift ne doivent PAS toucher l'audio
+  const guestLoadedSongIdRef = useRef<string | null>(null);
   useEffect(() => {
     if (!isSessionGuest || !activeSession || !authUser) return;
     if (!activeSession.song_id) return;
     if (lastLoadedSessionSongRef.current === activeSession.song_id) return;
     lastLoadedSessionSongRef.current = activeSession.song_id;
+    guestLoadedSongIdRef.current = null;
     (async () => {
       try {
         const record = await pbGetFirst('songs', `id = "${activeSession.song_id}"`);
@@ -712,51 +822,118 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
         const song = recordToSong(record);
         sessionGuestRecordedRef.current = null; setCurrentSong(song); setQueue([song]); setQueueIndex(0);
         const a = getActive(); a.src = songAudioUrl(song); a.playbackRate = playbackRate; a.volume = volume; a.load();
-        const onCanPlay = async () => {
-          a.removeEventListener('canplaythrough', onCanPlay);
+        guestLoadedSongIdRef.current = song.id;
+        const onCanPlay = () => {
+          a.removeEventListener('canplay', onCanPlay);
           const cur = sessionRef.current;
-          if (!cur || !authUser) return;
-          const ready = cur.ready_participants ?? [];
-          if (!ready.includes(authUser.id)) pb.collection('listen_sessions').update(cur.id, { ready_participants: [...ready, authUser.id] }).catch(() => {});
+          if (!cur) return;
+          // Le titre de la session a changé pendant le chargement : ne rien faire
+          if (cur.song_id !== song.id) return;
+          // Si la session joue déjà, démarrer immédiatement au bon timestamp
+          if (cur.is_playing && a.paused) {
+            if (audioCtxRef.current?.state === 'suspended') audioCtxRef.current.resume().catch(() => {});
+            const drift = Math.abs(a.currentTime - (cur.position ?? 0));
+            if (drift > 0.5) a.currentTime = cur.position ?? 0;
+            a.play().then(() => {
+              if (sessionGuestRecordedRef.current !== song.id) {
+                sessionGuestRecordedRef.current = song.id;
+                recordPlayRef.current(song);
+              }
+            }).catch(console.error);
+          }
         };
-        a.addEventListener('canplaythrough', onCanPlay);
+        a.addEventListener('canplay', onCanPlay);
       } catch {}
     })();
-  }, [isSessionGuest, activeSession?.song_id, authUser, playbackRate, volume, activeSession]);
+  }, [isSessionGuest, activeSession?.song_id, authUser, playbackRate, volume]);
 
-  // Guest sync play/pause
+  // Guest sync play/pause — déclenché uniquement par is_playing, pas par position
+  // Évite les seeks parasites toutes les 1s causés par la latence réseau
   useEffect(() => {
     if (!isSessionGuest || !activeSession) return;
     const a = getActive();
     if (!a || !a.src) return;
-    if (Math.abs(a.currentTime - activeSession.current_time_seconds) > 1.5) a.currentTime = activeSession.current_time_seconds;
-    if (activeSession.is_playing) { a.play().then(() => { if (currentSong && sessionGuestRecordedRef.current !== currentSong.id) { sessionGuestRecordedRef.current = currentSong.id; recordPlay(currentSong); } }).catch(console.error); }
-    else a.pause();
-  }, [isSessionGuest, activeSession?.is_playing, activeSession?.current_time_seconds, activeSession, currentSong, recordPlay]);
+    // Titre en cours de chargement ou différent de celui de la session : c'est le callback
+    // canplay du chargement qui démarrera la lecture, pas cet effet
+    if (activeSession.song_id && guestLoadedSongIdRef.current !== activeSession.song_id) return;
 
-  // Host sync time
+    if (activeSession.is_playing) {
+      if (a.paused && a.readyState >= 2) {
+        // Résumer AudioContext si suspendu (politique autoplay navigateur/mobile)
+        if (audioCtxRef.current?.state === 'suspended') audioCtxRef.current.resume().catch(() => {});
+        // Sync le temps uniquement au moment du démarrage
+        const drift = Math.abs(a.currentTime - activeSession.position);
+        if (drift > 0.5) a.currentTime = activeSession.position;
+        a.play()
+          .then(() => {
+            if (currentSong && sessionGuestRecordedRef.current !== currentSong.id) {
+              sessionGuestRecordedRef.current = currentSong.id;
+              recordPlay(currentSong);
+            }
+          })
+          .catch(console.error);
+      }
+    } else {
+      if (!a.paused) a.pause();
+    }
+  }, [isSessionGuest, activeSession?.is_playing, currentSong, recordPlay]);
+
+  // Guest drift correction + stall recovery — déclenché toutes les 3s par le host sync
+  // NE PAS mettre position dans les deps du sync play/pause pour éviter
+  // le seek toutes les 1s qui cause pause + jump
+  useEffect(() => {
+    if (!isSessionGuest || !activeSession) return;
+    const a = getActive();
+    if (!a || !a.src) return;
+    const cur = sessionRef.current;
+    if (!cur) return;
+    // La position reçue appartient forcément au titre de la session : si notre audio
+    // charge encore un autre titre, ne surtout pas l'appliquer
+    if (cur.song_id && guestLoadedSongIdRef.current !== cur.song_id) return;
+    if (a.readyState < 2) return;
+
+    if (cur.is_playing && a.paused) {
+      // Stall recovery : audio mis en pause par le navigateur (appel, tab switch, buffer)
+      // ou terminé trop tôt, alors que la session est censée jouer le même titre
+      if (audioCtxRef.current?.state === 'suspended') audioCtxRef.current.resume().catch(() => {});
+      const drift = Math.abs(a.currentTime - cur.position);
+      if (drift > 0.5) a.currentTime = cur.position;
+      a.play().catch(console.error);
+    } else if (!a.paused) {
+      // Correction des gros décalages seulement (évite seeks parasites)
+      const drift = Math.abs(a.currentTime - cur.position);
+      if (drift > 8) a.currentTime = cur.position;
+    }
+  }, [isSessionGuest, activeSession?.position]);
+
+  // Host sync time — toutes les 3s, sert uniquement à la correction de drift guest (seuil 8s)
+  // Le play/pause se propage via subscribe temps-réel immédiatement
+  // IMPORTANT: ne pas inclure 'activeSession' (objet) dans les deps — le polling le recrée toutes les 2s
+  // ce qui réinitialiserait l'intervalle avant qu'il se déclenche. On lit sessionRef.current à la place.
   useEffect(() => {
     if (!isSessionHost || !activeSession) return;
     const interval = setInterval(() => {
       const a = getActive();
       if (!a || !sessionRef.current) return;
-      const updates: any = { current_time_seconds: a.currentTime };
-      if (a.paused && sessionRef.current.is_playing) updates.is_playing = false;
-      pb.collection('listen_sessions').update(sessionRef.current.id, updates).catch(() => {});
-    }, 1500);
+      // Pendant un crossfade, l'élément actif est l'ANCIEN titre quasi terminé : sa position
+      // ne doit jamais être écrite (elle téléportait les invités à la fin du nouveau titre).
+      if (crossfadingRef.current) return;
+      // Audio en cours de chargement ou de seek : ne rien écrire. Pendant cette fenêtre
+      // a.paused est true alors que l'hôte n'a PAS mis pause — écrire is_playing: false ici
+      // mettait tous les invités en pause définitivement juste après le lancement d'un titre.
+      if (!a.src || a.readyState < 2 || a.seeking) return;
+      const updates: any = { position: a.currentTime };
+      // Pause réelle de l'hôte uniquement (currentTime > 0 exclut la fenêtre post-chargement)
+      if (a.paused && !a.ended && a.currentTime > 0 && sessionRef.current.is_playing) updates.is_playing = false;
+      // Auto-réparation : si l'hôte joue mais que la session dit pause, on corrige —
+      // tout is_playing: false parasite est annulé en 3s max et les invités reprennent
+      if (!a.paused && !sessionRef.current.is_playing) updates.is_playing = true;
+      queueSessionWrite(updates);
+    }, 3000);
     return () => clearInterval(interval);
-  }, [isSessionHost, activeSession?.id, activeSession]);
+  }, [isSessionHost, activeSession?.id, queueSessionWrite]);
 
-  // Host: autoplay when all ready
-  useEffect(() => {
-    if (!isSessionHost || !activeSession?.song_id) return;
-    if (activeSession.is_playing || !pendingSessionAutoplayRef.current) return;
-    if (!allParticipantsReady) return;
-    const a = getActive();
-    if (a && a.paused) {
-      a.play().then(() => { pendingSessionAutoplayRef.current = false; if (currentSong) recordPlay(currentSong); pb.collection('listen_sessions').update(activeSession.id, { is_playing: true, current_time_seconds: a.currentTime }).catch(() => {}); }).catch(console.error);
-    }
-  }, [isSessionHost, allParticipantsReady, activeSession, currentSong, recordPlay]);
+  // Host autoplay removed — host plays immediately via loadAndPlay, broadcastSong signals is_playing: true
 
   const playExternalAudio = useCallback((payload: { videoId: string; title: string; author: string; coverUrl: string; audioUrl: string }) => {
     if (!payload?.audioUrl) return;
@@ -767,7 +944,7 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
   return (
     <PlayerContext.Provider value={{
       currentSong, isPlaying, currentTime, duration, volume, queue, queueIndex, isShuffled, repeatMode, isPlayerOpen, playbackRate, crossfadeSeconds, transitionMode,
-      activeSession, isSessionHost, isSessionGuest, allParticipantsReady, connectionStatus, refreshSession, setActiveSession, stopAudio, refreshSongStats,
+      activeSession, isSessionHost, isSessionGuest, connectionStatus, isBuffering, refreshSession, setActiveSession, stopAudio, refreshSongStats,
       playSong, playSongFromList, playExternalAudio, togglePlay, next, previous, seek, setVolume, toggleShuffle, cycleRepeat,
       openPlayer, closePlayer, setPlaybackRate, setCrossfadeSeconds, setTransitionMode, addToQueue, startRadio, signalVideoReady,
       getAnalyserNode: () => analyserRef.current,

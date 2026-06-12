@@ -1,231 +1,230 @@
-import { X, Youtube, Smartphone, Monitor, Music, Users, Upload, Car, Search, Heart, Bell } from 'lucide-react';
+import { useEffect, useRef, useState } from 'react';
+import {
+  X, Music2, Sparkles, Upload, Users, ListMusic, Flame,
+  TrendingUp, Tag, Pin, Repeat2, Headphones, UserPlus, Lock,
+  Heart, Award, QrCode, ChevronLeft, ChevronRight,
+} from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { cn } from '@/lib/utils';
+import juxLogo from '@/assets/jux-logo.png';
 
 interface TutorialModalProps {
   open: boolean;
   onClose: () => void;
 }
 
+interface SlideItem {
+  icon: typeof Music2;
+  label: string;
+  text: string;
+}
+
+interface Slide {
+  icon: typeof Music2;
+  emoji: string;
+  title: string;
+  description: string;
+  items: SlideItem[];
+}
+
+const SLIDES: Slide[] = [
+  {
+    icon: Music2,
+    emoji: '🎵',
+    title: 'Bienvenue sur Jux !',
+    description: 'Ta plateforme musicale sociale. Écoute, publie et découvre de la musique avec tes amis.',
+    items: [
+      { icon: Headphones, label: 'Écoute libre', text: 'Tous les sons de la communauté, gratuitement.' },
+      { icon: Users, label: 'Social', text: 'Suis tes amis et vois ce qu\'ils écoutent en direct.' },
+      { icon: Sparkles, label: 'Personnalisé', text: 'Des recommandations basées sur tes écoutes.' },
+    ],
+  },
+  {
+    icon: Sparkles,
+    emoji: '✨',
+    title: 'Découvre chaque jour',
+    description: 'L\'accueil se renouvelle en continu avec du contenu fait pour toi.',
+    items: [
+      { icon: Sparkles, label: 'Daily Mix', text: 'Une sélection générée chaque jour selon tes 3 derniers jours d\'écoute.' },
+      { icon: TrendingUp, label: 'Tendances', text: 'Les sons qui montent dans la communauté.' },
+      { icon: Tag, label: 'Par genre', text: 'Filtre l\'accueil par genre en un tap sur une pastille.' },
+    ],
+  },
+  {
+    icon: Upload,
+    emoji: '🎤',
+    title: 'Publie ta musique',
+    description: 'Partage tes sons avec la communauté depuis le bouton Upload.',
+    items: [
+      { icon: Upload, label: 'Upload', text: 'Un fichier audio, un titre, une cover — et c\'est en ligne.' },
+      { icon: Repeat2, label: 'Republie', text: 'Reposte les sons que tu aimes sur ton profil.' },
+      { icon: Pin, label: 'Titre épinglé', text: 'Mets un son en avant sur ton profil, avec extrait choisi.' },
+    ],
+  },
+  {
+    icon: Users,
+    emoji: '👥',
+    title: 'Retrouve tes amis',
+    description: 'L\'onglet Social, c\'est ta communauté en temps réel.',
+    items: [
+      { icon: UserPlus, label: 'Abonnements', text: 'Envoie des demandes et accepte celles qu\'on t\'envoie.' },
+      { icon: Headphones, label: 'En ce moment', text: 'Vois en direct ce que tes amis écoutent.' },
+      { icon: QrCode, label: 'QR code', text: 'Partage ton profil en un scan depuis la page Profil.' },
+    ],
+  },
+  {
+    icon: ListMusic,
+    emoji: '📚',
+    title: 'Crée tes playlists',
+    description: 'Organise ta musique et construis des playlists à plusieurs.',
+    items: [
+      { icon: Lock, label: 'Privées ou publiques', text: 'Tu choisis qui peut voir chaque playlist.' },
+      { icon: Users, label: 'Collaboratives', text: 'Invite des amis (qui te suivent en retour) à ajouter des sons.' },
+      { icon: Heart, label: 'Titres likés', text: 'Tous tes sons likés réunis automatiquement dans Favoris.' },
+    ],
+  },
+  {
+    icon: Flame,
+    emoji: '🔥',
+    title: 'Ton univers',
+    description: 'Plus tu écoutes, plus ton profil prend vie.',
+    items: [
+      { icon: Flame, label: 'Série d\'écoute', text: 'Écoute chaque jour pour faire grimper ta flamme.' },
+      { icon: Award, label: 'Rang', text: 'Accomplis des quêtes pour monter de palier, d\'Amateur I au Panthéon Jux.' },
+      { icon: Sparkles, label: 'Wrapped', text: 'Tes stats d\'écoute résumées, accessibles depuis ton profil.' },
+    ],
+  },
+];
+
 export default function TutorialModal({ open, onClose }: TutorialModalProps) {
+  const [index, setIndex] = useState(0);
+  const touchStartX = useRef<number | null>(null);
+
+  // Repart de la première slide à chaque ouverture
+  useEffect(() => {
+    if (open) setIndex(0);
+  }, [open]);
+
   if (!open) return null;
 
+  const isLast = index === SLIDES.length - 1;
+  const slide = SLIDES[index];
+
+  const next = () => (isLast ? onClose() : setIndex((i) => i + 1));
+  const prev = () => setIndex((i) => Math.max(0, i - 1));
+
+  const onTouchStart = (e: React.TouchEvent) => { touchStartX.current = e.touches[0].clientX; };
+  const onTouchEnd = (e: React.TouchEvent) => {
+    if (touchStartX.current === null) return;
+    const delta = e.changedTouches[0].clientX - touchStartX.current;
+    touchStartX.current = null;
+    if (Math.abs(delta) < 50) return;
+    if (delta < 0 && !isLast) setIndex((i) => i + 1);
+    if (delta > 0) prev();
+  };
+
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-end sm:items-center justify-center"
-      onClick={onClose}
-    >
+    <div className="fixed inset-0 z-50 flex items-end justify-center sm:items-center">
       {/* Backdrop */}
-      <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" />
+      <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
 
       {/* Modal */}
       <div
-        className="relative z-10 w-full max-w-lg max-h-[85vh] overflow-y-auto rounded-t-2xl sm:rounded-2xl bg-background p-6 shadow-2xl"
-        onClick={(e) => e.stopPropagation()}
+        className="relative z-10 flex w-full max-w-md flex-col overflow-hidden rounded-t-3xl bg-background shadow-2xl sm:rounded-3xl"
         style={{ animation: 'fadeSlideUp 0.3s cubic-bezier(0.16,1,0.3,1) both' }}
+        onTouchStart={onTouchStart}
+        onTouchEnd={onTouchEnd}
       >
-        {/* Close */}
-        <Button
-          variant="ghost"
-          size="icon"
-          className="absolute right-3 top-3"
-          onClick={onClose}
-          aria-label="Fermer"
-        >
-          <X className="h-5 w-5" />
-        </Button>
+        {/* Halo décoratif */}
+        <div className="pointer-events-none absolute inset-x-0 top-0 h-48 bg-gradient-hero" />
 
-        {/* Title */}
-        <div className="mb-6 text-center">
-          <h2 className="text-2xl font-bold text-foreground">🎵 Bienvenue sur Jux !</h2>
-          <p className="mt-1 text-sm text-muted-foreground">
-            Tout ce que tu dois savoir pour profiter de l'app
-          </p>
-        </div>
-
-        {/* Sections */}
-        <div className="space-y-6">
-          {/* ── Qu'est-ce que Jux ? ── */}
-          <section>
-            <h3 className="mb-2 flex items-center gap-2 text-lg font-semibold text-foreground">
-              <Music className="h-5 w-5 text-primary" />
-              Qu'est-ce que Jux ?
-            </h3>
-            <p className="text-sm text-muted-foreground leading-relaxed">
-              Jux est une plateforme musicale sociale où tu peux écouter, découvrir et partager
-              de la musique avec tes amis. Tu peux uploader tes propres musiques, créer des
-              playlists, suivre d'autres utilisateurs, et même écouter en synchronisation avec
-              tes amis en temps réel !
-            </p>
-          </section>
-
-          {/* ── Comment utiliser l'app ? ── */}
-          <section>
-            <h3 className="mb-2 flex items-center gap-2 text-lg font-semibold text-foreground">
-              <Monitor className="h-5 w-5 text-primary" />
-              Comment utiliser l'app
-            </h3>
-            <div className="space-y-3 text-sm text-muted-foreground">
-              <div className="flex items-start gap-3 rounded-xl bg-secondary/50 p-3">
-                <HomeIcon className="mt-0.5 h-4 w-4 flex-shrink-0 text-primary" />
-                <div>
-                  <p className="font-medium text-foreground">Accueil</p>
-                  <p className="leading-relaxed">
-                    Découvre les tendances, ton Daily Mix personnalisé, les collabs et les
-                    dernières musiques ajoutées.
-                  </p>
-                </div>
-              </div>
-              <div className="flex items-start gap-3 rounded-xl bg-secondary/50 p-3">
-                <Search className="mt-0.5 h-4 w-4 flex-shrink-0 text-primary" />
-                <div>
-                  <p className="font-medium text-foreground">Recherche</p>
-                  <p className="leading-relaxed">
-                    Cherche des musiques, des artistes ou des utilisateurs.
-                  </p>
-                </div>
-              </div>
-              <div className="flex items-start gap-3 rounded-xl bg-secondary/50 p-3">
-                <Heart className="mt-0.5 h-4 w-4 flex-shrink-0 text-primary" />
-                <div>
-                  <p className="font-medium text-foreground">Favoris</p>
-                  <p className="leading-relaxed">
-                    Retrouve toutes tes musiques likées au même endroit.
-                  </p>
-                </div>
-              </div>
-              <div className="flex items-start gap-3 rounded-xl bg-secondary/50 p-3">
-                <Bell className="mt-0.5 h-4 w-4 flex-shrink-0 text-primary" />
-                <div>
-                  <p className="font-medium text-foreground">Notifications</p>
-                  <p className="leading-relaxed">
-                    Reçois les alertes quand quelqu'un interagit avec toi.
-                  </p>
-                </div>
-              </div>
-              <div className="flex items-start gap-3 rounded-xl bg-secondary/50 p-3">
-                <Car className="mt-0.5 h-4 w-4 flex-shrink-0 text-primary" />
-                <div>
-                  <p className="font-medium text-foreground">Mode Voiture</p>
-                  <p className="leading-relaxed">
-                    Une interface simplifiée et optimisée pour la conduite.
-                  </p>
-                </div>
-              </div>
-            </div>
-          </section>
-
-          {/* ── Ajouter des amis ── */}
-          <section>
-            <h3 className="mb-2 flex items-center gap-2 text-lg font-semibold text-foreground">
-              <Users className="h-5 w-5 text-primary" />
-              Ajouter des amis
-            </h3>
-            <p className="text-sm text-muted-foreground leading-relaxed">
-              Va dans l'onglet <strong>Social</strong> (l'icône en bas de l'écran). Tu peux
-              rechercher des utilisateurs, envoyer des demandes d'amis et voir les profils
-              des autres membres. Une fois amis, vous pouvez vous envoyer des messages et
-              écouter de la musique ensemble !
-            </p>
-          </section>
-
-          {/* ── Uploader une musique ── */}
-          <section>
-            <h3 className="mb-2 flex items-center gap-2 text-lg font-semibold text-foreground">
-              <Upload className="h-5 w-5 text-primary" />
-              Uploader une musique
-            </h3>
-            <p className="mb-3 text-sm text-muted-foreground leading-relaxed">
-              Va sur ton profil (icône en bas à droite) puis appuie sur le bouton
-              <strong> Upload</strong>. Choisis un fichier audio (MP3, WAV, etc.), ajoute
-              un titre, un artiste, une cover et c'est prêt !
-            </p>
-
-            <div className="rounded-xl border border-border bg-card p-4">
-              <h4 className="mb-2 flex items-center gap-2 text-sm font-semibold text-foreground">
-                <Youtube className="h-4 w-4 text-red-500" />
-                Télécharger depuis YouTube
-              </h4>
-
-              {/* PC */}
-              <div className="mb-3">
-                <div className="mb-1 flex items-center gap-1.5 text-xs font-medium uppercase tracking-wider text-foreground">
-                  <Monitor className="h-3.5 w-3.5" />
-                  Sur PC
-                </div>
-                <p className="text-sm text-muted-foreground leading-relaxed">
-                  Le plus simple est d'installer cette extension Chrome :{' '}
-                  <a
-                    href="https://chromewebstore.google.com/detail/youtube-to-mp3/ogoimgmekoacpndfanncfplddpjnecjm"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="font-medium text-primary underline hover:text-primary/80"
-                  >
-                    Youtube to MP3
-                  </a>
-                  . Une fois installée, va sur YouTube, choisis la musique que tu veux et
-                  télécharge-la avec l'extension. Le reste (cover, infos…) n'a pas besoin
-                  d'être détaillé, tu peux le laisser vide ou le modifier après.
-                </p>
-              </div>
-
-              {/* Mobile */}
-              <div>
-                <div className="mb-1 flex items-center gap-1.5 text-xs font-medium uppercase tracking-wider text-foreground">
-                  <Smartphone className="h-3.5 w-3.5" />
-                  Sur Mobile
-                </div>
-                <p className="text-sm text-muted-foreground leading-relaxed">
-                  Copie le lien de la vidéo YouTube, va sur{' '}
-                  <a
-                    href="https://notube.lol/fr/youtube-app-348"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="font-medium text-primary underline hover:text-primary/80"
-                  >
-                    notube.lol
-                  </a>
-                  , colle le lien et télécharge la musique.
-                </p>
-              </div>
-            </div>
-          </section>
-
-          {/* ── Remarque ── */}
-          <p className="text-center text-xs text-muted-foreground">
-            Jux est en constante évolution — amuse-toi bien ! 🚀
-          </p>
-        </div>
-
-        {/* Bottom close */}
-        <div className="mt-6 text-center">
-          <Button
-            variant="default"
-            className="w-full rounded-xl"
+        {/* Header : logo + passer */}
+        <div className="relative flex items-center justify-between px-5 pt-5">
+          <img src={juxLogo} alt="Jux" className="h-6 w-auto" />
+          <button
             onClick={onClose}
+            aria-label="Passer le tutoriel"
+            className="flex items-center gap-1 rounded-full px-3 py-1.5 text-xs font-semibold text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
           >
-            C'est compris !
-          </Button>
+            Passer
+            <X className="h-3.5 w-3.5" />
+          </button>
+        </div>
+
+        {/* Contenu de la slide */}
+        <div key={index} className="relative px-6 pt-6 animate-fade-slide-up">
+          {/* Icône héro */}
+          <div className="mb-5 flex justify-center">
+            <div className="relative">
+              <div className="flex h-20 w-20 items-center justify-center rounded-3xl bg-gradient-primary shadow-elegant">
+                <slide.icon className="h-9 w-9 text-primary-foreground" />
+              </div>
+              <span className="absolute -bottom-2 -right-2 flex h-8 w-8 items-center justify-center rounded-full border border-border/60 bg-background text-base shadow-soft">
+                {slide.emoji}
+              </span>
+            </div>
+          </div>
+
+          <h2 className="text-center text-xl font-extrabold tracking-tight">{slide.title}</h2>
+          <p className="mx-auto mt-1.5 max-w-xs text-center text-sm leading-relaxed text-muted-foreground">
+            {slide.description}
+          </p>
+
+          {/* Points clés */}
+          <div className="mt-5 space-y-2.5">
+            {slide.items.map((item) => (
+              <div key={item.label} className="flex items-start gap-3 rounded-2xl border border-border/40 bg-card/50 p-3">
+                <div className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-xl bg-primary/10">
+                  <item.icon className="h-4 w-4 text-primary" />
+                </div>
+                <div className="min-w-0">
+                  <p className="text-sm font-semibold">{item.label}</p>
+                  <p className="text-xs leading-relaxed text-muted-foreground">{item.text}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Footer : dots + navigation */}
+        <div className="relative px-6 pb-6 pt-5 safe-bottom">
+          {/* Dots */}
+          <div className="mb-4 flex items-center justify-center gap-1.5">
+            {SLIDES.map((_, i) => (
+              <button
+                key={i}
+                onClick={() => setIndex(i)}
+                aria-label={`Slide ${i + 1}`}
+                className={cn(
+                  'h-1.5 rounded-full transition-all duration-300',
+                  i === index ? 'w-6 bg-gradient-primary' : 'w-1.5 bg-secondary hover:bg-muted'
+                )}
+              />
+            ))}
+          </div>
+
+          <div className="flex items-center gap-2">
+            {index > 0 && (
+              <Button
+                variant="outline"
+                size="icon"
+                aria-label="Précédent"
+                className="h-11 w-11 flex-shrink-0 rounded-xl"
+                onClick={prev}
+              >
+                <ChevronLeft className="h-5 w-5" />
+              </Button>
+            )}
+            <Button
+              className="h-11 flex-1 rounded-xl bg-gradient-primary text-sm font-bold shadow-elegant-sm"
+              onClick={next}
+            >
+              {isLast ? 'C\'est parti ! 🚀' : 'Suivant'}
+              {!isLast && <ChevronRight className="ml-1 h-4 w-4" />}
+            </Button>
+          </div>
         </div>
       </div>
     </div>
-  );
-}
-
-/* Small Home icon (not exported from lucide) */
-function HomeIcon({ className }: { className?: string }) {
-  return (
-    <svg
-      xmlns="http://www.w3.org/2000/svg"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      className={className}
-    >
-      <path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
-      <polyline points="9 22 9 12 15 12 15 22" />
-    </svg>
   );
 }

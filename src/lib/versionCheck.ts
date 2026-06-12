@@ -10,7 +10,7 @@
 import type { JuxPlatform } from './platform';
 
 /** Version actuelle de l'app Android */
-export const LATEST_ANDROID_VERSION = "1.0.3";
+export const LATEST_ANDROID_VERSION = "1.0.4";
 
 /** Version actuelle de l'app PC */
 export const LATEST_PC_VERSION = "1.0.4";
@@ -144,7 +144,7 @@ export function getDownloadUrl(): string {
 export function getReleaseNotes(): string {
   const platform = getDetectedPlatform();
   if (platform === 'android-app') {
-    return "Version 1.0.3 (mobile) — Migration du serveur de musique : passage de Supabase (5 Go) à PocketBase (≈450 Go) pour plus d'espace et fiabilité. Inclut améliorations de lecture offline et gestion du cache.";
+    return "Version 1.0.4 (mobile) — Correction d'un bug de mise à jour répétée.";
   }
   // PC Desktop
   return "Version 1.0.4 (PC) — Le serveur a été changé et l'hébergement du site a également été mis à jour.";

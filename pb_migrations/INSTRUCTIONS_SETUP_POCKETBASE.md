@@ -263,7 +263,18 @@ PocketBase crée automatiquement la collection `users` pour l'authentification. 
 
 ---
 
-### Collection 19 : `media`
+### Collection 19 : `artists`
+- **Type** : Base
+- **Champs** :
+
+| Nom | Type | Requis |
+|-----|------|--------|
+| name | Texte | ✅ |
+| cover | Fichier | ❌ (max 5MB) |
+
+---
+
+### Collection 20 : `media`
 - **Type** : Base
 - **Champs** :
 

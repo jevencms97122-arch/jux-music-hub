@@ -7,7 +7,7 @@ import VolumeControl from '@/components/VolumeControl';
 import { cn } from '@/lib/utils';
 
 export default function MiniPlayer() {
-  const { currentSong, isPlaying, togglePlay, next, openPlayer, currentTime, duration } = usePlayer();
+  const { currentSong, isPlaying, isBuffering, togglePlay, next, openPlayer, currentTime, duration } = usePlayer();
   const [volumeOpen, setVolumeOpen] = useState(false);
   const prevIdRef = useRef<string | null>(null);
   const [animate, setAnimate] = useState(false);
@@ -66,11 +66,13 @@ export default function MiniPlayer() {
             <button
               onClick={(e) => { e.stopPropagation(); togglePlay(); }}
               className="rounded-xl bg-gradient-primary p-2.5 text-primary-foreground shadow-elegant-sm hover:shadow-glow active:scale-95"
-              aria-label={isPlaying ? 'Pause' : 'Play'}
+              aria-label={isBuffering ? 'Chargement' : isPlaying ? 'Pause' : 'Play'}
             >
-              {isPlaying
-                ? <Pause className="h-4.5 w-4.5 fill-current" />
-                : <Play className="h-4.5 w-4.5 fill-current" />}
+              {isBuffering
+                ? <div className="h-4.5 w-4.5 rounded-full border-2 border-primary-foreground/30 border-t-primary-foreground animate-spin" />
+                : isPlaying
+                  ? <Pause className="h-4.5 w-4.5 fill-current" />
+                  : <Play className="h-4.5 w-4.5 fill-current" />}
             </button>
             <button
               onClick={(e) => { e.stopPropagation(); next(); }}

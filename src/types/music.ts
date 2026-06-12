@@ -9,7 +9,12 @@ export interface Profile {
   avatar: string | null;
   avatar_url: string | null;
   bio: string | null;
+  badge: string | null;
+  ban_status: boolean;
   profile_completed: boolean;
+  pinned_song_id: string | null;
+  pinned_start: number | null;
+  pinned_end: number | null;
   collectionName?: string;
   collectionId?: string;
   created_at: string;
@@ -153,7 +158,7 @@ export interface ListenSession {
   id: string;
   host_id: string;
   song_id: string | null;
-  current_time_seconds: number;
+  position: number;
   is_playing: boolean;
   participants: string[];
   is_active: boolean;

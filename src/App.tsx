@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { AuthProvider, useAuth } from '@/contexts/AuthContext';
 import { PlayerProvider } from '@/contexts/PlayerContext';
 import { ThemeProvider, useTheme } from '@/contexts/ThemeContext';
@@ -26,12 +26,14 @@ import Notifications from '@/pages/Notifications';
 import Favorites from '@/pages/Favorites';
 import Wrapped from '@/pages/Wrapped';
 import CarMode from '@/pages/CarMode';
+import Rank from '@/pages/Rank';
 import MiniPlayer from '@/components/MiniPlayer';
 import PlayerPage from '@/components/PlayerPage';
 import BottomNav from '@/components/BottomNav';
 import UpdateChecker from '@/components/UpdateChecker';
 import WebDeprecatedScreen from '@/components/WebDeprecatedScreen';
 import GamepadController from '@/components/GamepadController';
+import BannedScreen from '@/components/BannedScreen';
 import { detectPlatform } from '@/lib/platform';
 import { Toaster } from '@/components/ui/sonner';
 
@@ -62,18 +64,26 @@ const PageWrap = ({ children }: { children: React.ReactNode }) => (
 function PresenceHeartbeat() {
   const { user } = useAuth();
   const { currentSong, isPlaying } = usePlayer();
+  const isPlayingRef = useRef(isPlaying);
+  const currentSongRef = useRef(currentSong);
+  useEffect(() => { isPlayingRef.current = isPlaying; }, [isPlaying]);
+  useEffect(() => { currentSongRef.current = currentSong; }, [currentSong]);
+
   useEffect(() => {
     if (!user) return;
-    const emit = () => updatePresence({
-      userId: user.id,
-      isListening: isPlaying,
-      songId: currentSong?.id,
-      songTitle: currentSong?.title,
-      songAuthor: currentSong?.author,
-      songCoverUrl: currentSong ? songCoverUrl(currentSong) : undefined,
-    });
+    const emit = () => {
+      const cs = currentSongRef.current;
+      updatePresence({
+        userId: user.id,
+        isListening: isPlayingRef.current,
+        songId: cs?.id,
+        songTitle: cs?.title,
+        songAuthor: cs?.author,
+        songCoverUrl: cs ? songCoverUrl(cs) : undefined,
+      });
+    };
     emit();
-    const interval = setInterval(emit, 3000);
+    const interval = setInterval(emit, 6000);
     const handleUnload = () => clearPresence(user.id);
     window.addEventListener('beforeunload', handleUnload);
     return () => {
@@ -81,12 +91,18 @@ function PresenceHeartbeat() {
       window.removeEventListener('beforeunload', handleUnload);
       clearPresence(user.id);
     };
-  }, [user, isPlaying, currentSong]);
+  }, [user]);
+  return null;
+}
+
+function ScrollToTop() {
+  const { pathname } = useLocation();
+  useEffect(() => { window.scrollTo(0, 0); }, [pathname]);
   return null;
 }
 
 function AppContent() {
-  const { user, profile, loading } = useAuth();
+  const { user, profile, loading, logout } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
   const [unreadCount, setUnreadCount] = useState(0);
@@ -103,7 +119,7 @@ function AppContent() {
       } catch {}
     };
     fetchUnread();
-    const interval = setInterval(fetchUnread, 15000);
+    const interval = setInterval(fetchUnread, 30000);
     return () => clearInterval(interval);
   }, [user]);
 
@@ -133,6 +149,7 @@ function AppContent() {
 
 
   // Notifications temps réel via PocketBase
+  const shownNotifIds = useRef<Set<string>>(new Set());
   useEffect(() => {
     if (!user) return;
     let unsub: (() => void) | undefined;
@@ -142,17 +159,34 @@ function AppContent() {
           if (e.action !== 'create') return;
           const n: any = e.record;
           if (n.recipient_id !== user.id) return;
-          if ('Notification' in window && Notification.permission === 'granted') {
-            new Notification(n.title, { body: n.body ?? '' });
-          }
-          if (n.type === 'session_invite') {
+          // Dedup — PocketBase can fire the same event twice
+          if (shownNotifIds.current.has(n.id)) return;
+          shownNotifIds.current.add(n.id);
+
+          if (n.type === 'friend_request') {
+            const pseudo = n.data?.sender_pseudo || null;
+            const message = pseudo ? `${pseudo} a commencé à vous suivre` : 'Quelqu\'un a commencé à vous suivre';
+            if ('Notification' in window && Notification.permission === 'granted') {
+              new Notification(message);
+            }
+            toast(message, {
+              duration: 6000,
+              action: { label: 'Voir', onClick: () => navigate('/notifications') },
+            });
+          } else if (n.type === 'session_invite') {
             const code = n.data?.code;
+            if ('Notification' in window && Notification.permission === 'granted') {
+              new Notification(n.title, { body: n.body ?? '' });
+            }
             toast(n.title, {
               description: n.body,
               duration: 15000,
               action: code ? { label: 'Rejoindre', onClick: () => navigate(`/listen-together?code=${code}`) } : undefined,
             });
           } else {
+            if ('Notification' in window && Notification.permission === 'granted') {
+              new Notification(n.title, { body: n.body ?? '' });
+            }
             toast(n.title, { description: n.body ?? undefined });
           }
         });
@@ -172,6 +206,8 @@ function AppContent() {
   }
 
   if (!user) return <Login />;
+
+  if (profile?.ban_status) return <BannedScreen onLogout={logout} />;
 
   const profileCompleted = profile?.profile_completed ?? false;
 
@@ -196,6 +232,7 @@ function AppContent() {
 
   return (
     <PlayerProvider>
+      <ScrollToTop />
       <PresenceHeartbeat />
       <GamepadController />
       <div className="min-h-screen">
@@ -221,7 +258,8 @@ function AppContent() {
               <Route path="/favorites" element={guard(<Favorites />)} />
               <Route path="/wrapped" element={guard(<Wrapped />)} />
               <Route path="/car-mode" element={guard(<CarMode />)} />
-              <Route path="*" element={<Navigate to="/jux" replace />} />
+              <Route path="/rank" element={guard(<Rank />)} />
+<Route path="*" element={<Navigate to="/jux" replace />} />
             </Routes>
           </AnimatePresence>
         </main>

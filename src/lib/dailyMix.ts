@@ -1,90 +1,76 @@
-﻿import { pb } from './pocketbase';
+import { pb } from './pocketbase';
 import type { Song } from '@/types/music';
+import { recordToSong } from './pbUtils';
 
-function recordToSong(r: any): Song {
-  return {
-    id: r.id,
-    title: r.title || '',
-    author: r.author || '',
-    audio: r.audio || '',
-    cover: r.cover || null,
-    audio_url: r.audio_url || '',
-    cover_url: r.cover_url || null,
-    video_url: r.video_url || null,
-    genre: r.genre || null,
-    uploaded_by: r.uploaded_by || '',
-    play_count: r.play_count ?? 0,
-    weekly_play_count: r.weekly_play_count ?? 0,
-    likes_count: r.likes_count ?? 0,
-    created_at: r.created,
-    updated_at: r.updated,
-    collectionId: r.collectionId,
-    collectionName: r.collectionName,
-  };
+export interface DailyMixResult {
+  songs: Song[];
+  genre: string | null;
 }
 
+
 /**
- * Génère un Daily Mix basé sur l'historique d'écoute.
+ * Génère un Daily Mix basé sur le genre le plus écouté sur les 3 derniers jours.
  */
-export async function generateDailyMix(userId: string): Promise<Song[]> {
+export async function generateDailyMix(userId: string): Promise<DailyMixResult> {
   try {
-    const historyRes = await pb.collection('listen_history').getList(1, 100, {
-      filter: `user_id = "${userId}"`,
+    const threeDaysAgo = new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString();
+
+    const historyRes = await pb.collection('listen_history').getList(1, 500, {
+      filter: `user_id = "${userId}" && listened_at >= "${threeDaysAgo}"`,
       sort: '-listened_at',
     });
 
-    const songIds = Array.from(new Set(historyRes.items.map((h: any) => h.song_id)));
+    const recentSongIds = Array.from(new Set(historyRes.items.map((h: any) => h.song_id)));
 
-    let listened: Song[] = [];
-    if (songIds.length > 0) {
-      // Fetch songs in batches since PB doesn't support in() filter natively via SDK
+    // Récupère les songs écoutées pour trouver les genres
+    let recentListened: Song[] = [];
+    if (recentSongIds.length > 0) {
       const batchSize = 50;
-      for (let i = 0; i < songIds.length; i += batchSize) {
-        const batch = songIds.slice(i, i + batchSize);
+      for (let i = 0; i < recentSongIds.length; i += batchSize) {
+        const batch = recentSongIds.slice(i, i + batchSize);
         const filters = batch.map(id => `id = "${id}"`).join(' || ');
-        const res = await pb.collection('songs').getList(1, batchSize, {
-          filter: filters,
-        });
-        listened.push(...res.items.map(recordToSong));
+        const res = await pb.collection('songs').getList(1, batchSize, { filter: filters });
+        recentListened.push(...res.items.map(recordToSong));
       }
     }
 
-    // Genres et auteurs préférés
+    // Genre le plus écouté sur 3 jours
     const genreCount = new Map<string, number>();
-    const authorCount = new Map<string, number>();
-    listened.forEach((s) => {
-      if (s.genre) genreCount.set(s.genre, (genreCount.get(s.genre) ?? 0) + 1);
-      if (s.author) authorCount.set(s.author, (authorCount.get(s.author) ?? 0) + 1);
+    // On compte chaque écoute (pas juste unique) pour le poids réel
+    for (const h of historyRes.items) {
+      const song = recentListened.find(s => s.id === h.song_id);
+      if (song?.genre) {
+        genreCount.set(song.genre, (genreCount.get(song.genre) ?? 0) + 1);
+      }
+    }
+
+    const topGenre = [...genreCount.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] ?? null;
+
+    // Fallback si pas assez d'historique récent → top populaires
+    if (recentSongIds.length < 3 || !topGenre) {
+      const res = await pb.collection('songs').getList(1, 20, { sort: '-play_count' });
+      return { songs: res.items.map(recordToSong), genre: null };
+    }
+
+    // Charge les songs du genre dominant
+    const genreRes = await pb.collection('songs').getList(1, 100, {
+      filter: `genre = "${topGenre.replace(/"/g, '')}"`,
+      sort: '-play_count',
     });
-    const topGenres = [...genreCount.entries()].sort((a, b) => b[1] - a[1]).slice(0, 3).map((e) => e[0]);
+    const genreSongs = genreRes.items.map(recordToSong);
 
-    // Découvertes : titres jamais écoutés, dans les genres préférés
-    let discovery: Song[] = [];
-    if (topGenres.length > 0) {
-      const genreFilters = topGenres.map(g => `genre = "${g}"`).join(' || ');
-      const res = await pb.collection('songs').getList(1, 60, {
-        filter: genreFilters,
-        sort: '-play_count',
-      });
-      discovery = res.items.map(recordToSong).filter((s) => !songIds.includes(s.id));
-    }
-
-    // Si pas assez d'historique → top 20 populaires
-    if (listened.length < 5 && discovery.length < 5) {
-      const res = await pb.collection('songs').getList(1, 20, {
-        sort: '-play_count',
-      });
-      return res.items.map(recordToSong);
-    }
-
-    // Mix : 10 favoris + 10 découvertes, mélangés avec seed quotidien
     const seed = new Date().toISOString().slice(0, 10);
-    const favs = shuffleSeeded(listened.slice(0, 30), seed + ':f').slice(0, 10);
-    const news = shuffleSeeded(discovery, seed + ':n').slice(0, 10);
-    return shuffleSeeded([...favs, ...news], seed);
+    const alreadyHeard = genreSongs.filter(s => recentSongIds.includes(s.id));
+    const fresh = genreSongs.filter(s => !recentSongIds.includes(s.id));
+
+    const favs = shuffleSeeded(alreadyHeard, seed + ':f').slice(0, 10);
+    const news = shuffleSeeded(fresh, seed + ':n').slice(0, 10);
+    const mix = shuffleSeeded([...favs, ...news], seed);
+
+    return { songs: mix, genre: topGenre };
   } catch (err) {
     console.error('Daily mix error:', err);
-    return [];
+    return { songs: [], genre: null };
   }
 }
 

@@ -1,12 +1,16 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
-import { avatarUrl } from '@/lib/storage';
+import { avatarUrl, songAudioUrl, songCoverUrl } from '@/lib/storage';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
-import { ArrowLeft, Camera, User, Check } from 'lucide-react';
+import { ArrowLeft, Camera, User, Check, Pin, Play, Pause, Search, X } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+import { pb } from '@/lib/pocketbase';
+import type { Song } from '@/types/music';
+
+const fmtTime = (s: number) => s < 60 ? `${s}s` : `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
 
 interface Props { onBack: () => void }
 
@@ -22,6 +26,18 @@ export default function ProfileEdit({ onBack }: Props) {
   const [submitting, setSubmitting] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
 
+  // Pinned track state
+  const [userSongs, setUserSongs] = useState<Song[]>([]);
+  const [songSearch, setSongSearch] = useState('');
+  const [pinnedSong, setPinnedSong] = useState<Song | null>(null);
+  const [pinnedStart, setPinnedStart] = useState(0);
+  const [pinnedEnd, setPinnedEnd] = useState(20);
+  const [clipDuration, setClipDuration] = useState(0);
+  const [previewPlaying, setPreviewPlaying] = useState(false);
+  const previewAudioRef = useRef<HTMLAudioElement | null>(null);
+  const previewRafRef = useRef<number>(0);
+  const [previewProgress, setPreviewProgress] = useState(0);
+
   useEffect(() => {
     if (!profile) return;
     setPseudo(profile.pseudo ?? '');
@@ -29,6 +45,78 @@ export default function ProfileEdit({ onBack }: Props) {
     setLastName(profile.last_name ?? '');
     setBio(profile.bio ?? '');
   }, [profile]);
+
+  // Load user songs + existing pinned
+  useEffect(() => {
+    if (!authUser) return;
+    pb.collection('songs').getList(1, 200, { filter: `uploaded_by = "${authUser.id}"`, sort: '-created', requestKey: null })
+      .then((res) => {
+        const songs: Song[] = res.items.map((r: any) => ({
+          id: r.id, title: r.title || '', author: r.author || '', audio: r.audio || '',
+          cover: r.cover || null, audio_url: r.audio_url || '',
+          cover_url: r.cover_url || null, video_url: r.video_url || null, genre: r.genre || null,
+          uploaded_by: r.uploaded_by || '', duration: r.duration || 0, play_count: r.play_count ?? 0,
+          weekly_play_count: r.weekly_play_count ?? 0, likes_count: r.likes_count ?? 0,
+          created_at: r.created, updated_at: r.updated,
+          collectionId: r.collectionId, collectionName: r.collectionName,
+        }));
+        setUserSongs(songs);
+        if (profile?.pinned_song_id) {
+          const existing = songs.find((s) => s.id === profile.pinned_song_id);
+          if (existing) {
+            setPinnedSong(existing);
+            const s = profile.pinned_start ?? 0;
+            const e = profile.pinned_end ?? Math.min(20, existing.duration || 20);
+            setPinnedStart(s);
+            setPinnedEnd(e);
+          }
+        }
+      }).catch(() => {});
+  }, [authUser, profile]);
+
+  // Load clip duration when pinned song changes
+  useEffect(() => {
+    if (!pinnedSong) { setClipDuration(0); return; }
+    const url = songAudioUrl(pinnedSong);
+    const a = new Audio(url);
+    a.addEventListener('loadedmetadata', () => {
+      const dur = Math.floor(a.duration);
+      setClipDuration(dur);
+      setPinnedStart((s) => Math.min(s, Math.max(0, dur - 1)));
+      setPinnedEnd((e) => Math.min(e, dur));
+    });
+    a.load();
+  }, [pinnedSong]);
+
+  const stopPreview = useCallback(() => {
+    if (previewAudioRef.current) previewAudioRef.current.pause();
+    cancelAnimationFrame(previewRafRef.current);
+    setPreviewPlaying(false);
+    setPreviewProgress(0);
+  }, []);
+
+  const togglePreview = useCallback(() => {
+    if (!pinnedSong) return;
+    if (previewPlaying) { stopPreview(); return; }
+    if (!previewAudioRef.current) previewAudioRef.current = new Audio();
+    const a = previewAudioRef.current;
+    const url = songAudioUrl(pinnedSong);
+    if (a.src !== url) a.src = url;
+    a.currentTime = pinnedStart;
+    const dur = pinnedEnd - pinnedStart;
+    const tick = () => {
+      const elapsed = a.currentTime - pinnedStart;
+      if (elapsed >= dur || a.currentTime >= pinnedEnd) { stopPreview(); return; }
+      setPreviewProgress(elapsed / dur);
+      previewRafRef.current = requestAnimationFrame(tick);
+    };
+    a.play().then(() => { setPreviewPlaying(true); previewRafRef.current = requestAnimationFrame(tick); }).catch(() => {});
+  }, [pinnedSong, pinnedStart, pinnedEnd, previewPlaying, stopPreview]);
+
+  // Stop preview when range changes
+  useEffect(() => { stopPreview(); }, [pinnedStart, pinnedEnd, stopPreview]);
+
+  useEffect(() => () => { stopPreview(); }, [stopPreview]);
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -39,7 +127,7 @@ export default function ProfileEdit({ onBack }: Props) {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!authUser) return;
+    if (!authUser || !profile) return;
     setSubmitting(true);
     try {
       await updateProfile(
@@ -51,6 +139,11 @@ export default function ProfileEdit({ onBack }: Props) {
         },
         avatar ?? undefined,
       );
+      // Save pinned track separately (extra fields not in updateProfile)
+      await pb.collection('profiles').update(profile.id, {
+        pinned_song_id: pinnedSong?.id ?? null,
+        pinned_start: pinnedSong ? pinnedStart : null,
+      });
       toast({ title: 'Profil mis à jour' });
       onBack();
     } catch (err: any) {
@@ -168,6 +261,108 @@ export default function ProfileEdit({ onBack }: Props) {
               className="resize-none border-white/10 bg-white/[0.05] text-foreground placeholder:text-muted-foreground/40 focus:border-primary/50"
             />
           </Field>
+
+          {/* Pinned track */}
+          <div className="space-y-3 pt-1">
+            <div className="flex items-center gap-2">
+              <Pin className="h-3.5 w-3.5 text-primary" />
+              <label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Titre épinglé</label>
+              {pinnedSong && (
+                <button type="button" onClick={() => { setPinnedSong(null); stopPreview(); }}
+                  className="ml-auto flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground">
+                  <X className="h-3 w-3" />Retirer
+                </button>
+              )}
+            </div>
+
+            {/* Song search */}
+            {!pinnedSong && (
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+                <Input
+                  value={songSearch}
+                  onChange={(e) => setSongSearch(e.target.value)}
+                  placeholder="Chercher parmi tes morceaux…"
+                  className="pl-8 h-10 border-white/10 bg-white/[0.05] text-foreground placeholder:text-muted-foreground/40 focus:border-primary/50"
+                />
+                {songSearch && (
+                  <div className="mt-1 rounded-xl border border-white/10 bg-card overflow-hidden max-h-52 overflow-y-auto">
+                    {userSongs.filter((s) => s.title.toLowerCase().includes(songSearch.toLowerCase())).map((s) => (
+                      <button
+                        key={s.id}
+                        type="button"
+                        onClick={() => { setPinnedSong(s); setSongSearch(''); setPinnedStart(0); setPinnedEnd(Math.min(20, s.duration || 20)); }}
+                        className="flex w-full items-center gap-3 px-3 py-2.5 hover:bg-white/[0.06] text-left"
+                      >
+                        {songCoverUrl(s) && <img src={songCoverUrl(s)} alt="" className="h-9 w-9 rounded-lg object-cover shrink-0" />}
+                        <div className="min-w-0">
+                          <p className="text-sm font-medium truncate">{s.title}</p>
+                          <p className="text-xs text-muted-foreground truncate">{s.author}</p>
+                        </div>
+                      </button>
+                    ))}
+                    {userSongs.filter((s) => s.title.toLowerCase().includes(songSearch.toLowerCase())).length === 0 && (
+                      <p className="px-3 py-3 text-xs text-muted-foreground">Aucun résultat</p>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Range editor */}
+            {pinnedSong && clipDuration > 0 && (
+              <div className="rounded-xl border border-white/10 bg-white/[0.03] p-4 space-y-4">
+                {/* Song preview header */}
+                <div className="flex items-center gap-3">
+                  {songCoverUrl(pinnedSong) && (
+                    <img src={songCoverUrl(pinnedSong)} alt="" className="h-11 w-11 rounded-lg object-cover shrink-0" />
+                  )}
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-semibold truncate">{pinnedSong.title}</p>
+                    <p className="text-xs text-muted-foreground">{pinnedSong.author}</p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={togglePreview}
+                    className={cn(
+                      'flex h-9 w-9 shrink-0 items-center justify-center rounded-full transition-colors',
+                      previewPlaying ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground hover:text-foreground'
+                    )}
+                  >
+                    {previewPlaying ? <Pause className="h-4 w-4" /> : <Play className="h-4 w-4 translate-x-0.5" />}
+                  </button>
+                </div>
+
+                {/* Preview progress bar */}
+                {previewPlaying && (
+                  <div className="h-1 rounded-full bg-white/10 overflow-hidden">
+                    <div className="h-full bg-primary rounded-full transition-all" style={{ width: `${previewProgress * 100}%` }} />
+                  </div>
+                )}
+
+                {/* Slider début */}
+                <div className="space-y-2">
+                  <div className="flex justify-between text-[10px] text-muted-foreground">
+                    <span>Démarrer à</span>
+                    <span>{fmtTime(pinnedStart)}</span>
+                  </div>
+                  <input
+                    type="range" min={0} max={Math.max(0, clipDuration - 1)} step={1}
+                    value={pinnedStart}
+                    onChange={(e) => setPinnedStart(Number(e.target.value))}
+                    className="w-full accent-primary"
+                  />
+                  <p className="text-[10px] text-center text-muted-foreground">
+                    La musique démarrera à {fmtTime(pinnedStart)}
+                  </p>
+                </div>
+              </div>
+            )}
+
+            {pinnedSong && clipDuration === 0 && (
+              <p className="text-xs text-muted-foreground">Chargement de l'audio…</p>
+            )}
+          </div>
         </div>
       </form>
     </div>

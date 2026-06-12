@@ -12,7 +12,7 @@ import { toast } from 'sonner';
 import { avatarUrl, songCoverUrl } from '@/lib/storage';
 import type { Profile, Song } from '@/types/music';
 
-function generate4DigitCode() { return String(Math.floor(1000 + Math.random() * 9000)); }
+function generateSessionCode() { return String(Math.floor(10000000 + Math.random() * 90000000)); }
 
 const pbGetFirst = async (collection: string, filter: string) => {
   try { const r = await pb.collection(collection).getList(1, 1, { filter, requestKey: null }); return r.items[0] || null; } catch { return null; }
@@ -33,8 +33,8 @@ const fetchProfiles = async (ids: string[]) => {
 export default function ListenTogether() {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
-  const { user } = useAuth();
-  const { activeSession, isSessionHost, allParticipantsReady, setActiveSession, refreshSession, stopAudio, currentSong } = usePlayer();
+  const { user, profile } = useAuth();
+  const { activeSession, isSessionHost, setActiveSession, refreshSession, stopAudio, currentSong } = usePlayer();
   const [host, setHost] = useState<Profile | null>(null);
   const [hostSong, setHostSong] = useState<Song | null>(null);
   const [participantsProfiles, setParticipantsProfiles] = useState<Profile[]>([]);
@@ -63,13 +63,11 @@ export default function ListenTogether() {
       const s = await pbGetFirst('listen_sessions', `code = "${code}" && is_active = true`);
       if (!s) { toast.error('Session introuvable'); return; }
       const participants = s.participants as string[] || [];
-      const ready = s.ready_participants as string[] || [];
       if (participants.includes(user.id)) { toast.info('Tu es déjà dans cette session'); return; }
       await pb.collection('listen_sessions').update(s.id, {
         participants: [...participants, user.id],
-        ready_participants: [...ready, user.id],
       });
-      setActiveSession({ id: s.id, host_id: s.host_id, song_id: s.song_id, current_time_seconds: s.current_time_seconds, is_playing: s.is_playing, participants: [...participants, user.id], ready_participants: [...ready, user.id], is_active: true, code: s.code } as ListenSessionRow);
+      setActiveSession({ id: s.id, host_id: s.host_id, song_id: s.song_id, position: s.position ?? 0, is_playing: s.is_playing, participants: [...participants, user.id], is_active: true, code: s.code } as ListenSessionRow);
       refreshSession();
       navigate('/listen-together');
     } catch { toast.error('Code invalide'); }
@@ -78,12 +76,12 @@ export default function ListenTogether() {
   const createSession = async () => {
     if (!user) return;
     try {
-      const code = generate4DigitCode();
+      const code = generateSessionCode();
       const newS = await pb.collection('listen_sessions').create({
-        host_id: user.id, code, is_active: true, is_playing: false, current_time_seconds: 0,
-        participants: [user.id], ready_participants: [user.id],
+        host_id: user.id, code, is_active: true, is_playing: false, position: 0,
+        participants: [user.id],
       });
-      setActiveSession({ id: newS.id, host_id: user.id, song_id: null, current_time_seconds: 0, is_playing: false, participants: [user.id], ready_participants: [user.id], is_active: true, code } as ListenSessionRow);
+      setActiveSession({ id: newS.id, host_id: user.id, song_id: null, position: 0, is_playing: false, participants: [user.id], is_active: true, code } as ListenSessionRow);
       refreshSession();
       toast.success('Session créée ! Code : ' + code);
     } catch (e: any) { toast.error(e.message); }
@@ -98,8 +96,7 @@ export default function ListenTogether() {
     if (!activeSession || !user) return;
     try {
       const participants = (activeSession.participants || []).filter((p: string) => p !== user.id);
-      const ready = (activeSession.ready_participants || []).filter((p: string) => p !== user.id);
-      await pb.collection('listen_sessions').update(activeSession.id, { participants, ready_participants: ready });
+      await pb.collection('listen_sessions').update(activeSession.id, { participants });
       setActiveSession(null);
       stopAudio();
       navigate('/home');
@@ -109,12 +106,13 @@ export default function ListenTogether() {
   const inviteFriend = async (friendId: string) => {
     if (!user) return;
     try {
-      await pb.collection('notifications').create({ recipient_id: friendId, type: 'session_invite', title: `${user.email} t'invite à une session`, body: `Rejoins-le sur Jux-Music !`, data: { code: activeSession?.code } });
+      const senderName = profile?.pseudo || user.email;
+      await pb.collection('notifications').create({ recipient_id: friendId, type: 'session_invite', title: `${senderName} t'invite à écouter ensemble`, body: `Code : ${activeSession?.code}`, data: { code: activeSession?.code } });
       toast.success('Invitation envoyée');
     } catch {}
   };
 
-  const codeParam = searchParams.code;
+  const codeParam = searchParams.get('code');
   useEffect(() => { if (codeParam) { doJoin(codeParam); navigate('/listen-together', { replace: true }); } }, [codeParam]);
   useEffect(() => { if (user) fetchProfiles(([] as any)).then(() => {}); loadHostInfo; }, [user]);
 
@@ -178,7 +176,7 @@ export default function ListenTogether() {
           <Button className="w-full" onClick={createSession}><Radio className="h-4 w-4 mr-2" />Créer une session</Button>
           <div className="relative"><div className="absolute inset-0 flex items-center"><span className="w-full border-t" /></div><div className="relative flex justify-center text-xs uppercase"><span className="bg-background px-2 text-muted-foreground">ou</span></div></div>
           <div className="flex gap-2">
-            <Input placeholder="Code à 4 chiffres" value={joinCode} onChange={(e) => setJoinCode(e.target.value)} maxLength={4} className="text-center text-lg tracking-widest" />
+            <Input placeholder="Code à 8 chiffres" value={joinCode} onChange={(e) => setJoinCode(e.target.value)} maxLength={8} className="text-center text-lg tracking-widest" />
             <Button onClick={() => doJoin(joinCode)}>Rejoindre</Button>
           </div>
         </div>

@@ -1,208 +1,382 @@
-﻿import { useAuth } from '@/contexts/AuthContext';
+import { useAuth } from '@/contexts/AuthContext';
 import { Button } from '@/components/ui/button';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
-import { Pencil, Upload as UploadIcon, LogOut, Sparkles, Award, Music2, Settings, PlusCircle, History, Flame, ListMusic } from 'lucide-react';
+import {
+  Pencil, Sparkles, Trophy, Music2, Settings, PlusCircle, History,
+  Flame, Repeat2, QrCode, ChevronRight, Headphones, ListMusic,
+} from 'lucide-react';
 import { avatarUrl, songCoverUrl } from '@/lib/storage';
 import { useEffect, useState } from 'react';
-import { getBadges, type Badge } from '@/lib/badges';
+import { getRankProgress, type RankProgress } from '@/lib/ranks';
+import RankBadge from '@/components/RankBadge';
+import ProfileBadge from '@/components/ProfileBadge';
 import { getUserStats } from '@/lib/streaks';
 import { pb } from '@/lib/pocketbase';
 import { usePlayer } from '@/contexts/PlayerContext';
 import SongCard from '@/components/SongCard';
 import NativeAppSettings from '@/components/NativeAppSettings';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import type { Song } from '@/types/music';
-import ThemeSelectorSheet from '@/components/ThemeSelectorSheet';
+import { recordToSong } from '@/lib/pbUtils';
+import PinnedTrack from '@/components/PinnedTrack';
 import ProfileQrCode from '@/components/ProfileQrCode';
-import TransitionSettings from '@/components/TransitionSettings';
 import SettingsSheet from '@/components/SettingsSheet';
+import { cn } from '@/lib/utils';
 
-function recordToSong(r: any): Song {
-  return {
-    id: r.id, title: r.title || '', author: r.author || '', audio: r.audio || '',
-    cover: r.cover || null, audio_url: r.audio_url || '',
-    cover_url: r.cover_url || null, video_url: r.video_url || null, genre: r.genre || null,
-    uploaded_by: r.uploaded_by || '', duration: r.duration || 0, play_count: r.play_count ?? 0,
-    weekly_play_count: r.weekly_play_count ?? 0, likes_count: r.likes_count ?? 0,
-    created_at: r.created, updated_at: r.updated,
-    collectionId: r.collectionId, collectionName: r.collectionName,
-  };
-}
+
+type Tab = 'tracks' | 'reposts' | 'history';
 
 export default function ProfilePage() {
-  const { profile, user, logout } = useAuth();
+  const { profile, user } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
   const { playSongFromList } = usePlayer();
 
-  const [badges, setBadges] = useState<Badge[]>([]);
+  const [rank, setRank] = useState<RankProgress | null>(null);
   const [songs, setSongs] = useState<Song[]>([]);
   const [counts, setCounts] = useState({ followers: 0, following: 0 });
   const [streak, setStreak] = useState(0);
   const [totalListens, setTotalListens] = useState(0);
   const [recentHistory, setRecentHistory] = useState<{ song: Song; listenedAt: string }[]>([]);
-  const [showSettings, setShowSettings] = useState(false);
+  const [repostedSongs, setRepostedSongs] = useState<Song[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [tab, setTab] = useState<Tab>('tracks');
 
   useEffect(() => {
     if (!user) return;
-    // Réinitialiser les songs avant le chargement
     setSongs([]);
+    setLoading(true);
 
-    getBadges(user.id).then(setBadges);
+    getRankProgress(user.id).then(setRank);
     getUserStats(user.id).then((s: any) => {
       setStreak(s?.current_streak ?? 0);
       setTotalListens(s?.total_listens ?? 0);
     });
 
     (async () => {
-      const [songRes, followersRes, followingRes, historyRes] = await Promise.all([
-        pb.collection('songs').getList(1, 100, { filter: `uploaded_by = "${user.id}"`, sort: '-created', requestKey: null }),
-        pb.collection('follows').getList(1, 1, { filter: `following_id = "${user.id}" && status = "accepted"`, requestKey: null }),
-        pb.collection('follows').getList(1, 1, { filter: `follower_id = "${user.id}" && status = "accepted"`, requestKey: null }),
-        pb.collection('listen_history').getList(1, 10, { filter: `user_id = "${user.id}"`, sort: '-listened_at', requestKey: null }),
-      ]);
-      setSongs(songRes.items.map(recordToSong));
-      setCounts({ followers: followersRes.totalItems, following: followingRes.totalItems });
+      try {
+        const [songRes, followersRes, followingRes, historyRes, repostsRes] = await Promise.all([
+          pb.collection('songs').getList(1, 100, { filter: `uploaded_by = "${user.id}"`, sort: '-created', requestKey: null }),
+          pb.collection('follows').getList(1, 1, { filter: `following_id = "${user.id}" && status = "accepted"`, requestKey: null }),
+          pb.collection('follows').getList(1, 1, { filter: `follower_id = "${user.id}" && status = "accepted"`, requestKey: null }),
+          pb.collection('listen_history').getList(1, 10, { filter: `user_id = "${user.id}"`, sort: '-listened_at', requestKey: null }),
+          pb.collection('repost').getList(1, 50, { filter: `user_id = "${user.id}"`, sort: '-created', requestKey: null }),
+        ]);
+        setSongs(songRes.items.map(recordToSong));
+        setCounts({ followers: followersRes.totalItems, following: followingRes.totalItems });
 
-      if (historyRes.items.length > 0) {
-        const songIds = [...new Set(historyRes.items.map((r: any) => r.song_id))].filter(Boolean) as string[];
-        const songMap: Record<string, Song> = {};
-        if (songIds.length > 0) {
-          const filters = songIds.map((sid) => `id = "${sid}"`).join(' || ');
-          const songRes2 = await pb.collection('songs').getList(1, 50, { filter: filters, requestKey: null });
-          for (const r of songRes2.items) songMap[r.id] = recordToSong(r);
+        if (repostsRes.items.length > 0) {
+          const repostSongIds = [...new Set(repostsRes.items.map((r: any) => r.song_id))].filter(Boolean) as string[];
+          const filter = repostSongIds.map((id) => `id = "${id}"`).join(' || ');
+          const rSongs = await pb.collection('songs').getList(1, 50, { filter, requestKey: null });
+          setRepostedSongs(rSongs.items.map(recordToSong));
+        } else {
+          setRepostedSongs([]);
         }
-        setRecentHistory(
-          historyRes.items
-            .filter((r: any) => songMap[r.song_id])
-            .map((r: any) => ({ song: songMap[r.song_id], listenedAt: r.listened_at }))
-        );
+
+        if (historyRes.items.length > 0) {
+          const songIds = [...new Set(historyRes.items.map((r: any) => r.song_id))].filter(Boolean) as string[];
+          const songMap: Record<string, Song> = {};
+          if (songIds.length > 0) {
+            const filters = songIds.map((sid) => `id = "${sid}"`).join(' || ');
+            const songRes2 = await pb.collection('songs').getList(1, 50, { filter: filters, requestKey: null });
+            for (const r of songRes2.items) songMap[r.id] = recordToSong(r);
+          }
+          setRecentHistory(
+            historyRes.items
+              .filter((r: any) => songMap[r.song_id])
+              .map((r: any) => ({ song: songMap[r.song_id], listenedAt: r.listened_at }))
+          );
+        } else {
+          setRecentHistory([]);
+        }
+      } finally {
+        setLoading(false);
       }
     })();
   }, [user, location.pathname]);
 
-  const unlocked = badges.filter((b) => b.unlocked);
+  const tabs: { id: Tab; label: string; icon: typeof Music2; count: number }[] = [
+    { id: 'tracks', label: 'Morceaux', icon: Music2, count: songs.length },
+    { id: 'reposts', label: 'Reposts', icon: Repeat2, count: repostedSongs.length },
+    { id: 'history', label: 'Récents', icon: History, count: recentHistory.length },
+  ];
 
   return (
-    <div className="min-h-screen pb-32">
-      <header className="px-6 pt-6" style={{ animation: 'fadeSlideUp 0.6s cubic-bezier(0.16,1,0.3,1) both' }}>
-        <div className="flex items-start justify-between">
-          <div className="flex items-center gap-5 flex-1">
-            <Avatar className="h-20 w-20 ring-2 ring-primary/30">
-              <AvatarImage src={profile ? avatarUrl(profile) : ''} />
-              <AvatarFallback>{profile?.pseudo?.[0]?.toUpperCase() ?? '?'}</AvatarFallback>
-            </Avatar>
-            <div className="grid flex-1 grid-cols-3 gap-2 text-center">
-              <div><div className="text-lg font-bold">{songs.length}</div><div className="text-xs text-muted-foreground">Sons</div></div>
-              <div><div className="text-lg font-bold">{counts.followers}</div><div className="text-xs text-muted-foreground">Abonnés</div></div>
-              <div><div className="text-lg font-bold">{counts.following}</div><div className="text-xs text-muted-foreground">Abonnements</div></div>
+    <div className="relative min-h-screen pb-32">
+      {/* Halo héro en haut de page */}
+      <div className="pointer-events-none absolute inset-x-0 top-0 h-72 bg-gradient-hero" />
+
+      {/* ── Header / Identité ── */}
+      <header className="relative px-5 pt-6 animate-fade-slide-up">
+        <div className="flex items-center justify-between mb-5">
+          <h1 className="text-2xl font-extrabold tracking-tight">Profil</h1>
+          <div className="flex items-center gap-1">
+            <ProfileQrCode
+              trigger={
+                <Button size="icon" variant="ghost" aria-label="Partager mon profil" className="text-muted-foreground hover:text-foreground">
+                  <QrCode className="h-5 w-5" />
+                </Button>
+              }
+            />
+            <SettingsSheet
+              trigger={
+                <Button size="icon" variant="ghost" aria-label="Paramètres" className="text-muted-foreground hover:text-foreground">
+                  <Settings className="h-5 w-5" />
+                </Button>
+              }
+            />
+          </div>
+        </div>
+
+        <div className="flex items-center gap-5">
+          {/* Avatar avec anneau dégradé */}
+          <div className="relative shrink-0">
+            <div className="rounded-full bg-gradient-primary p-[3px] shadow-elegant-sm">
+              <Avatar className="h-[88px] w-[88px] border-[3px] border-background">
+                <AvatarImage src={profile ? avatarUrl(profile) : ''} />
+                <AvatarFallback className="text-2xl font-bold">{profile?.pseudo?.[0]?.toUpperCase() ?? '?'}</AvatarFallback>
+              </Avatar>
             </div>
+            {streak >= 3 && (
+              <div className="absolute -bottom-1 -right-1 flex items-center gap-0.5 rounded-full bg-background px-2 py-0.5 shadow-soft border border-border/60">
+                <Flame className="h-3.5 w-3.5 text-orange-400" />
+                <span className="text-xs font-bold text-orange-400">{streak}</span>
+              </div>
+            )}
+          </div>
+
+          {/* Stats */}
+          <div className="grid flex-1 grid-cols-3 overflow-hidden rounded-2xl border border-border/50 bg-card/50">
+            {[
+              { value: songs.length, label: 'Sons' },
+              { value: counts.followers, label: 'Abonnés' },
+              { value: counts.following, label: 'Suivis' },
+            ].map((s, i) => (
+              <button
+                key={s.label}
+                onClick={() => navigate('/social')}
+                className={cn(
+                  'flex flex-col items-center justify-center py-3 transition-colors hover:bg-card',
+                  i > 0 && 'border-l border-border/50'
+                )}
+              >
+                <span className="text-lg font-extrabold leading-none">{loading ? '–' : s.value}</span>
+                <span className="mt-1 text-[10px] font-medium text-muted-foreground">{s.label}</span>
+              </button>
+            ))}
           </div>
         </div>
 
         <div className="mt-4">
-          <h1 className="text-xl font-bold">{profile?.pseudo ?? 'Utilisateur'}</h1>
-          {profile?.bio && <p className="text-sm text-muted-foreground mt-1">{profile.bio}</p>}
+          <div className="flex items-center gap-2">
+            <h2 className="text-xl font-bold leading-tight">{profile?.pseudo ?? 'Utilisateur'}</h2>
+            {rank && <RankBadge tier={rank.tier} />}
+          </div>
+          {profile?.badge && <ProfileBadge label={profile.badge} className="mt-1.5" />}
+          {profile?.bio && <p className="mt-1 text-sm leading-relaxed text-muted-foreground">{profile.bio}</p>}
         </div>
 
+        {/* Actions */}
         <div className="mt-4 flex gap-2">
-          <Button size="sm" className="flex-1" onClick={() => navigate('/profile-edit')}><Pencil className="h-4 w-4 mr-1" />Modifier</Button>
-          <Button size="sm" variant="outline" onClick={() => navigate('/upload')}><PlusCircle className="h-4 w-4 mr-1" />Publier</Button>
-          <SettingsSheet
-            trigger={
-              <Button size="sm" variant="outline" aria-label="Paramètres">
-                <Settings className="h-4 w-4" />
-              </Button>
-            }
-          />
+          <Button size="sm" className="flex-1 rounded-xl bg-gradient-primary font-semibold shadow-elegant-sm" onClick={() => navigate('/profile-edit')}>
+            <Pencil className="mr-1.5 h-4 w-4" />Modifier
+          </Button>
+          {profile?.badge && (
+            <Button size="sm" variant="outline" className="flex-1 rounded-xl font-semibold" onClick={() => navigate('/upload')}>
+              <PlusCircle className="mr-1.5 h-4 w-4" />Publier
+            </Button>
+          )}
         </div>
       </header>
 
-      {(streak > 0 || totalListens > 0) && (
-        <section className="px-6 mt-4">
-          <div className="flex gap-3">
-            {streak > 0 && (
-              <div className="flex-1 flex flex-col items-center gap-1 rounded-2xl bg-card/60 py-3 px-2 border border-border/50">
-                <Flame className="h-5 w-5 text-orange-400" />
-                <span className="text-lg font-bold">{streak}</span>
-                <span className="text-[10px] text-muted-foreground">Série en cours</span>
-              </div>
-            )}
-            {totalListens > 0 && (
-              <div className="flex-1 flex flex-col items-center gap-1 rounded-2xl bg-card/60 py-3 px-2 border border-border/50">
-                <Music2 className="h-5 w-5 text-primary" />
-                <span className="text-lg font-bold">{totalListens}</span>
-                <span className="text-[10px] text-muted-foreground">Écoutes totales</span>
-              </div>
-            )}
-            <button
-              onClick={() => navigate('/wrapped')}
-              className="flex-1 flex flex-col items-center gap-1 rounded-2xl bg-gradient-primary py-3 px-2"
-            >
-              <Sparkles className="h-5 w-5 text-primary-foreground" />
-              <span className="text-lg font-bold text-primary-foreground">Wrapped</span>
-              <span className="text-[10px] text-primary-foreground/70">Mes stats</span>
-            </button>
-          </div>
+      {/* ── Titre épinglé ── */}
+      {profile?.pinned_song_id && (
+        <section className="relative px-5 mt-5 animate-fade-slide-up delay-1">
+          <PinnedTrack songId={profile.pinned_song_id} start={profile.pinned_start ?? 0} />
         </section>
       )}
 
-      {unlocked.length > 0 && (
-        <section className="px-6 mt-6">
-          <h2 className="text-lg font-bold mb-3 flex items-center gap-2"><Award className="h-5 w-5 text-primary" />Badges ({unlocked.length}/{badges.length})</h2>
-          <div className="flex gap-3 overflow-x-auto pb-2 scrollbar-hide">
-            {badges.map((b) => (
-              <div key={b.id} className={`flex flex-col items-center gap-1 flex-shrink-0 ${b.unlocked ? 'opacity-100' : 'opacity-30'}`}>
-                <div className={`flex h-14 w-14 items-center justify-center rounded-full text-2xl ${b.unlocked ? 'bg-gradient-primary' : 'bg-secondary'}`}>
-                  {b.emoji}
-                </div>
-                <span className="text-[10px] text-center text-muted-foreground max-w-[72px] truncate">{b.name}</span>
+      {/* ── Stats d'écoute + Wrapped ── */}
+      <section className="relative px-5 mt-5 animate-fade-slide-up delay-2">
+        {(streak > 0 || totalListens > 0) && (
+          <div className="mb-3 grid grid-cols-2 gap-3">
+            <div className="flex items-center gap-3 rounded-2xl border border-border/50 bg-card/60 p-3.5">
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-orange-400/15">
+                <Flame className="h-5 w-5 text-orange-400" />
+              </div>
+              <div className="min-w-0">
+                <div className="text-lg font-extrabold leading-none">{streak}</div>
+                <div className="mt-1 truncate text-[11px] text-muted-foreground">Jours de série</div>
+              </div>
+            </div>
+            <div className="flex items-center gap-3 rounded-2xl border border-border/50 bg-card/60 p-3.5">
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary/15">
+                <Headphones className="h-5 w-5 text-primary" />
+              </div>
+              <div className="min-w-0">
+                <div className="text-lg font-extrabold leading-none">{totalListens}</div>
+                <div className="mt-1 truncate text-[11px] text-muted-foreground">Écoutes totales</div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        <button
+          onClick={() => navigate('/wrapped')}
+          className="group flex w-full items-center gap-3 rounded-2xl bg-gradient-primary p-4 text-left shadow-elegant-sm transition-transform active:scale-[0.98]"
+        >
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-white/15">
+            <Sparkles className="h-5 w-5 text-primary-foreground" />
+          </div>
+          <div className="min-w-0 flex-1">
+            <div className="text-sm font-bold text-primary-foreground">Mon Wrapped</div>
+            <div className="text-[11px] text-primary-foreground/75">Découvre tes stats d'écoute</div>
+          </div>
+          <ChevronRight className="h-5 w-5 shrink-0 text-primary-foreground/70 transition-transform group-hover:translate-x-0.5" />
+        </button>
+      </section>
+
+      {/* ── Rang & Quêtes ── */}
+      {rank && (
+        <section className="relative px-5 mt-6 animate-fade-slide-up delay-3">
+          <button
+            onClick={() => navigate('/rank')}
+            className="group flex w-full items-center gap-3 rounded-2xl border border-border/50 bg-card/60 p-4 text-left transition-colors hover:bg-card active:scale-[0.98]"
+          >
+            <div
+              className={cn('flex h-12 w-12 shrink-0 items-center justify-center rounded-full text-2xl', rank.tier.ultimate && 'animate-pulse')}
+              style={{ backgroundColor: `${rank.tier.color}26`, border: `2px solid ${rank.tier.color}` }}
+            >
+              {rank.tier.emoji}
+            </div>
+            <div className="min-w-0 flex-1">
+              <div className="flex items-center gap-2">
+                <Trophy className="h-3.5 w-3.5 text-primary" />
+                <span className="text-sm font-bold" style={{ color: rank.tier.color }}>{rank.tier.label}</span>
+                <span className="text-[11px] font-semibold text-muted-foreground">Palier {rank.tier.index}/30</span>
+              </div>
+              <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-secondary">
+                <div
+                  className="h-full rounded-full transition-all"
+                  style={{ width: `${(rank.questsDone / rank.totalQuests) * 100}%`, backgroundColor: rank.tier.color }}
+                />
+              </div>
+              <div className="mt-1.5 text-[11px] text-muted-foreground">
+                {rank.questsDone}/{rank.totalQuests} quêtes accomplies
+              </div>
+            </div>
+            <ChevronRight className="h-5 w-5 shrink-0 text-muted-foreground transition-transform group-hover:translate-x-0.5" />
+          </button>
+        </section>
+      )}
+
+      {/* ── Contenu : onglets ── */}
+      <section className="relative px-5 mt-6 animate-fade-slide-up delay-4">
+        <div className="mb-4 flex rounded-2xl border border-border/50 bg-card/50 p-1">
+          {tabs.map((t) => (
+            <button
+              key={t.id}
+              onClick={() => setTab(t.id)}
+              className={cn(
+                'flex flex-1 items-center justify-center gap-1.5 rounded-xl py-2 text-xs font-semibold transition-colors',
+                tab === t.id ? 'bg-gradient-primary text-primary-foreground shadow-elegant-sm' : 'text-muted-foreground hover:text-foreground'
+              )}
+            >
+              <t.icon className="h-3.5 w-3.5" />
+              {t.label}
+              {t.count > 0 && (
+                <span className={cn(
+                  'rounded-full px-1.5 text-[10px] font-bold',
+                  tab === t.id ? 'bg-white/20' : 'bg-secondary'
+                )}>
+                  {t.count}
+                </span>
+              )}
+            </button>
+          ))}
+        </div>
+
+        {loading ? (
+          <div className="grid grid-cols-2 gap-3">
+            {Array.from({ length: 4 }).map((_, i) => (
+              <div key={i} className="space-y-2">
+                <div className="aspect-square w-full animate-pulse rounded-xl bg-secondary" />
+                <div className="h-3 w-3/4 animate-pulse rounded bg-secondary" />
+                <div className="h-2.5 w-1/2 animate-pulse rounded bg-secondary" />
               </div>
             ))}
           </div>
-        </section>
-      )}
-
-      {songs.length > 0 && (
-        <section className="px-6 mt-6">
-          <h2 className="text-lg font-bold mb-3 flex items-center gap-2"><Music2 className="h-5 w-5 text-primary" />Mes morceaux</h2>
-          <div className="grid grid-cols-2 gap-3">
-            {songs.map((s) => (<SongCard key={s.id} song={s} onPlay={() => playSongFromList(s, songs)} />))}
-          </div>
-        </section>
-      )}
-
-      {recentHistory.length > 0 && (
-        <section className="px-6 mt-6">
-          <div className="flex items-center justify-between mb-3">
-            <h2 className="text-lg font-bold flex items-center gap-2"><History className="h-5 w-5 text-primary" />Écoutes récentes</h2>
-            <button onClick={() => navigate('/favorites')} className="text-xs text-muted-foreground hover:text-foreground flex items-center gap-1">
-              <ListMusic className="h-3.5 w-3.5" /> Favoris
-            </button>
-          </div>
+        ) : tab === 'tracks' ? (
+          songs.length > 0 ? (
+            <div className="grid grid-cols-2 gap-3">
+              {songs.map((s) => (<SongCard key={s.id} song={s} onPlay={() => playSongFromList(s, songs)} />))}
+            </div>
+          ) : (
+            <EmptyState
+              icon={<Music2 className="h-6 w-6 text-primary" />}
+              title="Aucun morceau"
+              subtitle={profile?.badge ? "Publie ton premier son pour le voir ici." : "Seuls les membres avec le badge PDG de Jux Music peuvent publier."}
+              action={profile?.badge ? <Button size="sm" className="rounded-xl bg-gradient-primary" onClick={() => navigate('/upload')}><PlusCircle className="mr-1.5 h-4 w-4" />Publier un son</Button> : undefined}
+            />
+          )
+        ) : tab === 'reposts' ? (
+          repostedSongs.length > 0 ? (
+            <div className="grid grid-cols-2 gap-3">
+              {repostedSongs.map((s) => (<SongCard key={s.id} song={s} onPlay={() => playSongFromList(s, repostedSongs)} />))}
+            </div>
+          ) : (
+            <EmptyState
+              icon={<Repeat2 className="h-6 w-6 text-primary" />}
+              title="Aucune republication"
+              subtitle="Reposte les sons que tu aimes pour les partager."
+            />
+          )
+        ) : recentHistory.length > 0 ? (
           <div className="space-y-2">
+            <div className="flex justify-end">
+              <button onClick={() => navigate('/favorites')} className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground">
+                <ListMusic className="h-3.5 w-3.5" /> Mes favoris
+              </button>
+            </div>
             {recentHistory.map(({ song, listenedAt }, i) => (
               <button
                 key={`${song.id}-${i}`}
                 onClick={() => playSongFromList(song, recentHistory.map((h) => h.song))}
-                className="flex w-full items-center gap-3 rounded-xl bg-card/50 p-2 text-left hover:bg-card"
+                className="flex w-full items-center gap-3 rounded-xl border border-border/40 bg-card/50 p-2 text-left transition-colors hover:bg-card"
               >
-                <img src={songCoverUrl(song)} alt="" className="h-11 w-11 rounded-lg object-cover flex-shrink-0" />
+                <img src={songCoverUrl(song)} alt="" className="h-11 w-11 shrink-0 rounded-lg object-cover" />
                 <div className="min-w-0 flex-1">
                   <p className="truncate text-sm font-semibold">{song.title}</p>
                   <p className="truncate text-xs text-muted-foreground">{song.author}</p>
                 </div>
-                <span className="text-[10px] text-muted-foreground flex-shrink-0">
+                <span className="shrink-0 text-[10px] text-muted-foreground">
                   {new Date(listenedAt).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' })}
                 </span>
               </button>
             ))}
           </div>
-        </section>
-      )}
+        ) : (
+          <EmptyState
+            icon={<History className="h-6 w-6 text-primary" />}
+            title="Aucune écoute récente"
+            subtitle="Ton historique d'écoute apparaîtra ici."
+          />
+        )}
+      </section>
 
       <NativeAppSettings />
+    </div>
+  );
+}
+
+function EmptyState({ icon, title, subtitle, action }: { icon: React.ReactNode; title: string; subtitle: string; action?: React.ReactNode }) {
+  return (
+    <div className="flex flex-col items-center gap-2 rounded-2xl border border-dashed border-border/60 bg-card/30 px-6 py-10 text-center">
+      <div className="mb-1 flex h-12 w-12 items-center justify-center rounded-2xl bg-primary/10">{icon}</div>
+      <p className="text-sm font-bold">{title}</p>
+      <p className="text-xs text-muted-foreground">{subtitle}</p>
+      {action && <div className="mt-3">{action}</div>}
     </div>
   );
 }

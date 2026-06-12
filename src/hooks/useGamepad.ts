@@ -20,6 +20,25 @@ const FOCUSABLE_SEL = [
   '[tabindex]:not([tabindex="-1"])',
 ].join(', ');
 
+// ── Scroll target helper ──────────────────────────────────────────────────────
+
+function getScrollTarget(cx: number, cy: number): Element | null {
+  // Hide cursor temporarily so elementFromPoint sees what's below
+  const cursorEl = document.getElementById('gamepad-cursor');
+  if (cursorEl) cursorEl.style.visibility = 'hidden';
+  let el = document.elementFromPoint(cx, cy) as Element | null;
+  if (cursorEl) cursorEl.style.visibility = 'visible';
+
+  while (el && el !== document.documentElement) {
+    const style = window.getComputedStyle(el);
+    const overflowY = style.overflowY;
+    const canScroll = overflowY === 'auto' || overflowY === 'scroll';
+    if (canScroll && el.scrollHeight > el.clientHeight) return el;
+    el = el.parentElement;
+  }
+  return null;
+}
+
 // ── Spatial nav helpers ───────────────────────────────────────────────────────
 
 function getFocusables(): HTMLElement[] {
@@ -211,15 +230,19 @@ export function useGamepad() {
           hideCursor();
         }
 
-        // ── RIGHT STICK → scroll page ──────────────────────────────────
+        // ── RIGHT STICK → scroll (page ou conteneur actif) ────────────
         const rx = axes[2] ?? 0;
         const ry = axes[3] ?? 0;
 
         if (Math.abs(rx) > DEADZONE || Math.abs(ry) > DEADZONE) {
-          window.scrollBy(
-            Math.abs(rx) > DEADZONE ? rx * 14 : 0,
-            Math.abs(ry) > DEADZONE ? ry * 14 : 0,
-          );
+          const sdx = Math.abs(rx) > DEADZONE ? rx * 14 : 0;
+          const sdy = Math.abs(ry) > DEADZONE ? ry * 14 : 0;
+          const target = getScrollTarget(cursorPos.x, cursorPos.y);
+          if (target) {
+            target.scrollBy(sdx, sdy);
+          } else {
+            window.scrollBy(sdx, sdy);
+          }
         }
 
         // ── D-PAD → same spatial nav, discrete ────────────────────────

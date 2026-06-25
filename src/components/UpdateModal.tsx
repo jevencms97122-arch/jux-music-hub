@@ -47,7 +47,7 @@ export default function UpdateModal({ open, onClose, latestVersion }: UpdateModa
         <div className="mb-4 text-center">
           <h2 className="text-xl font-bold text-foreground">Mise à jour disponible</h2>
           <p className="mt-1 text-sm text-muted-foreground">
-            Une mise à jour est disponible pour Jux-Music Ver {latestVersion}
+            Une mise à jour est disponible pour Nexora Music Ver {latestVersion}
           </p>
         </div>
 

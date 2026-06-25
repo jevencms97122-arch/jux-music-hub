@@ -1,15 +1,16 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { pb } from '@/lib/pocketbase';
-import { songCoverUrl, avatarUrl } from '@/lib/storage';
+import { songCoverUrl, avatarUrl, songAudioUrl } from '@/lib/storage';
 import { usePlayer } from '@/contexts/PlayerContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { useReactiveBg } from '@/hooks/useReactiveBg';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import {
   Play, Pause, SkipBack, SkipForward, Shuffle, Repeat,
-  Volume2, ChevronDown, Music2, Wifi, WifiOff, AlertCircle, ListPlus, Gauge, Heart, MoreHorizontal, MessageSquare, ListMusic, Disc3, Repeat2
+  Volume2, ChevronDown, Music2, Wifi, WifiOff, AlertCircle, ListPlus, Gauge, Heart, MoreHorizontal, MessageSquare, ListMusic, Disc3, Repeat2, Share2, Download
 } from 'lucide-react';
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import CommentsModal from '@/components/CommentsModal';
 import { useNavigate } from 'react-router-dom';
 import type { Song } from '@/types/music';
@@ -51,6 +52,26 @@ export default function PlayerPage() {
   const [similarLoading, setSimilarLoading] = useState(false);
   const [similarTab, setSimilarTab] = useState<'genre' | 'author'>('genre');
   const [closing, setClosing] = useState(false);
+  const [shareUrl, setShareUrl] = useState<string | null>(null);
+
+  const shareSong = () => {
+    if (!currentSong) return;
+    const url = `${window.location.origin}/song/${currentSong.id}`;
+    setShareUrl(url);
+    setShowMenu(false);
+  };
+
+  const copyShareUrl = async (url: string) => {
+    try {
+      await navigator.clipboard.writeText(url);
+      toast('Lien copié !', { description: 'Colle-le dans Discord, iMessage ou n\'importe où.' });
+      setShareUrl(null);
+    } catch {
+      // HTTP context — select the input text so the user can Ctrl+C
+      const input = document.getElementById('share-url-input') as HTMLInputElement | null;
+      if (input) { input.select(); input.setSelectionRange(0, 99999); }
+    }
+  };
   const [opening, setOpening] = useState(false);
   const [songChangeAnim, setSongChangeAnim] = useState(false);
   const [isLiked, setIsLiked] = useState(false);
@@ -487,6 +508,38 @@ export default function PlayerPage() {
       <AddToPlaylistModal open={showAddToPlaylist} onOpenChange={setShowAddToPlaylist} songId={currentSong.id} />
       <CommentsModal open={showComments} onOpenChange={setShowComments} songId={currentSong.id} />
 
+      {/* Dialog partage */}
+      <Dialog open={!!shareUrl} onOpenChange={(open) => { if (!open) setShareUrl(null); }}>
+        <DialogContent className="max-w-sm mx-auto">
+          <DialogHeader>
+            <DialogTitle className="text-center text-lg">Partager la musique</DialogTitle>
+          </DialogHeader>
+          <div className="flex flex-col gap-4 pt-2">
+            <p className="text-sm text-muted-foreground text-center">
+              Copie ce lien et colle-le où tu veux. Quand quelqu'un l'ouvre, la musique se lance automatiquement.
+            </p>
+            <div className="relative">
+              <input
+                id="share-url-input"
+                readOnly
+                value={shareUrl ?? ''}
+                onClick={(e) => (e.target as HTMLInputElement).select()}
+                className="w-full rounded-xl border border-border bg-muted px-4 py-3 text-sm font-mono pr-24 focus:outline-none select-all cursor-text"
+              />
+            </div>
+            <button
+              onClick={() => shareUrl && copyShareUrl(shareUrl)}
+              className="w-full rounded-xl bg-primary text-primary-foreground py-3 font-semibold text-base active:scale-95 transition-transform"
+            >
+              Copier le lien
+            </button>
+            <p className="text-xs text-muted-foreground text-center">
+              Tu peux aussi appuyer sur le lien ci-dessus pour le sélectionner, puis faire Copier.
+            </p>
+          </div>
+        </DialogContent>
+      </Dialog>
+
       {/* File d'attente */}
       <Sheet open={showQueue} onOpenChange={setShowQueue}>
         <SheetContent side="bottom" className="rounded-t-3xl pb-safe max-h-[70vh] overflow-y-auto">
@@ -644,6 +697,36 @@ export default function PlayerPage() {
             <SheetTitle className="truncate">{currentSong.title}</SheetTitle>
           </SheetHeader>
           <div className="space-y-1">
+            <button
+              onClick={() => { setShowMenu(false); shareSong(); }}
+              className="flex w-full items-center gap-4 rounded-2xl px-4 py-3.5 hover:bg-white/[0.06] transition-colors"
+            >
+              <Share2 className="h-5 w-5 text-muted-foreground" />
+              <span className="text-sm font-medium">Partager</span>
+            </button>
+            <button
+              onClick={() => {
+                setShowMenu(false);
+                const url = songAudioUrl(currentSong);
+                if (!url) { toast.error('Fichier audio introuvable'); return; }
+                const ext = url.split('?')[0].split('.').pop() || 'mp3';
+                const filename = `${currentSong.title} - ${currentSong.author}.${ext}`;
+                fetch(url)
+                  .then(res => res.blob())
+                  .then(blob => {
+                    const a = document.createElement('a');
+                    a.href = URL.createObjectURL(blob);
+                    a.download = filename;
+                    a.click();
+                    URL.revokeObjectURL(a.href);
+                  })
+                  .catch(() => toast.error('Échec du téléchargement'));
+              }}
+              className="flex w-full items-center gap-4 rounded-2xl px-4 py-3.5 hover:bg-white/[0.06] transition-colors"
+            >
+              <Download className="h-5 w-5 text-muted-foreground" />
+              <span className="text-sm font-medium">Télécharger</span>
+            </button>
             <button
               onClick={() => { setShowMenu(false); setShowQueue(true); }}
               className="flex w-full items-center gap-4 rounded-2xl px-4 py-3.5 hover:bg-white/[0.06] transition-colors"

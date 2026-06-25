@@ -40,12 +40,12 @@ export default function Login() {
         <div className="mb-8 flex flex-col items-center gap-4 text-center">
           <img
             src={juxLogo}
-            alt="Jux"
+            alt="Nexora-Music"
             className="h-14 w-auto drop-shadow-[0_0_20px_hsl(var(--primary)/0.4)]"
           />
           <div>
             <h1 className="text-2xl font-bold tracking-tight text-foreground">
-              Bienvenue sur Jux
+              Bienvenue sur Nexora-Music
             </h1>
             <p className="mt-1 text-sm text-muted-foreground">
               Écoute et partage de la musique entre amis

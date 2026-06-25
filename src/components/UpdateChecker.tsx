@@ -153,7 +153,7 @@ export default function UpdateChecker() {
               >
                 <polyline points="20 6 9 17 4 12" />
               </svg>
-              <span className="text-xs text-green-400 font-medium">Jux-Music est à jour</span>
+              <span className="text-xs text-green-400 font-medium">Nexora Music est à jour</span>
             </>
           )}
 

@@ -9,8 +9,8 @@ import { sendNowPlayingToNative, clearNowPlayingOnNative, onNativeCommand, resol
 import type { NativeCommandEvent } from '@/lib/androidMediaBridge';
 import { toast } from 'sonner';
 import { updatePresence, clearPresence } from '@/lib/userPresence';
+import { updateDiscordPresence, clearDiscordPresence } from '@/lib/discordBridge';
 import type { Song } from '@/types/music';
-import { getPlayableAudioUrl, ensureCachedForPlayback, initOfflineManager } from '@/lib/offlineManager';
 
 export type TransitionMode = 'linear' | 'hardCut' | 'exponential' | 'logarithmic' | 'sine' | 'sCurve' | 'elastic' | 'cubicEaseInOut' | 'quartEaseInOut' | 'tempoShift';
 
@@ -301,7 +301,6 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
 
   // Init audio
   useEffect(() => {
-    initOfflineManager().catch(() => {});
     const create = () => { const a = new Audio(); a.preload = 'auto'; (a as any).preservesPitch = false; (a as any).mozPreservesPitch = false; (a as any).webkitPreservesPitch = false; a.crossOrigin = 'anonymous'; return a; };
     audioARef.current = create();
     audioBRef.current = create();
@@ -377,6 +376,29 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => { setMediaSessionMetadata(currentSong); }, [currentSong]);
   useEffect(() => { setMediaSessionPlaybackState(currentSong ? (isPlaying ? 'playing' : 'paused') : 'none'); }, [isPlaying, currentSong]);
+
+  // Discord Rich Presence — uniquement dans l'app Electron
+  const discordStartRef = useRef<number | null>(null);
+  useEffect(() => {
+    if (!currentSong) {
+      discordStartRef.current = null;
+      clearDiscordPresence();
+      return;
+    }
+    if (isPlaying) {
+      if (!discordStartRef.current) discordStartRef.current = Date.now();
+    } else {
+      discordStartRef.current = null;
+    }
+    updateDiscordPresence({
+      title: currentSong.title || 'Sans titre',
+      author: currentSong.author || 'Artiste inconnu',
+      coverUrl: songCoverUrl(currentSong) || undefined,
+      isPlaying,
+      startTimestamp: discordStartRef.current ?? undefined,
+    });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentSong?.id, isPlaying]);
 
   useEffect(() => {
     if (!currentSong) { applyAccentHsl(null); return; }
@@ -512,14 +534,14 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
     if (inactive) { try { inactive.pause(); inactive.volume = 0; inactive.removeAttribute('src'); inactive.load(); } catch {} }
     const a = getActive();
     if (!a) return;
-    a.src = await getPlayableAudioUrl(song);
+    a.src = songAudioUrl(song);
     a.volume = volume;
     const applyRate = () => { a.playbackRate = playbackRate; };
     applyRate();
     a.addEventListener('loadedmetadata', applyRate, { once: true });
     a.addEventListener('playing', applyRate, { once: true });
     if (!autoPlay) { a.load(); return; }
-    try { if (audioCtxRef.current?.state === 'suspended') await audioCtxRef.current.resume().catch(() => {}); await a.play(); a.playbackRate = playbackRate; recordPlay(song); ensureCachedForPlayback(song).catch(() => {}); } catch (e) { console.error('Audio play failed', e); }
+    try { if (audioCtxRef.current?.state === 'suspended') await audioCtxRef.current.resume().catch(() => {}); await a.play(); a.playbackRate = playbackRate; recordPlay(song); } catch (e) { console.error('Audio play failed', e); }
   }, [playbackRate, volume, recordPlay, authUser]);
 
   const loadAndPlayExternalAudio = useCallback(async (payload: { videoId: string; title: string; author: string; coverUrl: string; audioUrl: string; autoPlay?: boolean }) => {

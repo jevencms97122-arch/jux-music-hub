@@ -31,7 +31,7 @@ const SLIDES: Slide[] = [
   {
     icon: Music2,
     emoji: '🎵',
-    title: 'Bienvenue sur Jux !',
+    title: 'Bienvenue sur Nexora-Music !',
     description: 'Ta plateforme musicale sociale. Écoute, publie et découvre de la musique avec tes amis.',
     items: [
       { icon: Headphones, label: 'Écoute libre', text: 'Tous les sons de la communauté, gratuitement.' },
@@ -140,7 +140,7 @@ export default function TutorialModal({ open, onClose }: TutorialModalProps) {
 
         {/* Header : logo + passer */}
         <div className="relative flex items-center justify-between px-5 pt-5">
-          <img src={juxLogo} alt="Jux" className="h-6 w-auto" />
+          <img src={juxLogo} alt="Nexora-Music" className="h-6 w-auto" />
           <button
             onClick={onClose}
             aria-label="Passer le tutoriel"

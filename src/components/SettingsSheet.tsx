@@ -1,12 +1,32 @@
+import { useState } from 'react';
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from '@/components/ui/sheet';
 import { Switch } from '@/components/ui/switch';
 import { useAuth } from '@/contexts/AuthContext';
 import { useReactiveBg } from '@/hooks/useReactiveBg';
-import { LogOut, Sparkles } from 'lucide-react';
+import { useThemeEnabled } from '@/hooks/useThemeEnabled';
+import { useTheme } from '@/contexts/ThemeContext';
+import { LogOut, Sparkles, Palette, ChevronRight, RefreshCw, Zap } from 'lucide-react';
+import { usePerformanceMode } from '@/hooks/usePerformanceMode';
+import ThemeSelectorSheet from '@/components/ThemeSelectorSheet';
 
 export default function SettingsSheet({ trigger }: { trigger: React.ReactNode }) {
   const { logout } = useAuth();
   const { enabled, setEnabled } = useReactiveBg();
+  const { enabled: themesEnabled, setEnabled: setThemesEnabled } = useThemeEnabled();
+  const { enabled: performanceMode, setEnabled: setPerformanceMode } = usePerformanceMode();
+  const { currentTheme } = useTheme();
+  const [reactiveBgChanged, setReactiveBgChanged] = useState(false);
+  const [themesChanged, setThemesChanged] = useState(false);
+
+  const handleReactiveBgToggle = (v: boolean) => {
+    setEnabled(v);
+    setReactiveBgChanged(true);
+  };
+
+  const handleThemesToggle = (v: boolean) => {
+    setThemesEnabled(v);
+    setThemesChanged(true);
+  };
 
   return (
     <Sheet>
@@ -17,18 +37,101 @@ export default function SettingsSheet({ trigger }: { trigger: React.ReactNode })
         </SheetHeader>
 
         <div className="space-y-2">
-          {/* Arrière-plan réactif */}
-          <div className="flex items-center justify-between rounded-2xl bg-card/60 px-4 py-3.5">
-            <div className="flex items-center gap-3">
-              <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-purple-500/15">
-                <Sparkles className="h-4.5 w-4.5 text-purple-400" />
+          {/* Mode Performance */}
+          <div className="rounded-2xl bg-card/60 overflow-hidden">
+            <div className="flex items-center justify-between px-4 py-3.5">
+              <div className="flex items-center gap-3">
+                <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-green-500/15">
+                  <Zap className="h-4.5 w-4.5 text-green-400" />
+                </div>
+                <div>
+                  <p className="text-sm font-semibold">Mode Performance</p>
+                  <p className="text-xs text-muted-foreground">Désactive le chargement des images</p>
+                </div>
               </div>
-              <div>
-                <p className="text-sm font-semibold">Arrière-plan réactif</p>
-                <p className="text-xs text-muted-foreground">Le fond du lecteur s'anime avec la musique</p>
-              </div>
+              <Switch checked={performanceMode} onCheckedChange={(v) => { setPerformanceMode(v); window.location.reload(); }} />
             </div>
-            <Switch checked={enabled} onCheckedChange={setEnabled} />
+          </div>
+
+          {/* Arrière-plan réactif */}
+          <div className="rounded-2xl bg-card/60 overflow-hidden">
+            <div className="flex items-center justify-between px-4 py-3.5">
+              <div className="flex items-center gap-3">
+                <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-purple-500/15">
+                  <Sparkles className="h-4.5 w-4.5 text-purple-400" />
+                </div>
+                <div>
+                  <p className="text-sm font-semibold">Arrière-plan réactif</p>
+                  <p className="text-xs text-muted-foreground">Le fond du lecteur s'anime avec la musique</p>
+                </div>
+              </div>
+              <Switch checked={enabled} onCheckedChange={handleReactiveBgToggle} />
+            </div>
+            {reactiveBgChanged && (
+              <div className="border-t border-border/40 px-4 pb-3.5 pt-3 flex items-center justify-between gap-3">
+                <p className="text-xs text-amber-400">Rechargez la page pour appliquer le changement.</p>
+                <button
+                  onClick={() => window.location.reload()}
+                  className="flex items-center gap-1.5 rounded-xl bg-amber-500/15 px-3 py-1.5 text-xs font-semibold text-amber-400 hover:bg-amber-500/25 transition-colors flex-shrink-0"
+                >
+                  <RefreshCw className="h-3.5 w-3.5" />
+                  Recharger
+                </button>
+              </div>
+            )}
+          </div>
+
+          {/* Thèmes */}
+          <div className="rounded-2xl bg-card/60 overflow-hidden">
+            <div className="flex items-center justify-between px-4 py-3.5">
+              <div className="flex items-center gap-3">
+                <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-indigo-500/15">
+                  <Palette className="h-4.5 w-4.5 text-indigo-400" />
+                </div>
+                <div>
+                  <p className="text-sm font-semibold">Thèmes</p>
+                  <p className="text-xs text-muted-foreground">Dégradés et couleurs personnalisés</p>
+                </div>
+              </div>
+              <Switch checked={themesEnabled} onCheckedChange={handleThemesToggle} />
+            </div>
+
+            {themesChanged && (
+              <div className="border-t border-border/40 px-4 pb-3 pt-3 flex items-center justify-between gap-3">
+                <p className="text-xs text-amber-400">Rechargez la page pour appliquer le changement.</p>
+                <button
+                  onClick={() => window.location.reload()}
+                  className="flex items-center gap-1.5 rounded-xl bg-amber-500/15 px-3 py-1.5 text-xs font-semibold text-amber-400 hover:bg-amber-500/25 transition-colors flex-shrink-0"
+                >
+                  <RefreshCw className="h-3.5 w-3.5" />
+                  Recharger
+                </button>
+              </div>
+            )}
+            {themesEnabled && (
+              <div className="border-t border-border/40 px-4 pb-3.5 pt-2">
+                <ThemeSelectorSheet
+                  triggerLabel={
+                    <button className="flex w-full items-center gap-3 rounded-xl bg-secondary/50 px-3 py-2.5 hover:bg-secondary/80 transition-colors">
+                      {/* Aperçu miniature du thème actif */}
+                      <span
+                        className="h-6 w-6 rounded-md flex-shrink-0 border border-white/10"
+                        style={{
+                          background: currentTheme.background,
+                          backgroundSize: '300% 300%',
+                          animation: currentTheme.backgroundAnimation ?? undefined,
+                        }}
+                      />
+                      <span className="text-sm font-medium flex-1 text-left">{currentTheme.name}</span>
+                      {currentTheme.backgroundAnimation && (
+                        <span className="text-[10px] font-bold text-purple-400 bg-purple-500/15 px-1.5 py-0.5 rounded-full">✦ animé</span>
+                      )}
+                      <ChevronRight className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+                    </button>
+                  }
+                />
+              </div>
+            )}
           </div>
         </div>
 

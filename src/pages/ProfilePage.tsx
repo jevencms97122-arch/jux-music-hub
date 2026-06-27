@@ -309,7 +309,7 @@ export default function ProfilePage() {
           </div>
         ) : tab === 'tracks' ? (
           songs.length > 0 ? (
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3">
               {songs.map((s) => (<SongCard key={s.id} song={s} onPlay={() => playSongFromList(s, songs)} />))}
             </div>
           ) : (
@@ -322,7 +322,7 @@ export default function ProfilePage() {
           )
         ) : tab === 'reposts' ? (
           repostedSongs.length > 0 ? (
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3">
               {repostedSongs.map((s) => (<SongCard key={s.id} song={s} onPlay={() => playSongFromList(s, repostedSongs)} />))}
             </div>
           ) : (

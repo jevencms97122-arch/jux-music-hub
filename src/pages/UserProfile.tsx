@@ -322,14 +322,14 @@ export default function UserProfile() {
 
         {tab === 'tracks' ? (
           songs.length > 0 ? (
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3">
               {songs.map((s) => (<SongCard key={s.id} song={s} onPlay={() => playSongFromList(s, songs)} />))}
             </div>
           ) : (
             <EmptyState icon={<Music2 className="h-6 w-6 text-primary" />} title="Aucun morceau" subtitle="Cet artiste n'a encore rien publié." />
           )
         ) : repostedSongs.length > 0 ? (
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3">
             {repostedSongs.map((s) => (<SongCard key={s.id} song={s} onPlay={() => playSongFromList(s, repostedSongs)} />))}
           </div>
         ) : (

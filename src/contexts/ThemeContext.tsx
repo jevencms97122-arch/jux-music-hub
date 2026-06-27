@@ -93,20 +93,23 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
   const themes = useMemo(() => APP_THEMES, []);
 
   const [currentThemeId, setCurrentThemeId] = useState<string>(readSavedThemeId);
-  const wasAnimatedRef = useRef(false);
+  const [animPaused, setAnimPaused] = useState(false);
 
   const currentTheme = useMemo(() => {
     return themes.find((t) => t.id === currentThemeId) ?? themes[0];
   }, [themes, currentThemeId]);
 
-  // Applique le thème + sauvegarde localStorage à chaque changement
+  // Applique les CSS vars + nettoie l'ancien style body
   useEffect(() => {
     if (!currentTheme) return;
     applyThemeToCssVars(currentTheme);
-    applyAnimationState(currentTheme);
-    wasAnimatedRef.current = currentTheme.backgroundAnimation != null;
 
-    // Sauvegarde les accents du thème pour restore quand couleur dynamique est désactivée
+    // Nettoie l'ancienne approche body inline (si elle était active)
+    document.body.style.background = '';
+    document.body.style.backgroundSize = '';
+    document.body.style.animation = '';
+    document.body.removeAttribute('data-animated-bg');
+
     storeThemeAccents({
       primary: currentTheme.hsl.primary,
       accent: currentTheme.hsl.accent,
@@ -122,39 +125,39 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     }
   }, [currentTheme]);
 
-  // Pause/resume background animations based on page visibility
+  // Pause/resume basé sur visibilité et focus — utilise React state
   useEffect(() => {
-    const handleVisibilityChange = () => {
-      const body = document.body;
-      if (document.hidden) {
-        body.classList.add('paused');
-      } else {
-        body.classList.remove('paused');
-      }
-    };
+    const pause = () => setAnimPaused(true);
+    const resume = () => setAnimPaused(false);
+    const onVisibility = () => document.hidden ? pause() : resume();
 
-    const handleBlur = () => document.body.classList.add('paused');
-    const handleFocus = () => document.body.classList.remove('paused');
-
-    document.addEventListener('visibilitychange', handleVisibilityChange);
-    window.addEventListener('blur', handleBlur);
-    window.addEventListener('focus', handleFocus);
+    document.addEventListener('visibilitychange', onVisibility);
+    window.addEventListener('blur', pause);
+    window.addEventListener('focus', resume);
 
     return () => {
-      document.removeEventListener('visibilitychange', handleVisibilityChange);
-      window.removeEventListener('blur', handleBlur);
-      window.removeEventListener('focus', handleFocus);
+      document.removeEventListener('visibilitychange', onVisibility);
+      window.removeEventListener('blur', pause);
+      window.removeEventListener('focus', resume);
     };
   }, []);
 
   // Notification de redémarrage
   const notifyRestart = useCallback(() => {
-    toast.info(
-      'Redémarrage recommandé',
-      {
-        description: 'Un redémarrage de l\'application est recommandé pour appliquer complètement les changements.',
-        duration: 10000,
-      }
+    toast(
+      <div className="flex w-full items-center justify-between gap-3">
+        <div>
+          <p className="text-sm font-semibold">Redémarrage recommandé</p>
+          <p className="text-xs text-muted-foreground mt-0.5">Rechargez pour appliquer complètement le thème.</p>
+        </div>
+        <button
+          onClick={() => window.location.reload()}
+          className="flex-shrink-0 rounded-lg bg-primary/20 px-3 py-1.5 text-xs font-semibold text-primary hover:bg-primary/30 transition-colors"
+        >
+          Recharger
+        </button>
+      </div>,
+      { duration: 20000 }
     );
   }, []);
 
@@ -169,7 +172,27 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     [themes, currentTheme, setTheme],
   );
 
-  return <ThemeContext.Provider value={value}>{children}</ThemeContext.Provider>;
+  return (
+    <ThemeContext.Provider value={value}>
+      {/* Backdrop animé : fixe, z-index -1, toujours visible derrière tout le contenu */}
+      {currentTheme.backgroundAnimation && (
+        <div
+          aria-hidden
+          style={{
+            position: 'fixed',
+            inset: 0,
+            zIndex: -1,
+            pointerEvents: 'none',
+            background: currentTheme.background,
+            backgroundSize: '300% 300%',
+            animation: currentTheme.backgroundAnimation,
+            animationPlayState: animPaused ? 'paused' : 'running',
+          }}
+        />
+      )}
+      {children}
+    </ThemeContext.Provider>
+  );
 }
 
 export function useTheme(): ThemeContextValue {

@@ -112,8 +112,7 @@ export default function Social() {
     const followerIds = inF.items.map((f: any) => f.follower_id);
     const reqItems = req.items.map((r: any) => ({ id: r.id, follower_id: r.follower_id, following_id: r.following_id, status: r.status, created_at: r.created } as Follow));
 
-    // user.id inclus pour que sa propre écoute apparaisse dans "En ce moment"
-    const presenceIds = [...followingIds, user.id];
+    const presenceIds = [...followingIds];
     const [presenceProfiles, followerProfiles, reqProfiles, presenceRecords] = await Promise.all([
       fetchProfiles(presenceIds),
       fetchProfiles(followerIds),
@@ -121,7 +120,7 @@ export default function Social() {
       fetchPresences(presenceIds),
     ]);
 
-    const followingProfiles = presenceProfiles.filter((p) => p.user_id !== user.id);
+    const followingProfiles = presenceProfiles;
     setFollowing(followingProfiles);
     setFollowers(followerProfiles);
     setRequests(reqItems.map((r) => ({ ...r, profile: reqProfiles.find((p) => p.user_id === r.follower_id) })));
@@ -159,7 +158,7 @@ export default function Social() {
         return next;
       });
     };
-    const interval = setInterval(doPoll, 6000);
+    const interval = setInterval(doPoll, 8000);
     if (initialLoadDone.current) doPoll();
     return () => clearInterval(interval);
   }, [user, following]);
@@ -364,7 +363,7 @@ export default function Social() {
   };
 
   const isPresenceFresh = (p: FriendPresence) =>
-    p.last_seen_at && Date.now() - new Date(p.last_seen_at).getTime() < 10_000;
+    p.last_seen_at && Date.now() - new Date(p.last_seen_at).getTime() < 45_000;
 
   const maxInitial = 20;
   const [showAll, setShowAll] = useState(false);

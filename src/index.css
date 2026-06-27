@@ -470,6 +470,12 @@
   100% { height: 8px; }
 }
 
+/* ── Sonner toasts : toujours interactifs ── */
+[data-sonner-toaster],
+[data-sonner-toaster] * {
+  pointer-events: auto !important;
+}
+
 /* ── Background gradient animations for animated themes ── */
 
 /* Generic gradient shift – déplace les couleurs du gradient */

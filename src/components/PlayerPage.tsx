@@ -53,6 +53,7 @@ export default function PlayerPage() {
   const [similarTab, setSimilarTab] = useState<'genre' | 'author'>('genre');
   const [closing, setClosing] = useState(false);
   const [shareUrl, setShareUrl] = useState<string | null>(null);
+  const [publisherProfile, setPublisherProfile] = useState<{ pseudo: string; avatar_url: string | null; user_id: string } | null>(null);
 
   const shareSong = () => {
     if (!currentSong) return;
@@ -135,6 +136,26 @@ export default function PlayerPage() {
       else { setIsLiked(false); setLikeId(null); }
     }).catch(() => { setIsLiked(false); setLikeId(null); });
   }, [currentSong?.id, user]);
+
+  // Load publisher profile when song changes
+  useEffect(() => {
+    if (!currentSong?.uploaded_by) { setPublisherProfile(null); return; }
+    pb.collection('profiles').getList(1, 1, {
+      filter: `user_id = "${currentSong.uploaded_by}"`,
+      requestKey: null,
+    }).then((res) => {
+      const p = (res as any).items[0];
+      if (p) {
+        setPublisherProfile({
+          pseudo: p.pseudo || '?',
+          user_id: p.user_id,
+          avatar_url: p.avatar ? `${pb.baseUrl}/api/files/${p.collectionId}/${p.id}/${p.avatar}` : null,
+        });
+      } else {
+        setPublisherProfile(null);
+      }
+    }).catch(() => setPublisherProfile(null));
+  }, [currentSong?.id, currentSong?.uploaded_by]);
 
   // Load repost status + reposters (only followed users) when song changes
   useEffect(() => {
@@ -361,7 +382,28 @@ export default function PlayerPage() {
             className={cn('min-w-0 flex-1', songChangeAnim && 'animate-slide-up-stagger')}
           >
             <h2 className="truncate text-xl font-bold tracking-tight text-foreground">{currentSong.title}</h2>
-            <p className="mt-0.5 truncate text-sm text-muted-foreground">{currentSong.author}</p>
+            <div className="mt-0.5 flex items-center gap-2 min-w-0">
+              <p className="truncate text-sm text-muted-foreground">{currentSong.author}</p>
+              {publisherProfile && (
+                <button
+                  onClick={() => { setClosing(true); setTimeout(() => { setClosing(false); closePlayer(); navigate(`/u/${publisherProfile.user_id}`); }, 100); }}
+                  className="flex items-center gap-1 flex-shrink-0"
+                >
+                  {publisherProfile.avatar_url ? (
+                    <img
+                      src={publisherProfile.avatar_url}
+                      alt={publisherProfile.pseudo}
+                      className="h-5 w-5 rounded-full object-cover"
+                    />
+                  ) : (
+                    <div className="h-5 w-5 rounded-full bg-muted flex items-center justify-center text-[10px] font-bold text-muted-foreground">
+                      {publisherProfile.pseudo[0]?.toUpperCase()}
+                    </div>
+                  )}
+                  <span className="text-xs text-muted-foreground">{publisherProfile.pseudo}</span>
+                </button>
+              )}
+            </div>
           </div>
           <div className="ml-3 flex flex-shrink-0 items-center gap-1">
             <button

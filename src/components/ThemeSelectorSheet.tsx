@@ -48,7 +48,10 @@ export default function ThemeSelectorSheet({
             )}
             style={{
               background: t.background,
-              backgroundSize: t.backgroundAnimation ? '200% 200%' : undefined,
+              backgroundSize: t.backgroundAnimation ? '300% 300%' : undefined,
+              animation: t.backgroundAnimation
+                ? t.backgroundAnimation.replace(/\d+s/, '3s')
+                : undefined,
             }}
           />
           {t.backgroundAnimation && (
@@ -107,7 +110,7 @@ export default function ThemeSelectorSheet({
               className="mt-3 h-16 w-full rounded-lg border"
               style={{
                 background: currentTheme.background,
-                backgroundSize: currentTheme.backgroundAnimation ? '200% 200%' : undefined,
+                backgroundSize: currentTheme.backgroundAnimation ? '300% 300%' : undefined,
                 animation: currentTheme.backgroundAnimation ?? undefined,
               }}
             />

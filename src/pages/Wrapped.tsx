@@ -1,4 +1,4 @@
-﻿import { useEffect, useState, useRef, useCallback } from 'react';
+﻿import { useEffect, useState, useCallback } from 'react';
 import { pb } from '@/lib/pocketbase';
 import { useAuth } from '@/contexts/AuthContext';
 import { useNavigate } from 'react-router-dom';
@@ -19,7 +19,7 @@ interface WrappedData {
 
 export default function Wrapped() {
   const navigate = useNavigate();
-  const { user, profile } = useAuth();
+  const { profile } = useAuth();
   const [data, setData] = useState<WrappedData | null>(null);
   const [loading, setLoading] = useState(true);
   const [generating, setGenerating] = useState(false);
@@ -168,55 +168,69 @@ export default function Wrapped() {
   }, [data, profile, monthLabel]);
 
   useEffect(() => {
-    if (!user) return;
+    const authId = pb.authStore.model?.id;
+    if (!authId) return;
+
     (async () => {
-      const startOfMonth = new Date();
-      startOfMonth.setDate(1);
-      startOfMonth.setHours(0, 0, 0, 0);
+      try {
+        const now = new Date();
+        const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+        // Format attendu par PocketBase : "YYYY-MM-DD HH:MM:SS.sssZ"
+        const startStr = startOfMonth.toISOString().replace('T', ' ');
 
-      const historyRes = await pb.collection('listen_history').getList(1, 500, {
-        filter: `user_id = "${user.id}" && listened_at > "${startOfMonth.toISOString()}"`,
-        requestKey: null,
-      });
-
-      const counts = new Map<string, number>();
-      historyRes.items.forEach((h: any) => counts.set(h.song_id, (counts.get(h.song_id) ?? 0) + 1));
-
-      const songIds = [...counts.keys()];
-      let topSongs: Array<{ song: Song; count: number }> = [];
-      let topGenre: string | null = null;
-      let topArtist: string | null = null;
-
-      if (songIds.length > 0) {
-        const songsList: Song[] = [];
-        for (let i = 0; i < songIds.length; i += 50) {
-          const batch = songIds.slice(i, i + 50);
-          const filters = batch.map((id: string) => `id = "${id}"`).join(' || ');
-          const res = await pb.collection('songs').getList(1, 50, { filter: filters, requestKey: null });
-          songsList.push(...res.items.map(recordToSong));
-        }
-        const songsMap = new Map(songsList.map((s) => [s.id, s]));
-
-        topSongs = [...counts.entries()]
-          .map(([id, count]) => ({ song: songsMap.get(id), count }))
-          .filter((x) => x.song)
-          .sort((a, b) => b.count - a.count)
-          .slice(0, 5) as Array<{ song: Song; count: number }>;
-
-        const genreCount = new Map<string, number>();
-        const artistCount = new Map<string, number>();
-        topSongs.forEach(({ song }) => {
-          if (song.genre) genreCount.set(song.genre, (genreCount.get(song.genre) ?? 0) + 1);
-          if (song.author) artistCount.set(song.author, (artistCount.get(song.author) ?? 0) + 1);
+        // getFullList récupère TOUS les enregistrements (pas de limite à 500)
+        const historyItems = await pb.collection('listen_history').getFullList({
+          filter: `user_id = "${authId}" && listened_at >= "${startStr}"`,
+          requestKey: null,
         });
-        topGenre = genreCount.size > 0 ? [...genreCount.entries()].sort((a, b) => b[1] - a[1])[0][0] : null;
-        topArtist = artistCount.size > 0 ? [...artistCount.entries()].sort((a, b) => b[1] - a[1])[0][0] : null;
-      }
 
-      setData({ totalListens: historyRes.totalItems, uniqueSongs: songIds.length, topSongs, topGenre, topArtist });
-      setLoading(false);
+        const counts = new Map<string, number>();
+        historyItems.forEach((h: any) => {
+          if (h.song_id) counts.set(h.song_id, (counts.get(h.song_id) ?? 0) + 1);
+        });
+
+        const songIds = [...counts.keys()];
+        let topSongs: Array<{ song: Song; count: number }> = [];
+        let topGenre: string | null = null;
+        let topArtist: string | null = null;
+
+        if (songIds.length > 0) {
+          const songsList: Song[] = [];
+          for (let i = 0; i < songIds.length; i += 50) {
+            const batch = songIds.slice(i, i + 50);
+            const filters = batch.map((id: string) => `id = "${id}"`).join(' || ');
+            const res = await pb.collection('songs').getList(1, 50, { filter: filters, requestKey: null });
+            songsList.push(...res.items.map(recordToSong));
+          }
+          const songsMap = new Map(songsList.map((s) => [s.id, s]));
+
+          topSongs = [...counts.entries()]
+            .map(([id, count]) => ({ song: songsMap.get(id), count }))
+            .filter((x) => x.song)
+            .sort((a, b) => b.count - a.count)
+            .slice(0, 5) as Array<{ song: Song; count: number }>;
+
+          // Compte genre/artiste sur TOUTES les écoutes (pas juste le top 5)
+          const genreCount = new Map<string, number>();
+          const artistCount = new Map<string, number>();
+          historyItems.forEach((h: any) => {
+            const song = songsMap.get(h.song_id);
+            if (song?.genre) genreCount.set(song.genre, (genreCount.get(song.genre) ?? 0) + 1);
+            if (song?.author) artistCount.set(song.author, (artistCount.get(song.author) ?? 0) + 1);
+          });
+          topGenre = genreCount.size > 0 ? [...genreCount.entries()].sort((a, b) => b[1] - a[1])[0][0] : null;
+          topArtist = artistCount.size > 0 ? [...artistCount.entries()].sort((a, b) => b[1] - a[1])[0][0] : null;
+        }
+
+        setData({ totalListens: historyItems.length, uniqueSongs: songIds.length, topSongs, topGenre, topArtist });
+      } catch (err) {
+        console.error('Wrapped fetch error:', err);
+        setData({ totalListens: 0, uniqueSongs: 0, topSongs: [], topGenre: null, topArtist: null });
+      } finally {
+        setLoading(false);
+      }
     })();
-  }, [user]);
+  }, []);
 
   if (loading) return <div className="p-8 text-center">Calcul de ton wrapped...</div>;
 

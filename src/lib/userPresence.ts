@@ -39,11 +39,11 @@ export async function updatePresence(payload: {
       user_id: userId,
       is_listening: isListening,
       last_seen_at: new Date().toISOString(),
+      current_song_id: songId ?? null,
+      current_song_title: songTitle ?? null,
+      current_song_author: songAuthor ?? null,
+      current_song_cover_url: songCoverUrl ?? null,
     };
-    if (songId) data.current_song_id = songId;
-    if (songTitle) data.current_song_title = songTitle;
-    if (songAuthor) data.current_song_author = songAuthor;
-    if (songCoverUrl) data.current_song_cover_url = songCoverUrl;
 
     const cachedId = presenceIdCache.get(userId);
     if (cachedId) {

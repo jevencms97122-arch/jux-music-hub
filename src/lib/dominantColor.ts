@@ -166,6 +166,7 @@ export function restoreThemeAccents() {
 }
 
 export function applyAccentHsl(hsl: string | null) {
+  if (localStorage.getItem('jux_themes_enabled') === 'true') { restoreThemeAccents(); return; }
   if (!hsl) { restoreThemeAccents(); return; }
   const m = hsl.match(/^(\d+) (\d+)% (\d+)%$/);
   let glow = hsl;

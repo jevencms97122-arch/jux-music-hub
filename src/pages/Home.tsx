@@ -7,7 +7,7 @@ import CachedImage from '@/components/CachedImage';
 import StoryCircles from '@/components/StoryCircles';
 import { useNavigate } from 'react-router-dom';
 import {
-  Play, Heart, TrendingUp, Sparkles,
+  Play, Heart, Clock, Sparkles,
   ListMusic, Globe, ArrowRight, Music2, Upload, Bell, Tag, ChevronDown
 } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
@@ -369,7 +369,7 @@ export default function Home() {
           {/* Genre rows or filtered grid */}
           {selectedGenre ? (
             <div className="px-4">
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5">
                 {filteredSongs.map((s) => (
                   <SongCard key={s.id} song={s} onPlay={() => playSongFromList(s, filteredSongs)} />
                 ))}
@@ -472,9 +472,9 @@ export default function Home() {
       {/* Découverte — masquée quand un genre est filtré (la grille filtrée est déjà au-dessus) */}
       {!selectedGenre && (
         <section className="relative px-4 animate-fade-slide-up" style={{ animationDelay: '0.3s' }}>
-          <SectionHeader icon={TrendingUp} title="Découvre" />
+          <SectionHeader icon={Clock} title="Nouveautés" />
           {loading ? (
-            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4">
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5">
               {Array.from({ length: 8 }).map((_, i) => (
                 <div key={i} className="aspect-square animate-pulse rounded-2xl bg-secondary" />
               ))}
@@ -496,7 +496,7 @@ export default function Home() {
             </div>
           ) : (
             <>
-              <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4">
+              <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5">
                 {songs.slice(0, visibleCount).map((s) => (
                   <SongCard key={s.id} song={s} onPlay={() => playSongFromList(s, songs)} />
                 ))}

@@ -84,7 +84,7 @@ function PresenceHeartbeat() {
       });
     };
     emit();
-    const interval = setInterval(emit, 6000);
+    const interval = setInterval(emit, 4000);
     const handleUnload = () => clearPresence(user.id);
     window.addEventListener('beforeunload', handleUnload);
     return () => {
@@ -108,6 +108,7 @@ function AppContent() {
   const location = useLocation();
   const [unreadCount, setUnreadCount] = useState(0);
   const [splashDone, setSplashDone] = useState(false);
+  const [splashDismissed, setSplashDismissed] = useState(false);
 
   useEffect(() => {
     if (!user) return;
@@ -270,7 +271,12 @@ function AppContent() {
 
   return (
     <>
-      {!splashDone && <SplashScreen onComplete={() => setSplashDone(true)} />}
+      {!splashDismissed && (
+        <SplashScreen
+          onComplete={() => setSplashDone(true)}
+          onDismiss={() => setSplashDismissed(true)}
+        />
+      )}
       <div
         style={{
           opacity: splashDone ? 1 : 0,

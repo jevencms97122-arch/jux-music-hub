@@ -54,15 +54,8 @@ export default function UpdateChecker() {
       setLatestVersion(detectedLatest);
 
       if (currentVersion === null) {
-        // Pas d'API getAppVersion dispo → version obsolète → mise à jour
-        setState('update-available');
-
-        // 1 seconde après, ouvrir la modal
-        setTimeout(() => {
-          if (!cancelled) {
-            setModalOpen(true);
-          }
-        }, 1000);
+        // Version introuvable → on ne peut pas savoir → on cache tout
+        setVisible(false);
         return;
       }
 

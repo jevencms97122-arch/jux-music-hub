@@ -1,16 +1,15 @@
 import { useState, useEffect, useRef } from 'react';
 import { loadMedia } from '@/lib/mediaCache';
 import { isPerformanceModeEnabled } from '@/hooks/usePerformanceMode';
+import { Music2 } from 'lucide-react';
 
 interface CachedImageProps extends React.ImgHTMLAttributes<HTMLImageElement> {
-  /** L'URL originale de l'image */
   src: string;
-  /** URL de fallback si l'image ne se charge pas */
   fallbackSrc?: string;
-  /** Classes CSS additionnelles */
   className?: string;
-  /** Texte alternatif */
   alt?: string;
+  /** Si true, le mode performance n'affecte pas cette image (ex: avatars) */
+  exempt?: boolean;
 }
 
 export default function CachedImage({
@@ -18,9 +17,10 @@ export default function CachedImage({
   fallbackSrc = '/placeholder.svg',
   className = '',
   alt = '',
+  exempt = false,
   ...imgProps
 }: CachedImageProps) {
-  const performanceMode = isPerformanceModeEnabled();
+  const performanceMode = !exempt && isPerformanceModeEnabled();
   const [displaySrc, setDisplaySrc] = useState<string>(src || fallbackSrc);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
@@ -73,7 +73,11 @@ export default function CachedImage({
   }, [src, fallbackSrc, performanceMode]);
 
   if (performanceMode) {
-    return <div className={`bg-secondary ${className}`} aria-label={alt} />;
+    return (
+      <div className={`bg-secondary flex items-center justify-center ${className}`} aria-label={alt}>
+        <Music2 className="h-1/3 w-1/3 text-muted-foreground/30" />
+      </div>
+    );
   }
 
   return (

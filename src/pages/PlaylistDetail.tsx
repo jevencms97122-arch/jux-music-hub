@@ -13,6 +13,7 @@ import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import type { Song, Playlist } from '@/types/music';
 import { recordToSong } from '@/lib/pbUtils';
+import CachedImage from '@/components/CachedImage';
 
 const fmtDuration = (s: number) => {
   if (!s || s <= 0) return '';
@@ -443,7 +444,7 @@ export default function PlaylistDetail() {
                   className="flex min-w-0 flex-1 items-center gap-3 rounded-2xl border border-border/40 bg-card/50 p-2 text-left transition-colors hover:bg-card"
                 >
                   <span className="w-5 shrink-0 text-center text-xs font-bold text-muted-foreground">{i + 1}</span>
-                  <img src={songCoverUrl(s)} alt="" className="h-12 w-12 shrink-0 rounded-lg object-cover" />
+                  <CachedImage src={songCoverUrl(s)} alt="" className="h-12 w-12 shrink-0 rounded-lg object-cover" />
                   <div className="min-w-0 flex-1">
                     <p className="truncate text-sm font-semibold">{s.title}</p>
                     <p className="truncate text-xs text-muted-foreground">{s.author}</p>

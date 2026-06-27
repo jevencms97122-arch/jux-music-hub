@@ -8,11 +8,12 @@ import StoryCircles from '@/components/StoryCircles';
 import { useNavigate } from 'react-router-dom';
 import {
   Play, Heart, Clock, Sparkles,
-  ListMusic, Globe, ArrowRight, Music2, Upload, Bell, Tag, ChevronDown
+  ListMusic, Globe, ArrowRight, Music2, Upload, Bell, Tag, ChevronDown, ScrollText
 } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import TrendingSection from '@/components/TrendingSection';
 import AppBanner from '@/components/AppBanner';
+import PatchNotesSheet from '@/components/PatchNotesSheet';
 import { generateDailyMix } from '@/lib/dailyMix';
 import type { Song, Playlist } from '@/types/music';
 import TutorialModal from '@/components/TutorialModal';
@@ -245,6 +246,16 @@ export default function Home() {
               </span>
             )}
           </button>
+          <PatchNotesSheet
+            trigger={
+              <button
+                className="flex h-9 w-9 items-center justify-center rounded-xl border border-border/50 bg-card/60 text-muted-foreground transition-colors hover:bg-card hover:text-foreground"
+                aria-label="Notes de mise à jour"
+              >
+                <ScrollText className="h-4 w-4" />
+              </button>
+            }
+          />
           <button
             onClick={() => navigate('/upload')}
             className="flex h-9 items-center gap-1.5 rounded-xl border border-border/50 bg-card/60 px-3 text-xs font-semibold text-muted-foreground transition-colors hover:bg-card hover:text-foreground"
@@ -410,7 +421,7 @@ export default function Home() {
                         className="group w-28 flex-shrink-0 snap-start text-left"
                       >
                         <div className="relative mb-1.5 aspect-square w-28 overflow-hidden rounded-xl">
-                          <img src={songCoverUrl(s)} alt="" className="h-full w-full object-cover transition-transform duration-200 group-hover:scale-105" />
+                          <CachedImage src={songCoverUrl(s)} alt="" className="h-full w-full object-cover transition-transform duration-200 group-hover:scale-105" />
                           <div className="absolute inset-0 flex items-center justify-center bg-black/0 group-hover:bg-black/30 transition-all duration-200">
                             <Play className="h-7 w-7 fill-white text-white opacity-0 group-hover:opacity-100 transition-opacity duration-200" />
                           </div>

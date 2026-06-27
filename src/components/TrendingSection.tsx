@@ -144,6 +144,7 @@ export default function TrendingSection({ trending }: Props) {
                           src={avatarUrl(profilesMap[s.uploaded_by])}
                           alt=""
                           className="h-full w-full object-cover"
+                          exempt
                         />
                       ) : (
                         <User className="h-2.5 w-2.5 p-0.5 text-muted-foreground" />

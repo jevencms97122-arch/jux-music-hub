@@ -18,6 +18,7 @@ interface BannerRecord {
   message: string;
   color: 'info' | 'success' | 'warning' | 'error' | 'primary';
   dismissible: boolean;
+  version_webapp?: string;
   button1_label?: string;
   button1_url?: string;
   button2_label?: string;
@@ -110,7 +111,16 @@ export default function AppBanner({ className }: { className?: string }) {
     <div className={cn('flex items-start gap-3 rounded-xl border px-4 py-3', v.container, className)}>
       <v.Icon className={cn('mt-0.5 h-4 w-4 flex-shrink-0', v.icon)} />
       <div className="min-w-0 flex-1">
-        {banner.title && <p className={cn('text-xs font-semibold', v.title)}>{banner.title}</p>}
+        {banner.title && (
+          <p className={cn('text-xs font-semibold flex items-center gap-1.5', v.title)}>
+            {banner.title}
+            {banner.version_webapp && (
+              <span className="rounded-full bg-white/10 px-1.5 py-0.5 text-[9px] font-bold tracking-wide">
+                {banner.version_webapp}
+              </span>
+            )}
+          </p>
+        )}
         {banner.message && <p className={cn('mt-0.5 text-[11px] leading-relaxed', v.text)}>{banner.message}</p>}
         {buttons.length > 0 && (
           <div className="mt-2.5 flex flex-wrap items-center gap-2">

@@ -7,6 +7,7 @@ import {
   Flame, Repeat2, QrCode, ChevronRight, Headphones, ListMusic,
 } from 'lucide-react';
 import { avatarUrl, songCoverUrl } from '@/lib/storage';
+import CachedImage from '@/components/CachedImage';
 import { useEffect, useState } from 'react';
 import { getRankProgress, type RankProgress } from '@/lib/ranks';
 import RankBadge from '@/components/RankBadge';
@@ -345,7 +346,7 @@ export default function ProfilePage() {
                 onClick={() => playSongFromList(song, recentHistory.map((h) => h.song))}
                 className="flex w-full items-center gap-3 rounded-xl border border-border/40 bg-card/50 p-2 text-left transition-colors hover:bg-card"
               >
-                <img src={songCoverUrl(song)} alt="" className="h-11 w-11 shrink-0 rounded-lg object-cover" />
+                <CachedImage src={songCoverUrl(song)} alt="" className="h-11 w-11 shrink-0 rounded-lg object-cover" />
                 <div className="min-w-0 flex-1">
                   <p className="truncate text-sm font-semibold">{song.title}</p>
                   <p className="truncate text-xs text-muted-foreground">{song.author}</p>

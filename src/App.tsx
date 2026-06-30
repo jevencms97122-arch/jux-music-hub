@@ -32,6 +32,7 @@ import MiniPlayer from '@/components/MiniPlayer';
 import PlayerPage from '@/components/PlayerPage';
 import BottomNav from '@/components/BottomNav';
 import UpdateChecker from '@/components/UpdateChecker';
+import WebAppUpdateNotifier from '@/components/WebAppUpdateNotifier';
 import WebDeprecatedScreen from '@/components/WebDeprecatedScreen';
 import GamepadController from '@/components/GamepadController';
 import BannedScreen from '@/components/BannedScreen';
@@ -225,6 +226,7 @@ function AppContent() {
         <GamepadController />
         <div className="min-h-screen">
           {profileCompleted && <UpdateChecker />}
+          {profileCompleted && <WebAppUpdateNotifier />}
           <main>
             <AnimatePresence mode="wait" initial={false}>
               <Routes location={location} key={location.pathname}>

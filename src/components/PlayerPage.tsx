@@ -7,7 +7,7 @@ import { useReactiveBg } from '@/hooks/useReactiveBg';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import {
   Play, Pause, SkipBack, SkipForward, Shuffle, Repeat,
-  Volume2, ChevronDown, Music2, Wifi, WifiOff, AlertCircle, ListPlus, Gauge, Heart, MoreHorizontal, MessageSquare, ListMusic, Disc3, Repeat2, Share2, Download
+  Volume2, ChevronDown, Music2, Wifi, WifiOff, AlertCircle, ListPlus, Gauge, Heart, MoreHorizontal, MessageSquare, ListMusic, Disc3, Repeat2, Share2, Download, Camera
 } from 'lucide-react';
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
@@ -19,6 +19,7 @@ import { toast } from 'sonner';
 import VolumeControl from './VolumeControl';
 import PlaybackRateControl from './PlaybackRateControl';
 import AddToPlaylistModal from './AddToPlaylistModal';
+import CreateStoryModal from './CreateStoryModal';
 import { detectPlatform } from '@/lib/platform';
 import { cn } from '@/lib/utils';
 
@@ -45,6 +46,7 @@ export default function PlayerPage() {
   const [showAddToPlaylist, setShowAddToPlaylist] = useState(false);
   const [showMenu, setShowMenu] = useState(false);
   const [showComments, setShowComments] = useState(false);
+  const [showCreateStory, setShowCreateStory] = useState(false);
   const [showQueue, setShowQueue] = useState(false);
   const [showSimilar, setShowSimilar] = useState(false);
   const [similarByGenre, setSimilarByGenre] = useState<Song[]>([]);
@@ -549,6 +551,7 @@ export default function PlayerPage() {
       <PlaybackRateControl open={showPlaybackRate} onClose={() => setShowPlaybackRate(false)} />
       <AddToPlaylistModal open={showAddToPlaylist} onOpenChange={setShowAddToPlaylist} songId={currentSong.id} />
       <CommentsModal open={showComments} onOpenChange={setShowComments} songId={currentSong.id} />
+      <CreateStoryModal open={showCreateStory} onOpenChange={setShowCreateStory} />
 
       {/* Dialog partage */}
       <Dialog open={!!shareUrl} onOpenChange={(open) => { if (!open) setShareUrl(null); }}>
@@ -800,6 +803,13 @@ export default function PlayerPage() {
             >
               <MessageSquare className="h-5 w-5 text-muted-foreground" />
               <span className="text-sm font-medium">Commentaires</span>
+            </button>
+            <button
+              onClick={() => { setShowMenu(false); setShowCreateStory(true); }}
+              className="flex w-full items-center gap-4 rounded-2xl px-4 py-3.5 hover:bg-white/[0.06] transition-colors"
+            >
+              <Camera className="h-5 w-5 text-muted-foreground" />
+              <span className="text-sm font-medium">Créer une story</span>
             </button>
             <button
               onClick={() => { setShowMenu(false); setShowAddToPlaylist(true); }}

@@ -34,7 +34,7 @@ export default function PatchNotesSheet({ trigger }: { trigger: React.ReactNode 
     if (banners.length > 0) return;
     setLoading(true);
     try {
-      const res = await pb.collection('app_banners').getList(1, 100, { sort: '-created', requestKey: null });
+      const res = await pb.collection('app_banners').getList(1, 100, { filter: 'active = true', sort: '-created', requestKey: null });
       setBanners(res.items as unknown as BannerRecord[]);
     } catch {
       setBanners([]);

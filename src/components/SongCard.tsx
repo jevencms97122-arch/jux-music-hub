@@ -8,6 +8,12 @@ interface Props {
   onPlay: () => void;
 }
 
+function formatPlayCount(count: number): string {
+  if (count >= 1_000_000) return `${(count / 1_000_000).toFixed(1).replace(/\.0$/, '')}M`;
+  if (count >= 1_000) return `${(count / 1_000).toFixed(1).replace(/\.0$/, '')}k`;
+  return `${count}`;
+}
+
 export default function SongCard({ song, onPlay }: Props) {
   return (
     <button
@@ -47,7 +53,13 @@ export default function SongCard({ song, onPlay }: Props) {
 
       <div className="w-full px-0.5">
         <p className="truncate text-[13px] font-semibold leading-snug text-foreground">{song.title}</p>
-        <p className="truncate text-[11px] text-muted-foreground">{song.author}</p>
+        <div className="flex items-center justify-between gap-1">
+          <p className="truncate text-[11px] text-muted-foreground">{song.author}</p>
+          <span className="flex shrink-0 items-center gap-0.5 text-[11px] text-muted-foreground">
+            <Play className="h-2.5 w-2.5 fill-muted-foreground" />
+            {formatPlayCount(song.play_count ?? 0)}
+          </span>
+        </div>
       </div>
     </button>
   );

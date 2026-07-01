@@ -3,6 +3,7 @@ import { pb } from '@/lib/pocketbase';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { useAuth } from '@/contexts/AuthContext';
 import { useNavigate } from 'react-router-dom';
+import { avatarUrl } from '@/lib/storage';
 import StoryViewer from './StoryViewer';
 
 export default function StoryCircles() {
@@ -13,8 +14,14 @@ export default function StoryCircles() {
   const [viewingIndex, setViewingIndex] = useState(-1);
 
   useEffect(() => {
+    if (!user) return;
     (async () => {
-      const res = await pb.collection('stories').getList(1, 50, { filter: 'expires_at > "' + new Date().toISOString() + '"', sort: '-created', requestKey: null });
+      const followsRes = await pb.collection('follows').getList(1, 200, { filter: `follower_id = "${user.id}" && status = "accepted"`, requestKey: null });
+      const followingIds = followsRes.items.map((f: any) => f.following_id);
+      const visibleUserIds = [...new Set([...followingIds, user.id])];
+      const userFilter = visibleUserIds.map((uid) => `user_id = "${uid}"`).join(' || ');
+      if (!userFilter) { setStories([]); return; }
+      const res = await pb.collection('stories').getList(1, 50, { filter: `expires_at > "${new Date().toISOString()}" && (${userFilter})`, sort: '-created', requestKey: null });
       setStories(res.items);
       const userIds = [...new Set(res.items.map((r: any) => r.user_id))].filter(Boolean);
       const map: Record<string, any> = {};
@@ -26,7 +33,7 @@ export default function StoryCircles() {
       }
       setProfileMap(map);
     })();
-  }, []);
+  }, [user]);
 
   const grouped = stories.reduce((acc: any, s: any) => {
     const uid = s.user_id;
@@ -49,7 +56,7 @@ export default function StoryCircles() {
               <div className="h-16 w-16 rounded-full bg-gradient-primary p-0.5">
                 <div className="h-full w-full rounded-full bg-background p-0.5">
                   <Avatar className="h-full w-full">
-                    <AvatarImage src={profile?.avatar || undefined} />
+                    <AvatarImage src={profile ? avatarUrl(profile) : undefined} />
                     <AvatarFallback>{profile?.pseudo?.[0] || '?'}</AvatarFallback>
                   </Avatar>
                 </div>

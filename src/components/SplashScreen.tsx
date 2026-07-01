@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { pb } from '@/lib/pocketbase';
+import { useAuth } from '@/contexts/AuthContext';
 import { Headphones } from 'lucide-react';
 
 interface LiveFriend {
@@ -22,6 +23,7 @@ function isPresenceFresh(lastSeenAt: string): boolean {
 }
 
 export default function SplashScreen({ onComplete, onDismiss }: Props) {
+  const { user } = useAuth();
   const [splashVisible, setSplashVisible] = useState(true);
   const [widgetVisible, setWidgetVisible] = useState(false);
   const [liveFriend, setLiveFriend] = useState<LiveFriend | null>(null);
@@ -59,8 +61,11 @@ export default function SplashScreen({ onComplete, onDismiss }: Props) {
 
   // Fetch présences — même logique que Social.tsx
   useEffect(() => {
-    const authId = pb.authStore.model?.id;
-    if (!authId) return;
+    if (!user || !pb.authStore.isValid) {
+      setLiveFriend(null);
+      return;
+    }
+    const authId = user.id;
 
     (async () => {
       try {
@@ -110,7 +115,7 @@ export default function SplashScreen({ onComplete, onDismiss }: Props) {
         });
       } catch {}
     })();
-  }, []);
+  }, [user]);
 
   return (
     <>

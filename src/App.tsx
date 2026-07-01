@@ -37,6 +37,7 @@ import WebDeprecatedScreen from '@/components/WebDeprecatedScreen';
 import GamepadController from '@/components/GamepadController';
 import BannedScreen from '@/components/BannedScreen';
 import { detectPlatform } from '@/lib/platform';
+import { isVRModeEnabled } from '@/hooks/useVRMode';
 import { Toaster } from '@/components/ui/sonner';
 
 function shouldShowWebDeprecated(): boolean {
@@ -312,6 +313,10 @@ function AppWithTheme() {
 }
 
 export default function App() {
+  useEffect(() => {
+    document.documentElement.toggleAttribute('data-vr-mode', isVRModeEnabled());
+  }, []);
+
   if (shouldShowWebDeprecated()) {
     return <WebDeprecatedScreen />;
   }

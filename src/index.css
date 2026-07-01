@@ -553,3 +553,23 @@
 [data-animated-bg].paused {
   animation-play-state: paused !important;
 }
+
+/* Mode VR — agrandit toute l'interface pour la rendre maniable au casque VR
+   (pointeur/laser peu précis) ou avec d'autres périphériques non-standards. */
+html[data-vr-mode] {
+  zoom: 1.4;
+}
+
+[data-vr-mode] button,
+[data-vr-mode] a,
+[data-vr-mode] input,
+[data-vr-mode] [role="button"],
+[data-vr-mode] [role="tab"] {
+  min-height: 44px;
+  min-width: 44px;
+}
+
+[data-vr-mode] :focus-visible {
+  outline: 3px solid hsl(var(--primary));
+  outline-offset: 3px;
+}

@@ -24,50 +24,58 @@ export default function ThemeSelectorSheet({
 
   const hasAnimation = currentTheme.backgroundAnimation != null;
 
-  const themeButtons = useMemo(() => {
-    return themes.map((t) => {
-      const isActive = t.id === currentTheme.id;
+  const renderThemeButton = (t: (typeof themes)[number]) => {
+    const isActive = t.id === currentTheme.id;
 
-      return (
-        <button
-          key={t.id}
-          type="button"
-          onClick={() => setTheme(t.id)}
-          aria-label={`Theme ${t.name}`}
-          title={t.name}
+    return (
+      <button
+        key={t.id}
+        type="button"
+        onClick={() => setTheme(t.id)}
+        aria-label={`Theme ${t.name}`}
+        title={t.name}
+        className={cn(
+          'relative inline-flex items-center justify-center rounded-xl border p-[2px] transition-transform',
+          'hover:scale-[1.03]',
+          isActive ? 'border-white/90' : 'border-transparent',
+        )}
+      >
+        <span
           className={cn(
-            'relative inline-flex items-center justify-center rounded-xl border p-[2px] transition-transform',
-            'hover:scale-[1.03]',
-            isActive ? 'border-white/90' : 'border-transparent',
+            PREVIEW_SIZE_CLASS,
+            'rounded-[9px]'
           )}
-        >
-          <span
-            className={cn(
-              PREVIEW_SIZE_CLASS,
-              'rounded-[9px]'
-            )}
-            style={{
-              background: t.background,
-              backgroundSize: t.backgroundAnimation ? '300% 300%' : undefined,
-              animation: t.backgroundAnimation
-                ? t.backgroundAnimation.replace(/\d+s/, '3s')
-                : undefined,
-            }}
-          />
-          {t.backgroundAnimation && (
-            <span className="pointer-events-none absolute -right-1 -top-1 rounded-full bg-gradient-to-br from-purple-400 to-pink-500 px-1 text-[8px] font-bold text-white leading-none py-[1px]">
-              ✦
-            </span>
-          )}
-          {!t.backgroundAnimation && isActive && (
-            <span className="pointer-events-none absolute -right-1 -top-1 rounded-full bg-white p-1">
-              <span className="block h-2.5 w-2.5 rounded-full bg-black/80" />
-            </span>
-          )}
-        </button>
-      );
-    });
-  }, [currentTheme.id, setTheme, themes]);
+          style={{
+            background: t.background,
+            backgroundSize: t.backgroundAnimation ? '300% 300%' : undefined,
+            animation: t.backgroundAnimation
+              ? t.backgroundAnimation.replace(/\d+s/, '3s')
+              : undefined,
+          }}
+        />
+        {t.backgroundAnimation && (
+          <span className="pointer-events-none absolute -right-1 -top-1 rounded-full bg-gradient-to-br from-purple-400 to-pink-500 px-1 text-[8px] font-bold text-white leading-none py-[1px]">
+            ✦
+          </span>
+        )}
+        {!t.backgroundAnimation && isActive && (
+          <span className="pointer-events-none absolute -right-1 -top-1 rounded-full bg-white p-1">
+            <span className="block h-2.5 w-2.5 rounded-full bg-black/80" />
+          </span>
+        )}
+      </button>
+    );
+  };
+
+  const staticThemeButtons = useMemo(
+    () => themes.filter((t) => !t.backgroundAnimation).map(renderThemeButton),
+    [currentTheme.id, setTheme, themes],
+  );
+
+  const animatedThemeButtons = useMemo(
+    () => themes.filter((t) => t.backgroundAnimation).map(renderThemeButton),
+    [currentTheme.id, setTheme, themes],
+  );
 
   return (
     <Sheet>
@@ -96,10 +104,17 @@ export default function ThemeSelectorSheet({
 
         <div className="mt-4">
           <div className="mb-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-            Aperçus
+            Thèmes classiques
           </div>
           <div className="flex flex-wrap gap-3">
-            {themeButtons}
+            {staticThemeButtons}
+          </div>
+
+          <div className="mb-3 mt-6 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+            Thèmes animés ✦
+          </div>
+          <div className="flex flex-wrap gap-3">
+            {animatedThemeButtons}
           </div>
 
           <div className="mt-5 rounded-xl border bg-secondary/40 p-4">

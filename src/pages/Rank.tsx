@@ -1,12 +1,14 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
+import { useSeo } from '@/lib/useSeo';
 import { Button } from '@/components/ui/button';
 import { ArrowLeft, Check, Crown, Lock, Trophy } from 'lucide-react';
 import { getRankProgress, RANK_TIERS, type RankProgress } from '@/lib/ranks';
 import { cn } from '@/lib/utils';
 
 export default function Rank() {
+  useSeo({ title: 'Classement — Nexora Music', description: 'Ton rang et ta progression sur Nexora Music.', path: '/rank' });
   const { user } = useAuth();
   const navigate = useNavigate();
   const [progress, setProgress] = useState<RankProgress | null>(null);

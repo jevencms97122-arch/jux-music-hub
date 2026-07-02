@@ -1,6 +1,7 @@
 ﻿import { useEffect, useState } from 'react';
 import { pb } from '@/lib/pocketbase';
 import { useAuth } from '@/contexts/AuthContext';
+import { useSeo } from '@/lib/useSeo';
 import SongCard from '@/components/SongCard';
 import { usePlayer } from '@/contexts/PlayerContext';
 import { Button } from '@/components/ui/button';
@@ -41,6 +42,7 @@ function recordToSong(r: any): Song {
 }
 
 export default function Favorites() {
+  useSeo({ title: 'Favoris — Nexora Music', description: 'Tes musiques likées sur Nexora Music.', path: '/favorites' });
   const { user } = useAuth();
   const { playSongFromList } = usePlayer();
   const navigate = useNavigate();

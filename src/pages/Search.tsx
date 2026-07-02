@@ -10,6 +10,7 @@ import { ArrowLeft, Search as SearchIcon, Music2, Users, Flame, X, ChevronRight,
 import { cn } from '@/lib/utils';
 import type { Song } from '@/types/music';
 import { recordToSong } from '@/lib/pbUtils';
+import { useSeo } from '@/lib/useSeo';
 
 interface UserResult {
   id: string;
@@ -28,6 +29,7 @@ const loadRecent = (): string[] => {
 };
 
 export default function Search() {
+  useSeo({ title: 'Recherche — Nexora Music', description: 'Recherche des musiques et des artistes sur Nexora Music.', path: '/search' });
   const { playSongFromList } = usePlayer();
   const navigate = useNavigate();
   const [term, setTerm] = useState('');

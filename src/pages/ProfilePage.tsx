@@ -1,4 +1,5 @@
 import { useAuth } from '@/contexts/AuthContext';
+import { useSeo } from '@/lib/useSeo';
 import { Button } from '@/components/ui/button';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
@@ -28,6 +29,7 @@ import { cn } from '@/lib/utils';
 type Tab = 'tracks' | 'reposts' | 'history';
 
 export default function ProfilePage() {
+  useSeo({ title: 'Profil — Nexora Music', description: 'Ton profil Nexora Music.', path: '/profile' });
   const { profile, user } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();

@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { pb } from '@/lib/pocketbase';
 import { useAuth } from '@/contexts/AuthContext';
+import { useSeo } from '@/lib/useSeo';
 import { extractYoutubeId } from '@/lib/storage';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -17,6 +18,7 @@ interface ArtistEntry {
 }
 
 export default function Upload() {
+  useSeo({ title: 'Upload — Nexora Music', description: 'Partage ta musique avec la communauté Nexora Music.', path: '/upload' });
   const { user, profile } = useAuth();
   const navigate = useNavigate();
   const [title, setTitle] = useState('');

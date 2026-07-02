@@ -106,7 +106,7 @@ export default function Home() {
   const [visibleCount, setVisibleCount] = useState(DISCOVER_PAGE);
 
   useSeo({
-    title: 'Accueil — Jux-Music',
+    title: 'Accueil — Nexora Music',
     description: 'Découvre ton Daily Mix, les tendances et les nouveautés musicales partagées par la communauté Jux-Music.',
     path: '/jux',
   });
@@ -232,7 +232,7 @@ export default function Home() {
 
       {/* Header */}
       <header className="relative flex items-center justify-between px-4 pt-5 pb-3">
-        <img src="/jux-icon-511.png" alt="Nexora-Music" className="h-9 w-auto" />
+        <img src="/jux-icon-511.png" alt="Nexora-Music" className="h-9 w-auto rounded-xl" />
         <div className="flex items-center gap-2">
           <button
             onClick={() => navigate('/notifications')}

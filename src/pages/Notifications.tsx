@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { pb } from '@/lib/pocketbase';
 import { useAuth } from '@/contexts/AuthContext';
+import { useSeo } from '@/lib/useSeo';
 import { avatarUrl } from '@/lib/storage';
 import { Button } from '@/components/ui/button';
 import { useNavigate } from 'react-router-dom';
@@ -22,6 +23,7 @@ interface NotifItem {
 }
 
 export default function Notifications() {
+  useSeo({ title: 'Notifications — Nexora Music', description: 'Tes notifications Nexora Music.', path: '/notifications' });
   const { user } = useAuth();
   const navigate = useNavigate();
   const [notifs, setNotifs] = useState<NotifItem[]>([]);

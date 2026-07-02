@@ -1,6 +1,7 @@
 ﻿import { useEffect, useState, useCallback } from 'react';
 import { pb } from '@/lib/pocketbase';
 import { useAuth } from '@/contexts/AuthContext';
+import { useSeo } from '@/lib/useSeo';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { usePlayer, type ListenSessionRow } from '@/contexts/PlayerContext';
 import { Button } from '@/components/ui/button';
@@ -31,6 +32,7 @@ const fetchProfiles = async (ids: string[]) => {
 };
 
 export default function ListenTogether() {
+  useSeo({ title: 'Écoute ensemble — Nexora Music', description: 'Écoute de la musique en synchronisé avec tes amis sur Nexora Music.', path: '/listen-together' });
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const { user, profile } = useAuth();

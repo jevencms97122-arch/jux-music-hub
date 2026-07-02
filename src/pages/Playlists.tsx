@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { pb } from '@/lib/pocketbase';
 import { useAuth } from '@/contexts/AuthContext';
+import { useSeo } from '@/lib/useSeo';
 import { Button } from '@/components/ui/button';
 import { useNavigate } from 'react-router-dom';
 import { ArrowLeft, ListMusic, Plus, Globe, Heart, Lock, ChevronRight, Compass } from 'lucide-react';
@@ -22,6 +23,7 @@ function recordToPlaylist(r: any): Playlist {
 type Tab = 'mine' | 'liked' | 'discover';
 
 export default function Playlists() {
+  useSeo({ title: 'Playlists — Nexora Music', description: 'Tes playlists et celles de la communauté Nexora Music.', path: '/playlists' });
   const { user } = useAuth();
   const navigate = useNavigate();
   const [myPlaylists, setMyPlaylists] = useState<Playlist[]>([]);

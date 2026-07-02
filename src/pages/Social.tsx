@@ -48,7 +48,7 @@ interface ActivityItem {
 }
 
 export default function Social() {
-  useSeo({ title: 'Social — Jux-Music', description: 'Suis tes amis, découvre leurs écoutes en direct et leur activité musicale sur Jux-Music.', path: '/social' });
+  useSeo({ title: 'Social — Nexora Music', description: 'Suis tes amis, découvre leurs écoutes en direct et leur activité musicale sur Nexora Music.', path: '/social' });
 
   const { user, profile } = useAuth();
   const navigate = useNavigate();

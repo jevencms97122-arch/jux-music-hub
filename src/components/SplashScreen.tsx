@@ -129,7 +129,7 @@ export default function SplashScreen({ onComplete, onDismiss }: Props) {
             transition={{ duration: 0.8, ease: 'easeInOut' }}
           >
             <motion.img
-              src="/jux-icon-512.png"
+              src="/jux-icon-511.png"
               alt="Nexora-Music"
               className="w-48 h-48 rounded-2xl shadow-2xl"
               initial={{ opacity: 0, scale: 0.85, y: -16 }}

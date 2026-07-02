@@ -232,7 +232,7 @@ export default function Home() {
 
       {/* Header */}
       <header className="relative flex items-center justify-between px-4 pt-5 pb-3">
-        <img src={juxLogo} alt="Nexora-Music" className="h-7 w-auto" />
+        <img src="/jux-icon-511.png" alt="Nexora-Music" className="h-9 w-auto" />
         <div className="flex items-center gap-2">
           <button
             onClick={() => navigate('/notifications')}

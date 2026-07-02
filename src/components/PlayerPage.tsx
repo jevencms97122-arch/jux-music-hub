@@ -7,7 +7,7 @@ import { useReactiveBg } from '@/hooks/useReactiveBg';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import {
   Play, Pause, SkipBack, SkipForward, Shuffle, Repeat,
-  Volume2, ChevronDown, Music2, Wifi, WifiOff, AlertCircle, ListPlus, Gauge, Heart, MoreHorizontal, MessageSquare, ListMusic, Disc3, Repeat2, Share2, Download, Camera
+  Volume2, ChevronDown, Music2, Wifi, WifiOff, AlertCircle, ListPlus, Gauge, Heart, MoreHorizontal, MessageSquare, ListMusic, Disc3, Repeat2, Share2, Download, Camera, Moon
 } from 'lucide-react';
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
@@ -17,6 +17,7 @@ import type { Song } from '@/types/music';
 import { recordToSong } from '@/lib/pbUtils';
 import { toast } from 'sonner';
 import VolumeControl from './VolumeControl';
+import SleepTimerSheet from './SleepTimerSheet';
 import PlaybackRateControl from './PlaybackRateControl';
 import AddToPlaylistModal from './AddToPlaylistModal';
 import CreateStoryModal from './CreateStoryModal';
@@ -33,6 +34,7 @@ export default function PlayerPage() {
     playSong, togglePlay, next, previous, seek, setVolume, volume,
     closePlayer, isShuffled, toggleShuffle, repeatMode, cycleRepeat,
     playbackRate, isPlayerOpen, connectionStatus, getAnalyserNode,
+    sleepTimerMinutes, sleepTimerRemaining,
   } = usePlayer();
 
   const statusInfo = {
@@ -48,6 +50,7 @@ export default function PlayerPage() {
   const [showComments, setShowComments] = useState(false);
   const [showCreateStory, setShowCreateStory] = useState(false);
   const [showQueue, setShowQueue] = useState(false);
+  const [showSleepTimer, setShowSleepTimer] = useState(false);
   const [showSimilar, setShowSimilar] = useState(false);
   const [similarByGenre, setSimilarByGenre] = useState<Song[]>([]);
   const [similarByAuthor, setSimilarByAuthor] = useState<Song[]>([]);
@@ -548,6 +551,7 @@ export default function PlayerPage() {
       </div>
 
       <VolumeControl open={showVolume} onClose={() => setShowVolume(false)} />
+      <SleepTimerSheet open={showSleepTimer} onClose={() => setShowSleepTimer(false)} />
       <PlaybackRateControl open={showPlaybackRate} onClose={() => setShowPlaybackRate(false)} />
       <AddToPlaylistModal open={showAddToPlaylist} onOpenChange={setShowAddToPlaylist} songId={currentSong.id} />
       <CommentsModal open={showComments} onOpenChange={setShowComments} songId={currentSong.id} />
@@ -829,6 +833,24 @@ export default function PlayerPage() {
               <span className="text-sm font-medium">Vitesse de lecture</span>
               {playbackRate !== 1 && (
                 <span className="ml-auto text-xs font-bold text-primary">{Math.round(playbackRate * 100)}%</span>
+              )}
+            </button>
+            <button
+              onClick={() => { setShowMenu(false); setShowSleepTimer(true); }}
+              className={cn(
+                'flex w-full items-center gap-4 rounded-2xl px-4 py-3.5 transition-colors',
+                sleepTimerMinutes !== null ? 'text-primary' : 'hover:bg-white/[0.06]'
+              )}
+            >
+              <Moon className="h-5 w-5" />
+              <span className="text-sm font-medium">Arrêt automatique</span>
+              {sleepTimerRemaining !== null && (
+                <span className="ml-auto text-xs font-bold text-primary">
+                  {Math.floor(sleepTimerRemaining / 60)}m {(sleepTimerRemaining % 60).toString().padStart(2, '0')}s
+                </span>
+              )}
+              {sleepTimerMinutes === -1 && sleepTimerRemaining === null && (
+                <span className="ml-auto text-xs font-bold text-primary">Fin du morceau</span>
               )}
             </button>
             {currentSong.video_url && (

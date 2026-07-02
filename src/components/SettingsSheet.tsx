@@ -6,11 +6,13 @@ import { useReactiveBg } from '@/hooks/useReactiveBg';
 import { useThemeEnabled } from '@/hooks/useThemeEnabled';
 import { useTheme } from '@/contexts/ThemeContext';
 import { usePlayer, TRANSITION_MODES } from '@/contexts/PlayerContext';
-import { LogOut, Sparkles, Palette, ChevronRight, RefreshCw, Zap, AudioLines, Glasses } from 'lucide-react';
+import { LogOut, Sparkles, Palette, ChevronRight, RefreshCw, Zap, AudioLines, Glasses, Sliders } from 'lucide-react';
 import { usePerformanceMode } from '@/hooks/usePerformanceMode';
 import { useVRMode } from '@/hooks/useVRMode';
 import ThemeSelectorSheet from '@/components/ThemeSelectorSheet';
 import CrossfadeSelectorSheet from '@/components/CrossfadeSelectorSheet';
+import EqualizerSheet from '@/components/EqualizerSheet';
+import { EQ_PRESETS } from '@/lib/eqPresets';
 
 export default function SettingsSheet({ trigger }: { trigger: React.ReactNode }) {
   const { logout } = useAuth();
@@ -19,7 +21,8 @@ export default function SettingsSheet({ trigger }: { trigger: React.ReactNode })
   const { enabled: performanceMode, setEnabled: setPerformanceMode } = usePerformanceMode();
   const { enabled: vrMode, setEnabled: setVrMode } = useVRMode();
   const { currentTheme } = useTheme();
-  const { crossfadeSeconds, transitionMode } = usePlayer();
+  const { crossfadeSeconds, transitionMode, currentEqPreset } = usePlayer();
+  const [showEq, setShowEq] = useState(false);
   const currentCrossfadeLabel = crossfadeSeconds > 0
     ? (TRANSITION_MODES.find((m) => m.value === transitionMode)?.label ?? 'Linear')
     : 'Aucun';
@@ -158,6 +161,27 @@ export default function SettingsSheet({ trigger }: { trigger: React.ReactNode })
             )}
           </div>
 
+          {/* Égaliseur */}
+          <div className="rounded-2xl bg-card/60 overflow-hidden">
+            <button
+              onClick={() => setShowEq(true)}
+              className="flex w-full items-center justify-between px-4 py-3.5"
+            >
+              <div className="flex items-center gap-3">
+                <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-emerald-500/15">
+                  <Sliders className="h-4.5 w-4.5 text-emerald-400" />
+                </div>
+                <div className="text-left">
+                  <p className="text-sm font-semibold">Égaliseur</p>
+                  <p className="text-xs text-muted-foreground">
+                    {EQ_PRESETS.find((p) => p.id === currentEqPreset)?.name ?? 'Normal'}
+                  </p>
+                </div>
+              </div>
+              <ChevronRight className="h-4 w-4 text-muted-foreground" />
+            </button>
+          </div>
+
           {/* Crossfade */}
           <div className="rounded-2xl bg-card/60 overflow-hidden">
             <div className="flex items-center justify-between px-4 py-3.5">
@@ -187,6 +211,8 @@ export default function SettingsSheet({ trigger }: { trigger: React.ReactNode })
 
         {/* Séparateur */}
         <div className="my-6 h-px bg-border/50" />
+
+        <EqualizerSheet open={showEq} onClose={() => setShowEq(false)} />
 
         {/* Déconnexion */}
         <button

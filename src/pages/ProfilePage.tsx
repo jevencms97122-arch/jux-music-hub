@@ -173,7 +173,9 @@ export default function ProfilePage() {
 
         <div className="mt-4">
           <div className="flex items-center gap-2">
-            <h2 className="text-xl font-bold leading-tight">{profile?.pseudo ?? 'Utilisateur'}</h2>
+            <h2 className={cn('text-xl font-bold leading-tight', profile?.badge?.includes('PDG') && 'text-pdg-gold')}>
+              {profile?.pseudo ?? 'Utilisateur'}
+            </h2>
             {rank && <RankBadge tier={rank.tier} />}
           </div>
           {profile?.badge && <ProfileBadge label={profile.badge} className="mt-1.5" />}

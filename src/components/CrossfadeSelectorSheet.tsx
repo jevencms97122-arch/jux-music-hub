@@ -14,7 +14,7 @@ import { Check } from 'lucide-react';
 
 const DEFAULT_TRANSITION_MODE = 'linear';
 
-const VISIBLE_MODES = ['linear', 'tempoShift'];
+const VISIBLE_MODES = ['linear', 'tempoShift', 'bpmSync'];
 
 const OPTIONS = [
   { value: 'none' as const, label: 'Aucun', description: 'Coupure nette, sans fondu entre les morceaux' },

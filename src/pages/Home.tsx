@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useMemo } from 'react';
 import { pb } from '@/lib/pocketbase';
 import { usePlayer } from '@/contexts/PlayerContext';
 import { songCoverUrl } from '@/lib/storage';
@@ -8,7 +8,7 @@ import StoryCircles from '@/components/StoryCircles';
 import { useNavigate } from 'react-router-dom';
 import {
   Play, Heart, Clock, Sparkles,
-  ListMusic, Globe, ArrowRight, Music2, Upload, Bell, Tag, ChevronDown, ScrollText
+  ListMusic, Globe, ArrowRight, Music2, Upload, Bell, Tag, ChevronDown, ScrollText, Mic2
 } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import TrendingSection from '@/components/TrendingSection';
@@ -104,6 +104,7 @@ export default function Home() {
   const [unreadCount, setUnreadCount] = useState(0);
   const [selectedGenre, setSelectedGenre] = useState<string | null>(null);
   const [visibleCount, setVisibleCount] = useState(DISCOVER_PAGE);
+  const [artistSongs, setArtistSongs] = useState<Song[]>([]);
 
   useSeo({
     title: 'Accueil — Nexora Music',
@@ -145,6 +146,13 @@ export default function Home() {
         const fallback = await pb.collection('songs').getList(1, 10, { sort: '-weekly_play_count', requestKey: null });
         setTrending(fallback.items.map(recordToSong));
       }
+
+      // Charge tous les sons pour le classement artistes (fields limités pour la perf)
+      const artistRes = await pb.collection('songs').getList(1, 500, {
+        sort: '-play_count',
+        requestKey: 'artist-ranking',
+      });
+      setArtistSongs(artistRes.items.map(recordToSong));
 
       setLoading(false);
     })();
@@ -217,6 +225,20 @@ export default function Home() {
   })();
 
   const allGenres = genreGroups.map(([g]) => g);
+
+  const topArtists = useMemo(() => {
+    const map: Record<string, { name: string; totalPlays: number; songs: Song[] }> = {};
+    for (const s of artistSongs) {
+      const name = s.author?.trim();
+      if (!name) continue;
+      if (!map[name]) map[name] = { name, totalPlays: 0, songs: [] };
+      map[name].totalPlays += s.play_count ?? 0;
+      map[name].songs.push(s);
+    }
+    return Object.values(map)
+      .sort((a, b) => b.totalPlays - a.totalPlays)
+      .slice(0, 10);
+  }, [artistSongs]);
 
   const filteredSongs = selectedGenre
     ? songs.filter((s) => s.genre?.trim() === selectedGenre)
@@ -479,6 +501,97 @@ export default function Home() {
           </div>
         )}
       </section>
+
+      {/* Top Artistes */}
+      {!loading && topArtists.length > 0 && (
+        <section className="relative mb-8 px-4 animate-fade-slide-up" style={{ animationDelay: '0.25s' }}>
+          <SectionHeader icon={Mic2} title="Top Artistes" />
+
+          {/* Podium top 3 */}
+          <div className="mb-3 flex gap-2.5">
+            {topArtists.slice(0, 3).map((artist, i) => {
+              const coverSong = artist.songs.find((s) => s.cover_url) ?? artist.songs[0];
+              const cover = coverSong ? songCoverUrl(coverSong) : null;
+              const podiumBg = i === 0
+                ? 'from-yellow-500/20 via-yellow-500/8 to-transparent border-yellow-500/25'
+                : i === 1
+                ? 'from-zinc-400/15 via-zinc-400/5 to-transparent border-zinc-400/20'
+                : 'from-amber-700/20 via-amber-700/8 to-transparent border-amber-700/25';
+              const rankColor = i === 0 ? 'text-yellow-400' : i === 1 ? 'text-zinc-300' : 'text-amber-500';
+              const medal = i === 0 ? '🥇' : i === 1 ? '🥈' : '🥉';
+
+              return (
+                <button
+                  key={artist.name}
+                  onClick={() => playSongFromList(artist.songs[0], artist.songs)}
+                  className={cn(
+                    'group flex flex-1 flex-col items-center gap-2 rounded-2xl border bg-gradient-to-b p-3 text-center transition-all duration-200 hover:scale-[1.02] active:scale-[0.98]',
+                    podiumBg
+                  )}
+                >
+                  <div className="relative">
+                    <div className="h-16 w-16 overflow-hidden rounded-full bg-muted ring-2 ring-white/10 group-hover:ring-white/20 transition-all duration-200">
+                      {cover ? (
+                        <CachedImage src={cover} alt={artist.name} className="h-full w-full object-cover transition-transform duration-200 group-hover:scale-110" />
+                      ) : (
+                        <div className="flex h-full w-full items-center justify-center">
+                          <Mic2 className="h-7 w-7 text-muted-foreground/30" />
+                        </div>
+                      )}
+                    </div>
+                    <div className="absolute inset-0 flex items-center justify-center rounded-full bg-black/0 group-hover:bg-black/25 transition-all duration-200">
+                      <Play className="h-5 w-5 fill-white text-white opacity-0 group-hover:opacity-100 transition-opacity duration-200" />
+                    </div>
+                  </div>
+                  <p className="text-base">{medal}</p>
+                  <div className="w-full min-w-0">
+                    <p className="truncate text-xs font-bold text-foreground">{artist.name}</p>
+                    <p className={cn('text-[10px] font-semibold', rankColor)}>
+                      {artist.totalPlays.toLocaleString('fr-FR')}
+                    </p>
+                    <p className="text-[9px] text-muted-foreground">écoutes</p>
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+
+          {/* #4 → #10 liste compacte */}
+          <div className="space-y-1.5">
+            {topArtists.slice(3).map((artist, i) => {
+              const coverSong = artist.songs.find((s) => s.cover_url) ?? artist.songs[0];
+              const cover = coverSong ? songCoverUrl(coverSong) : null;
+              return (
+                <button
+                  key={artist.name}
+                  onClick={() => playSongFromList(artist.songs[0], artist.songs)}
+                  className="group flex w-full items-center gap-3 rounded-xl bg-card/40 px-3 py-2.5 transition-colors hover:bg-card/70 active:scale-[0.99]"
+                >
+                  <span className="w-5 shrink-0 text-center text-xs font-bold text-muted-foreground">
+                    {i + 4}
+                  </span>
+                  <div className="h-10 w-10 shrink-0 overflow-hidden rounded-full bg-muted">
+                    {cover ? (
+                      <CachedImage src={cover} alt={artist.name} className="h-full w-full object-cover" />
+                    ) : (
+                      <div className="flex h-full w-full items-center justify-center">
+                        <Mic2 className="h-4 w-4 text-muted-foreground/30" />
+                      </div>
+                    )}
+                  </div>
+                  <div className="min-w-0 flex-1 text-left">
+                    <p className="truncate text-sm font-semibold text-foreground">{artist.name}</p>
+                    <p className="text-xs text-muted-foreground">
+                      {artist.totalPlays.toLocaleString('fr-FR')} écoutes · {artist.songs.length} titres
+                    </p>
+                  </div>
+                  <Play className="h-4 w-4 shrink-0 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
+                </button>
+              );
+            })}
+          </div>
+        </section>
+      )}
 
       {/* Découverte — masquée quand un genre est filtré (la grille filtrée est déjà au-dessus) */}
       {!selectedGenre && (

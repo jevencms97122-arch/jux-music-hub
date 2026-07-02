@@ -554,6 +554,29 @@
   animation-play-state: paused !important;
 }
 
+/* ── PDG golden pseudo animation ── */
+@keyframes gold-shimmer {
+  0%   { background-position: -200% center; }
+  100% { background-position: 200% center; }
+}
+
+.text-pdg-gold {
+  background: linear-gradient(
+    90deg,
+    #b8860b 0%,
+    #ffd700 20%,
+    #fffacd 40%,
+    #ffd700 60%,
+    #daa520 80%,
+    #ffd700 100%
+  );
+  background-size: 200% auto;
+  background-clip: text;
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  animation: gold-shimmer 3s linear infinite;
+}
+
 /* Mode VR — agrandit toute l'interface pour la rendre maniable au casque VR
    (pointeur/laser peu précis) ou avec d'autres périphériques non-standards. */
 html[data-vr-mode] {

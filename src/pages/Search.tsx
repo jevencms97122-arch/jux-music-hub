@@ -16,6 +16,7 @@ interface UserResult {
   id: string;
   user_id: string;
   pseudo: string;
+  badge: string | null;
   avatar_url: string;
   current_streak: number;
   longest_streak: number;
@@ -84,6 +85,7 @@ export default function Search() {
         id: r.id,
         user_id: r.user_id,
         pseudo: r.pseudo,
+        badge: r.badge ?? null,
         avatar_url: avatarUrl(r),
         current_streak: statsMap[r.user_id]?.current_streak ?? 0,
         longest_streak: statsMap[r.user_id]?.longest_streak ?? 0,
@@ -263,7 +265,7 @@ export default function Search() {
                               {u.pseudo?.charAt(0)?.toUpperCase() ?? '?'}
                             </div>
                           )}
-                          <span className="min-w-0 flex-1 truncate text-sm font-semibold">{u.pseudo}</span>
+                          <span className={cn('min-w-0 flex-1 truncate text-sm font-semibold', u.badge?.includes('PDG') && 'text-pdg-gold')}>{u.pseudo}</span>
                           {displayStreak >= 3 && (
                             <span className={cn(
                               'flex items-center gap-1 rounded-full bg-secondary px-2 py-0.5 text-xs font-bold',

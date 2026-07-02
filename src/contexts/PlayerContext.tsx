@@ -10,9 +10,11 @@ import type { NativeCommandEvent } from '@/lib/androidMediaBridge';
 import { toast } from 'sonner';
 import { updatePresence, clearPresence } from '@/lib/userPresence';
 import { updateDiscordPresence, clearDiscordPresence } from '@/lib/discordBridge';
+import { BeatDetector } from '@/lib/beatDetector';
+import { EQ_BANDS_HZ, EQ_PRESETS, EQ_STORAGE_KEY } from '@/lib/eqPresets';
 import type { Song } from '@/types/music';
 
-export type TransitionMode = 'linear' | 'hardCut' | 'exponential' | 'logarithmic' | 'sine' | 'sCurve' | 'elastic' | 'cubicEaseInOut' | 'quartEaseInOut' | 'tempoShift';
+export type TransitionMode = 'linear' | 'hardCut' | 'exponential' | 'logarithmic' | 'sine' | 'sCurve' | 'elastic' | 'cubicEaseInOut' | 'quartEaseInOut' | 'tempoShift' | 'bpmSync';
 
 export type ConnectionStatus = 'stable' | 'slow' | 'unstable';
 
@@ -76,6 +78,11 @@ interface PlayerContextType {
   startRadio: (seed: Song) => Promise<void>;
   signalVideoReady: () => void;
   getAnalyserNode: () => AnalyserNode | null;
+  currentEqPreset: string;
+  setEqPreset: (id: string) => void;
+  sleepTimerMinutes: number | null;
+  sleepTimerRemaining: number | null;
+  setSleepTimer: (minutes: number | null) => void;
 }
 
 const PlayerContext = createContext<PlayerContextType | null>(null);
@@ -94,6 +101,7 @@ export const TRANSITION_MODES: { value: TransitionMode; label: string; descripti
   { value: 'cubicEaseInOut', label: 'Cubic Ease', description: 'Lisse cubique très fluide' },
   { value: 'quartEaseInOut', label: 'Quart Ease', description: 'Lisse quartique très progressive' },
   { value: 'tempoShift', label: 'Tempo Shift', description: 'Ralentit puis accélère le tempo' },
+  { value: 'bpmSync', label: 'BPM Sync', description: 'Crossfade calé sur les beats de la musique' },
 ];
 
 function recordToSong(r: any): Song {
@@ -126,6 +134,8 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
   const activeRef = useRef<'A' | 'B'>('A');
   const audioCtxRef = useRef<AudioContext | null>(null);
   const analyserRef = useRef<AnalyserNode | null>(null);
+  const eqFiltersRef = useRef<BiquadFilterNode[]>([]);
+  const beatDetectorRef = useRef<BeatDetector | null>(null);
   const crossfadingRef = useRef(false);
   const crossfadeIntervalRef = useRef<number | null>(null);
   const userRef = useRef(authUser);
@@ -153,6 +163,10 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
   });
   const [connectionStatus, setConnectionStatus] = useState<ConnectionStatus>('stable');
   const [isBuffering, setIsBuffering] = useState(false);
+  const [currentEqPreset, setCurrentEqPreset] = useState<string>(() => localStorage.getItem(EQ_STORAGE_KEY) ?? 'flat');
+  const [sleepTimerMinutes, setSleepTimerMinutes] = useState<number | null>(null);
+  const [sleepTimerRemaining, setSleepTimerRemaining] = useState<number | null>(null);
+  const sleepTimerEndRef = useRef<number | null>(null);
 
   const videoReadyRef = useRef(false);
   const signalVideoReady = useCallback(() => { videoReadyRef.current = true; }, []);
@@ -184,6 +198,7 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
 
   const calculateFadePosition = useCallback((p: number, mode: TransitionMode): number => {
     if (mode === 'hardCut') return p >= 1 ? 1 : 0;
+    if (mode === 'bpmSync') return Math.sin(p * Math.PI / 2); // courbe rapide, effet DJ
     if (mode === 'linear') return p;
     if (mode === 'exponential') return p * p * p * p;
     if (mode === 'logarithmic') return 1 - Math.pow(1 - p, 4);
@@ -250,7 +265,8 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
     inactive.currentTime = 0;
     const startFade = () => {
       const startTs = performance.now();
-      const fadeMs = fadeSec * 1000;
+      // BPM Sync : fondu court (max 1.5s) pour effet DJ mix
+      const fadeMs = (mode === 'bpmSync' ? Math.min(fadeSec, 1.5) : fadeSec) * 1000;
       const startVol = active.volume;
       const targetVol = volumeRef.current;
       const mode = transitionModeRef.current;
@@ -305,17 +321,39 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
     audioARef.current = create();
     audioBRef.current = create();
 
-    // Web Audio API — analyser for reactive visualisations
+    // Web Audio API — analyser + EQ filter chain
     try {
       const ctx = new AudioContext();
       const analyser = ctx.createAnalyser();
       analyser.fftSize = 512;
       analyser.smoothingTimeConstant = 0.82;
+
+      // Créer la chaîne EQ : 5 filtres peaking (60Hz, 250Hz, 1kHz, 4kHz, 16kHz)
+      const savedPresetId = localStorage.getItem(EQ_STORAGE_KEY) ?? 'flat';
+      const savedPreset = EQ_PRESETS.find((p) => p.id === savedPresetId) ?? EQ_PRESETS[0];
+      const filters = EQ_BANDS_HZ.map((freq, i) => {
+        const f = ctx.createBiquadFilter();
+        f.type = 'peaking';
+        f.frequency.value = freq;
+        f.Q.value = 1.0;
+        f.gain.value = savedPreset.gains[i];
+        return f;
+      });
+      // Chaîner : filter[0] → filter[1] → ... → filter[4] → analyser → destination
+      filters.forEach((f, i) => {
+        if (i < filters.length - 1) f.connect(filters[i + 1]);
+        else f.connect(analyser);
+      });
       analyser.connect(ctx.destination);
-      ctx.createMediaElementSource(audioARef.current).connect(analyser);
-      ctx.createMediaElementSource(audioBRef.current).connect(analyser);
+
+      // Les deux sources audio passent dans le premier filtre
+      ctx.createMediaElementSource(audioARef.current).connect(filters[0]);
+      ctx.createMediaElementSource(audioBRef.current).connect(filters[0]);
+
       audioCtxRef.current = ctx;
       analyserRef.current = analyser;
+      eqFiltersRef.current = filters;
+      beatDetectorRef.current = new BeatDetector(analyser);
     } catch {}
 
     const onTime = (e: Event) => {
@@ -326,7 +364,26 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
       if (!isFinite(dur) || dur <= 0) return;
       const fadeDuration = crossfadeSecondsRef.current;
       const remaining = dur - a.currentTime;
-      if (fadeDuration > 0 && remaining <= fadeDuration && remaining > 0.1 && !crossfadingRef.current && !isSessionGuestRef.current && repeatModeRef.current !== 'one') triggerCrossfadeRef.current();
+      if (fadeDuration > 0 && remaining <= fadeDuration && remaining > 0.1 && !crossfadingRef.current && !isSessionGuestRef.current && repeatModeRef.current !== 'one') {
+        // BPM Sync : attendre le prochain beat avant de déclencher le crossfade
+        if (transitionModeRef.current === 'bpmSync' && beatDetectorRef.current) {
+          // Attendre le prochain début de mesure (4 beats) pour un effet DJ mix propre
+          const msUntilMeasure = beatDetectorRef.current.getMsUntilNextMeasure();
+          if (msUntilMeasure !== null && msUntilMeasure < 4000) {
+            setTimeout(() => { if (!crossfadingRef.current) triggerCrossfadeRef.current(); }, msUntilMeasure);
+          } else {
+            // Fallback : prochain beat si mesure non détectée
+            const msUntilBeat = beatDetectorRef.current.getMsUntilNextBeat();
+            if (msUntilBeat !== null && msUntilBeat < 1500) {
+              setTimeout(() => { if (!crossfadingRef.current) triggerCrossfadeRef.current(); }, msUntilBeat);
+            } else {
+              triggerCrossfadeRef.current();
+            }
+          }
+        } else {
+          triggerCrossfadeRef.current();
+        }
+      }
     };
     const onDur = (e: Event) => { if (e.target === getActive()) setDuration(getActive().duration || 0); };
     const onEnd = (e: Event) => { if (e.target !== getActive()) return; if (crossfadingRef.current) return; if (isSessionGuestRef.current) return; nextRef.current(); };
@@ -376,6 +433,68 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => { setMediaSessionMetadata(currentSong); }, [currentSong]);
   useEffect(() => { setMediaSessionPlaybackState(currentSong ? (isPlaying ? 'playing' : 'paused') : 'none'); }, [isPlaying, currentSong]);
+
+  // ── Égaliseur ─────────────────────────────────────────────────────────────
+  const setEqPreset = useCallback((id: string) => {
+    const preset = EQ_PRESETS.find((p) => p.id === id);
+    if (!preset) return;
+    setCurrentEqPreset(id);
+    localStorage.setItem(EQ_STORAGE_KEY, id);
+    const filters = eqFiltersRef.current;
+    if (filters.length === 0) return;
+    preset.gains.forEach((gain, i) => {
+      if (filters[i]) filters[i].gain.setTargetAtTime(gain, audioCtxRef.current?.currentTime ?? 0, 0.05);
+    });
+  }, []);
+
+  // ── Sleep timer ───────────────────────────────────────────────────────────
+  const setSleepTimer = useCallback((minutes: number | null) => {
+    setSleepTimerMinutes(minutes);
+    sleepTimerEndRef.current = minutes !== null && minutes > 0
+      ? Date.now() + minutes * 60 * 1000
+      : null;
+    setSleepTimerRemaining(minutes !== null && minutes > 0 ? minutes * 60 : null);
+  }, []);
+
+  // Countdown du sleep timer (tick toutes les secondes)
+  useEffect(() => {
+    if (sleepTimerMinutes === null) { setSleepTimerRemaining(null); return; }
+    // Mode "fin du morceau" : -1
+    if (sleepTimerMinutes === -1) return;
+    const interval = setInterval(() => {
+      const end = sleepTimerEndRef.current;
+      if (!end) { setSleepTimerRemaining(null); return; }
+      const remaining = Math.max(0, Math.round((end - Date.now()) / 1000));
+      setSleepTimerRemaining(remaining);
+      if (remaining <= 0) {
+        [audioARef.current, audioBRef.current].forEach((a) => { if (a) try { a.pause(); } catch {} });
+        setSleepTimerMinutes(null);
+        sleepTimerEndRef.current = null;
+        setSleepTimerRemaining(null);
+      }
+    }, 1000);
+    return () => clearInterval(interval);
+  }, [sleepTimerMinutes]);
+
+  // Mode "fin du morceau" : arrêt quand la chanson se termine
+  useEffect(() => {
+    if (sleepTimerMinutes !== -1) return;
+    if (!isPlaying && currentTime > 0 && duration > 0 && currentTime >= duration - 0.5) {
+      [audioARef.current, audioBRef.current].forEach((a) => { if (a) try { a.pause(); } catch {} });
+      setSleepTimerMinutes(null);
+    }
+  }, [sleepTimerMinutes, isPlaying, currentTime, duration]);
+
+  // ── BPM Sync — démarrer/arrêter le beat detector selon le mode ────────────
+  useEffect(() => {
+    const bd = beatDetectorRef.current;
+    if (!bd) return;
+    if (transitionMode === 'bpmSync' && isPlaying) {
+      bd.start();
+    } else {
+      bd.stop();
+    }
+  }, [transitionMode, isPlaying]);
 
   // Discord Rich Presence — uniquement dans l'app Electron
   const discordStartRef = useRef<number | null>(null);
@@ -986,6 +1105,8 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
       playSong, playSongFromList, playExternalAudio, togglePlay, next, previous, seek, setVolume, toggleShuffle, cycleRepeat,
       openPlayer, closePlayer, setPlaybackRate, setCrossfadeSeconds, setTransitionMode, addToQueue, startRadio, signalVideoReady,
       getAnalyserNode: () => analyserRef.current,
+      currentEqPreset, setEqPreset,
+      sleepTimerMinutes, sleepTimerRemaining, setSleepTimer,
     }}>
       {children}
     </PlayerContext.Provider>

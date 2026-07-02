@@ -184,7 +184,9 @@ export default function UserProfile() {
         <Button variant="ghost" size="icon" aria-label="Retour" onClick={() => navigate(-1)}>
           <ArrowLeft className="h-5 w-5" />
         </Button>
-        <h1 className="text-base font-bold">{profile.pseudo || 'Profil'}</h1>
+        <h1 className={cn('text-base font-bold', profile.badge?.includes('PDG') && 'text-pdg-gold')}>
+          {profile.pseudo || 'Profil'}
+        </h1>
         <div className="w-9" />
       </header>
 
@@ -208,7 +210,9 @@ export default function UserProfile() {
           )}
         </div>
 
-        <h2 className="mt-4 text-2xl font-extrabold tracking-tight">{profile.pseudo || 'Utilisateur'}</h2>
+        <h2 className={cn('mt-4 text-2xl font-extrabold tracking-tight', profile.badge?.includes('PDG') && 'text-pdg-gold')}>
+          {profile.pseudo || 'Utilisateur'}
+        </h2>
         {rank && <RankBadge tier={rank.tier} size="md" className="mt-2" />}
         {profile.badge && <ProfileBadge label={profile.badge} size="md" className="mt-2" />}
         {profile.bio && <p className="mt-1.5 max-w-xs text-sm leading-relaxed text-muted-foreground">{profile.bio}</p>}

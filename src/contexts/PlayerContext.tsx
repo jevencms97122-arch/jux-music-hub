@@ -265,11 +265,11 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
     inactive.currentTime = 0;
     const startFade = () => {
       const startTs = performance.now();
+      const mode = transitionModeRef.current;
       // BPM Sync : fondu court (max 1.5s) pour effet DJ mix
       const fadeMs = (mode === 'bpmSync' ? Math.min(fadeSec, 1.5) : fadeSec) * 1000;
       const startVol = active.volume;
       const targetVol = volumeRef.current;
-      const mode = transitionModeRef.current;
       if (crossfadeIntervalRef.current) clearInterval(crossfadeIntervalRef.current);
       crossfadeIntervalRef.current = window.setInterval(() => {
         const p = Math.min(1, (performance.now() - startTs) / fadeMs);

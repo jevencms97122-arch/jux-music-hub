@@ -18,7 +18,8 @@ const isPreviewHost =
     window.location.hostname.includes("lovableproject.com") ||
     window.location.hostname.includes("lovable.app"));
 
-if (isPreviewHost || isInIframe) {
+// En dev, un SW d'un ancien build sur la même origine servirait une version en cache
+if (import.meta.env.DEV || isPreviewHost || isInIframe) {
   navigator.serviceWorker?.getRegistrations().then((regs) => regs.forEach((r) => r.unregister()));
 } else if ("serviceWorker" in navigator) {
   registerSW({ immediate: true });

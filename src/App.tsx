@@ -35,6 +35,7 @@ import UpdateChecker from '@/components/UpdateChecker';
 import WebAppUpdateNotifier from '@/components/WebAppUpdateNotifier';
 import WebDeprecatedScreen from '@/components/WebDeprecatedScreen';
 import GamepadController from '@/components/GamepadController';
+import JuxAssistant from '@/components/JuxAssistant';
 import BannedScreen from '@/components/BannedScreen';
 import { detectPlatform } from '@/lib/platform';
 import { isVRModeEnabled } from '@/hooks/useVRMode';
@@ -225,6 +226,7 @@ function AppContent() {
         <ScrollToTop />
         <PresenceHeartbeat />
         <GamepadController />
+        <JuxAssistant />
         <div className="min-h-screen">
           {profileCompleted && <UpdateChecker />}
           {profileCompleted && <WebAppUpdateNotifier />}

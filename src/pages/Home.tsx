@@ -8,7 +8,7 @@ import StoryCircles from '@/components/StoryCircles';
 import { useNavigate } from 'react-router-dom';
 import {
   Play, Heart, Clock, Sparkles,
-  ListMusic, Globe, ArrowRight, Music2, Upload, Bell, Tag, ChevronDown, ScrollText, Mic2
+  ListMusic, Globe, ArrowRight, Music2, Upload, Bell, Tag, ChevronDown, ScrollText, Mic2, Car
 } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import TrendingSection from '@/components/TrendingSection';
@@ -256,6 +256,13 @@ export default function Home() {
       <header className="relative flex items-center justify-between px-4 pt-5 pb-3">
         <img src="/jux-icon-511.png" alt="Nexora-Music" className="h-9 w-auto rounded-xl" />
         <div className="flex items-center gap-2">
+          <button
+            onClick={() => navigate('/car-mode')}
+            className="flex h-9 w-9 items-center justify-center rounded-xl border border-border/50 bg-card/60 text-muted-foreground transition-colors hover:bg-card hover:text-foreground"
+            aria-label="Mode voiture"
+          >
+            <Car className="h-4 w-4" />
+          </button>
           <button
             onClick={() => navigate('/notifications')}
             className="relative flex h-9 w-9 items-center justify-center rounded-xl border border-border/50 bg-card/60 text-muted-foreground transition-colors hover:bg-card hover:text-foreground"

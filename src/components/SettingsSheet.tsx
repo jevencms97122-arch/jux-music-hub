@@ -6,7 +6,9 @@ import { useReactiveBg } from '@/hooks/useReactiveBg';
 import { useThemeEnabled } from '@/hooks/useThemeEnabled';
 import { useTheme } from '@/contexts/ThemeContext';
 import { usePlayer, TRANSITION_MODES } from '@/contexts/PlayerContext';
-import { LogOut, Sparkles, Palette, ChevronRight, RefreshCw, Zap, AudioLines, Glasses, Sliders } from 'lucide-react';
+import { LogOut, Sparkles, Palette, ChevronRight, RefreshCw, Zap, AudioLines, Glasses, Sliders, Mic } from 'lucide-react';
+import { useVoiceAssistantSettings, isSpeechRecognitionSupported } from '@/hooks/useVoiceAssistant';
+import { cn } from '@/lib/utils';
 import { usePerformanceMode } from '@/hooks/usePerformanceMode';
 import { useVRMode } from '@/hooks/useVRMode';
 import ThemeSelectorSheet from '@/components/ThemeSelectorSheet';
@@ -26,6 +28,7 @@ export default function SettingsSheet({ trigger }: { trigger: React.ReactNode })
   const currentCrossfadeLabel = crossfadeSeconds > 0
     ? (TRANSITION_MODES.find((m) => m.value === transitionMode)?.label ?? 'Linear')
     : 'Aucun';
+  const { enabled: assistantEnabled, setEnabled: setAssistantEnabled, wakeWord, setWakeWord } = useVoiceAssistantSettings();
   const [reactiveBgChanged, setReactiveBgChanged] = useState(false);
   const [themesChanged, setThemesChanged] = useState(false);
 
@@ -157,6 +160,56 @@ export default function SettingsSheet({ trigger }: { trigger: React.ReactNode })
                     </button>
                   }
                 />
+              </div>
+            )}
+          </div>
+
+          {/* Assistant vocal Jux */}
+          <div className="rounded-2xl bg-card/60 overflow-hidden">
+            <div className="flex items-center justify-between px-4 py-3.5">
+              <div className="flex items-center gap-3">
+                <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-rose-500/15">
+                  <Mic className="h-4.5 w-4.5 text-rose-400" />
+                </div>
+                <div>
+                  <p className="text-sm font-semibold">Assistant Jux</p>
+                  <p className="text-xs text-muted-foreground">Commandes vocales en français pendant la lecture</p>
+                </div>
+              </div>
+              <Switch
+                checked={assistantEnabled}
+                disabled={!isSpeechRecognitionSupported()}
+                onCheckedChange={setAssistantEnabled}
+              />
+            </div>
+            {!isSpeechRecognitionSupported() && (
+              <div className="border-t border-border/40 px-4 pb-3.5 pt-3">
+                <p className="text-xs text-amber-400">Reconnaissance vocale non disponible sur ce navigateur.</p>
+              </div>
+            )}
+            {assistantEnabled && (
+              <div className="border-t border-border/40 px-4 pb-3.5 pt-3 space-y-2">
+                <p className="text-xs font-medium text-muted-foreground">Phrase magique</p>
+                <div className="grid grid-cols-2 gap-2">
+                  {(['jux', 'nexora'] as const).map((w) => (
+                    <button
+                      key={w}
+                      onClick={() => setWakeWord(w)}
+                      className={cn(
+                        'rounded-xl px-3 py-2.5 text-sm font-semibold capitalize transition-colors',
+                        wakeWord === w
+                          ? 'bg-gradient-primary text-primary-foreground shadow-elegant-sm'
+                          : 'bg-secondary/50 text-muted-foreground hover:bg-secondary/80'
+                      )}
+                    >
+                      « {w === 'jux' ? 'Jux' : 'Nexora'} »
+                    </button>
+                  ))}
+                </div>
+                <p className="text-[11px] leading-relaxed text-muted-foreground">
+                  Dis « {wakeWord === 'jux' ? 'Jux' : 'Nexora'}, pause », « reprendre », « musique suivante » ou « précédente ».
+                  Le micro s'active uniquement quand une musique est lancée.
+                </p>
               </div>
             )}
           </div>

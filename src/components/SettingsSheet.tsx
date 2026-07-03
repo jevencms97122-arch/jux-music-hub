@@ -6,14 +6,14 @@ import { useReactiveBg } from '@/hooks/useReactiveBg';
 import { useThemeEnabled } from '@/hooks/useThemeEnabled';
 import { useTheme } from '@/contexts/ThemeContext';
 import { usePlayer, TRANSITION_MODES } from '@/contexts/PlayerContext';
-import { LogOut, Sparkles, Palette, ChevronRight, RefreshCw, Zap, AudioLines, Glasses, Sliders, Mic } from 'lucide-react';
+import { LogOut, Sparkles, Palette, ChevronRight, RefreshCw, Zap, AudioLines, Glasses, Sliders, Mic, Settings2 } from 'lucide-react';
 import { useVoiceAssistantSettings, isSpeechRecognitionSupported } from '@/hooks/useVoiceAssistant';
-import { cn } from '@/lib/utils';
 import { usePerformanceMode } from '@/hooks/usePerformanceMode';
 import { useVRMode } from '@/hooks/useVRMode';
 import ThemeSelectorSheet from '@/components/ThemeSelectorSheet';
 import CrossfadeSelectorSheet from '@/components/CrossfadeSelectorSheet';
 import EqualizerSheet from '@/components/EqualizerSheet';
+import MicTestSheet from '@/components/MicTestSheet';
 import { EQ_PRESETS } from '@/lib/eqPresets';
 
 export default function SettingsSheet({ trigger }: { trigger: React.ReactNode }) {
@@ -28,7 +28,7 @@ export default function SettingsSheet({ trigger }: { trigger: React.ReactNode })
   const currentCrossfadeLabel = crossfadeSeconds > 0
     ? (TRANSITION_MODES.find((m) => m.value === transitionMode)?.label ?? 'Linear')
     : 'Aucun';
-  const { enabled: assistantEnabled, setEnabled: setAssistantEnabled, wakeWord, setWakeWord } = useVoiceAssistantSettings();
+  const { enabled: assistantEnabled, setEnabled: setAssistantEnabled } = useVoiceAssistantSettings();
   const [reactiveBgChanged, setReactiveBgChanged] = useState(false);
   const [themesChanged, setThemesChanged] = useState(false);
 
@@ -164,7 +164,7 @@ export default function SettingsSheet({ trigger }: { trigger: React.ReactNode })
             )}
           </div>
 
-          {/* Assistant vocal Jux */}
+          {/* Assistant vocal */}
           <div className="rounded-2xl bg-card/60 overflow-hidden">
             <div className="flex items-center justify-between px-4 py-3.5">
               <div className="flex items-center gap-3">
@@ -172,7 +172,7 @@ export default function SettingsSheet({ trigger }: { trigger: React.ReactNode })
                   <Mic className="h-4.5 w-4.5 text-rose-400" />
                 </div>
                 <div>
-                  <p className="text-sm font-semibold">Assistant Jux</p>
+                  <p className="text-sm font-semibold">Assistant</p>
                   <p className="text-xs text-muted-foreground">Commandes vocales en français pendant la lecture</p>
                 </div>
               </div>
@@ -190,26 +190,19 @@ export default function SettingsSheet({ trigger }: { trigger: React.ReactNode })
             {assistantEnabled && (
               <div className="border-t border-border/40 px-4 pb-3.5 pt-3 space-y-2">
                 <p className="text-xs font-medium text-muted-foreground">Phrase magique</p>
-                <div className="grid grid-cols-2 gap-2">
-                  {(['jux', 'nexora'] as const).map((w) => (
-                    <button
-                      key={w}
-                      onClick={() => setWakeWord(w)}
-                      className={cn(
-                        'rounded-xl px-3 py-2.5 text-sm font-semibold capitalize transition-colors',
-                        wakeWord === w
-                          ? 'bg-gradient-primary text-primary-foreground shadow-elegant-sm'
-                          : 'bg-secondary/50 text-muted-foreground hover:bg-secondary/80'
-                      )}
-                    >
-                      « {w === 'jux' ? 'Jux' : 'Nexora'} »
-                    </button>
-                  ))}
-                </div>
                 <p className="text-[11px] leading-relaxed text-muted-foreground">
-                  Dis « {wakeWord === 'jux' ? 'Jux' : 'Nexora'}, pause », « reprendre », « musique suivante » ou « précédente ».
-                  Le micro s'active uniquement quand une musique est lancée.
+                  Dis « Jux » ou « Nexora », suivi de « pause », « reprendre », « musique suivante » ou « précédente ».
+                  Les deux mots magiques sont acceptés en même temps. Le micro s'active uniquement quand une musique est lancée.
                 </p>
+                <MicTestSheet
+                  trigger={
+                    <button className="flex w-full items-center gap-3 rounded-xl bg-secondary/50 px-3 py-2.5 hover:bg-secondary/80 transition-colors">
+                      <Settings2 className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+                      <span className="text-sm font-medium flex-1 text-left">Périphérique &amp; test du micro</span>
+                      <ChevronRight className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+                    </button>
+                  }
+                />
               </div>
             )}
           </div>

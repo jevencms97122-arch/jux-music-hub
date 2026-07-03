@@ -1,26 +1,25 @@
 import { useEffect, useState, useCallback } from 'react';
 
 const ENABLED_KEY = 'jux_assistant_enabled';
-const WAKEWORD_KEY = 'jux_assistant_wakeword';
+const MIC_DEVICE_KEY = 'jux_assistant_mic_device';
 const SETTINGS_EVENT = 'jux:assistant-settings-changed';
-
-export type WakeWord = 'jux' | 'nexora';
 
 export function isAssistantEnabled(): boolean {
   try { return localStorage.getItem(ENABLED_KEY) === 'true'; } catch { return false; }
 }
 
-export function getWakeWord(): WakeWord {
-  try { return localStorage.getItem(WAKEWORD_KEY) === 'nexora' ? 'nexora' : 'jux'; } catch { return 'jux'; }
+/** null = périphérique par défaut du système */
+export function getMicDeviceId(): string | null {
+  try { return localStorage.getItem(MIC_DEVICE_KEY) || null; } catch { return null; }
 }
 
 /** Réglages de l'assistant vocal — synchronisés entre composants sans rechargement */
 export function useVoiceAssistantSettings() {
   const [enabled, setEnabledState] = useState(isAssistantEnabled);
-  const [wakeWord, setWakeWordState] = useState<WakeWord>(getWakeWord);
+  const [micDeviceId, setMicDeviceIdState] = useState<string | null>(getMicDeviceId);
 
   useEffect(() => {
-    const sync = () => { setEnabledState(isAssistantEnabled()); setWakeWordState(getWakeWord()); };
+    const sync = () => { setEnabledState(isAssistantEnabled()); setMicDeviceIdState(getMicDeviceId()); };
     window.addEventListener(SETTINGS_EVENT, sync);
     return () => window.removeEventListener(SETTINGS_EVENT, sync);
   }, []);
@@ -31,13 +30,14 @@ export function useVoiceAssistantSettings() {
     window.dispatchEvent(new Event(SETTINGS_EVENT));
   }, []);
 
-  const setWakeWord = useCallback((w: WakeWord) => {
-    localStorage.setItem(WAKEWORD_KEY, w);
-    setWakeWordState(w);
+  const setMicDeviceId = useCallback((id: string | null) => {
+    if (id) localStorage.setItem(MIC_DEVICE_KEY, id);
+    else localStorage.removeItem(MIC_DEVICE_KEY);
+    setMicDeviceIdState(id);
     window.dispatchEvent(new Event(SETTINGS_EVENT));
   }, []);
 
-  return { enabled, setEnabled, wakeWord, setWakeWord };
+  return { enabled, setEnabled, micDeviceId, setMicDeviceId };
 }
 
 /** La reconnaissance vocale est-elle disponible dans ce navigateur ? */

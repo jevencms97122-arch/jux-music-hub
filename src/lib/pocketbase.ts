@@ -4,7 +4,10 @@
  */
 import PocketBase from 'pocketbase';
 
-const PB_URL = import.meta.env.VITE_PB_URL || 'http://188.115.125.74:8090';
+// Slash final retiré : un VITE_PB_URL se terminant par "/" produisait des
+// doubles slashes ("...8090//api/health") ailleurs dans le code, ce qui
+// déclenchait une redirection 307 sans en-têtes CORS → requêtes bloquées.
+const PB_URL = (import.meta.env.VITE_PB_URL || 'http://188.115.125.74:8090').replace(/\/+$/, '');
 
 export const pb = new PocketBase(PB_URL);
 

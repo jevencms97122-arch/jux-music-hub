@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { usePlayer } from '@/contexts/PlayerContext';
 import { useVoiceAssistantSettings, isSpeechRecognitionSupported } from '@/hooks/useVoiceAssistant';
+import { startVoskSession, type VoskSession } from '@/lib/voskEngine';
 import { Mic } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -18,23 +19,10 @@ const WAKE_FUZZY_DISTANCE: Record<string, number> = { jux: 1, nexora: 2 };
 // Fenêtre pendant laquelle on écoute une commande après le mot magique
 const ARM_WINDOW_MS = 6000;
 
-// ── Détection d'activité vocale (VAD) sur notre flux brut ──────────────────
-// Le moteur de reconnaissance du navigateur (SpeechRecognition) ouvre en
-// interne SA PROPRE capture micro, avec écho-annulation, qu'on ne peut pas
-// configurer — c'est cette capture-là (pas la nôtre) que Windows/macOS/Chrome
-// finit par classer "communication" et qui déclenche la réduction de volume
-// des autres sons après quelques secondes d'activation continue.
-// Pour limiter cette exposition sur toutes les plateformes, on ne démarre la
-// reconnaissance que par courtes rafales, uniquement quand on détecte une
-// vraie voix sur notre flux brut (sans traitement, donc sans ducking) —
-// plutôt que de la laisser tourner en continu pendant toute la lecture.
-const VAD_ENTER_MARGIN = 16; // dépassement du bruit ambiant pour déclencher une rafale
-const VAD_SUSTAIN_MARGIN = 9; // dépassement pour considérer qu'on parle encore
-const VAD_MIN_ENTER_LEVEL = 18; // plancher absolu (évite de réagir au bruit de fond quasi nul)
-const VAD_ENTER_DEBOUNCE_MS = 150; // durée au-dessus du seuil avant de déclencher (anti-transitoire)
-const VAD_SILENCE_STOP_MS = 1400; // silence continu avant d'arrêter la rafale
-const VAD_MAX_BURST_MS = 15000; // garde-fou absolu (couvre la fenêtre d'attente de commande)
-const AMBIENT_TAU_MS = 3000; // constante de temps du lissage du niveau ambiant
+/** L'app est chargée dans le wrapper Electron (exposé par preload.cjs) ? */
+function isElectronApp(): boolean {
+  return typeof window !== 'undefined' && !!(window as any).electronAPI?.isElectron;
+}
 
 function normalize(text: string): string {
   // Minuscules + suppression des accents (é → e) pour un matching robuste
@@ -98,12 +86,15 @@ function parseCommand(text: string): Command | null {
  * Micro actif uniquement quand une musique est lancée et que l'option est activée.
  * Les deux mots magiques "Jux" et "Nexora" sont acceptés en permanence.
  *
- * Le flux micro qu'on ouvre nous-mêmes est en mode "brut" (echoCancellation,
- * noiseSuppression et autoGainControl désactivés, comme Discord) et reste
- * ouvert en continu sans jamais provoquer de ducking. La reconnaissance vocale
- * elle-même n'est démarrée que par courtes rafales déclenchées par la
- * détection d'activité vocale (VAD) ci-dessus, pour limiter au minimum le
- * temps où la capture interne du navigateur (celle qui cause le ducking) est active.
+ * Le micro est ouvert en mode "brut" (echoCancellation, noiseSuppression et
+ * autoGainControl désactivés, comme Discord) pour limiter au maximum le
+ * risque de réduction de volume par l'OS pendant que l'assistant écoute.
+ *
+ * Moteur de reconnaissance : webkitSpeechRecognition dans un navigateur
+ * classique (plus précis, envoie l'audio au service de Google). Dans l'app
+ * Electron, ce service échoue systématiquement (erreur "network" — réservé
+ * aux builds officiels de Chrome), donc on bascule sur Vosk, un moteur
+ * 100% local en WASM (voir src/lib/voskEngine.ts).
  */
 export default function JuxAssistant() {
   const { enabled, micDeviceId } = useVoiceAssistantSettings();
@@ -111,25 +102,12 @@ export default function JuxAssistant() {
   const [armed, setArmed] = useState(false);
 
   const recognitionRef = useRef<any>(null);
+  const voskSessionRef = useRef<VoskSession | null>(null);
   const micStreamRef = useRef<MediaStream | null>(null);
   const activeRef = useRef(false);
   const armedUntilRef = useRef<number>(0);
   const armTimeoutRef = useRef<number | null>(null);
   const restartTimeoutRef = useRef<number | null>(null);
-
-  // VAD
-  const vadAudioCtxRef = useRef<AudioContext | null>(null);
-  const vadAnalyserRef = useRef<AnalyserNode | null>(null);
-  const vadDataRef = useRef<Uint8Array | null>(null);
-  const vadRafRef = useRef<number | null>(null);
-  const ambientLevelRef = useRef(0);
-  const enterSinceRef = useRef<number | null>(null);
-  const lastLoudRef = useRef(0);
-  const burstActiveRef = useRef(false);
-  const burstStartRef = useRef(0);
-  const intentionalStopRef = useRef(false);
-  const recognitionRunningRef = useRef(false);
-  const lastFrameTsRef = useRef<number | null>(null);
 
   // Refs vers l'état du lecteur pour éviter de recréer la reconnaissance à chaque re-render
   const isPlayingRef = useRef(isPlaying);
@@ -141,21 +119,17 @@ export default function JuxAssistant() {
   useEffect(() => { nextRef.current = next; }, [next]);
   useEffect(() => { previousRef.current = previous; }, [previous]);
 
-  const shouldListen = enabled && !!currentSong && isSpeechRecognitionSupported();
+  const electron = isElectronApp();
+  const shouldListen = enabled && !!currentSong && (electron || isSpeechRecognitionSupported());
 
   useEffect(() => {
     const cleanup = () => {
       activeRef.current = false;
-      if (vadRafRef.current) { cancelAnimationFrame(vadRafRef.current); vadRafRef.current = null; }
       if (recognitionRef.current) { try { recognitionRef.current.stop(); } catch {} recognitionRef.current = null; }
+      if (voskSessionRef.current) { try { voskSessionRef.current.stop(); } catch {} voskSessionRef.current = null; }
       if (micStreamRef.current) { micStreamRef.current.getTracks().forEach((t) => t.stop()); micStreamRef.current = null; }
-      if (vadAudioCtxRef.current) { vadAudioCtxRef.current.close().catch(() => {}); vadAudioCtxRef.current = null; }
-      vadAnalyserRef.current = null;
-      vadDataRef.current = null;
       if (armTimeoutRef.current) { clearTimeout(armTimeoutRef.current); armTimeoutRef.current = null; }
       if (restartTimeoutRef.current) { clearTimeout(restartTimeoutRef.current); restartTimeoutRef.current = null; }
-      burstActiveRef.current = false;
-      recognitionRunningRef.current = false;
       setArmed(false);
     };
 
@@ -165,18 +139,14 @@ export default function JuxAssistant() {
     let cancelled = false;
 
     (async () => {
-      // Ouvrir le micro en mode "brut" : sans traitement voix, ce flux ne
-      // déclenche jamais le ducking, quelle que soit sa durée d'ouverture.
-      // C'est sur LUI qu'on fait tourner la détection d'activité vocale.
-      let stream: MediaStream;
+      // Ouvrir le micro en mode "brut" AVANT la reconnaissance : sans annulation
+      // d'écho ni suppression de bruit, Chrome n'active pas le mode communication
+      // et Windows ne réduit pas le volume des autres sons (comportement Discord).
+      const rawConstraints = { echoCancellation: false, noiseSuppression: false, autoGainControl: false };
+      let stream: MediaStream | null = null;
       try {
         stream = await navigator.mediaDevices.getUserMedia({
-          audio: {
-            deviceId: micDeviceId ? { exact: micDeviceId } : undefined,
-            echoCancellation: false,
-            noiseSuppression: false,
-            autoGainControl: false,
-          },
+          audio: micDeviceId ? { deviceId: { exact: micDeviceId }, ...rawConstraints } : rawConstraints,
         });
         if (cancelled) { stream.getTracks().forEach((t) => t.stop()); return; }
         micStreamRef.current = stream;
@@ -185,18 +155,32 @@ export default function JuxAssistant() {
         if (err?.name === 'NotAllowedError') {
           activeRef.current = false;
           toast.error("Micro refusé — l'assistant vocal ne peut pas fonctionner", { position: 'bottom-center' });
+          return;
         }
-        return;
+        // Le périphérique choisi dans les paramètres n'est plus disponible
+        // (débranché, ID périmé...) : on retombe sur le micro par défaut
+        // plutôt que d'échouer silencieusement.
+        if (micDeviceId) {
+          try {
+            stream = await navigator.mediaDevices.getUserMedia({ audio: rawConstraints });
+            if (cancelled) { stream.getTracks().forEach((t) => t.stop()); return; }
+            micStreamRef.current = stream;
+          } catch (err2: any) {
+            if (cancelled) return;
+            if (err2?.name === 'NotAllowedError') {
+              activeRef.current = false;
+              toast.error("Micro refusé — l'assistant vocal ne peut pas fonctionner", { position: 'bottom-center' });
+              return;
+            }
+            console.error('[JuxAssistant] Impossible d\'ouvrir le micro', err2);
+            toast.error("Micro introuvable — vérifie qu'un micro est branché et sélectionné", { position: 'bottom-center' });
+          }
+        } else {
+          console.error('[JuxAssistant] Impossible d\'ouvrir le micro', err);
+          toast.error("Micro introuvable — vérifie qu'un micro est branché", { position: 'bottom-center' });
+        }
       }
-      if (cancelled || !activeRef.current) return;
-
-      const SR = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
-      const recognition = new SR();
-      recognition.lang = 'fr-FR';
-      recognition.continuous = true;
-      recognition.interimResults = false;
-      recognition.maxAlternatives = 3;
-      recognitionRef.current = recognition;
+      if (cancelled || !activeRef.current || !stream) return;
 
       const executeCommand = (cmd: Command) => {
         switch (cmd) {
@@ -217,38 +201,70 @@ export default function JuxAssistant() {
         }
       };
 
-      // ── Gestion des rafales de reconnaissance ──
-      const stopBurst = () => {
-        if (!burstActiveRef.current) return;
-        burstActiveRef.current = false;
-        intentionalStopRef.current = true;
-        try { recognition.stop(); } catch {}
-      };
-
-      const startBurst = () => {
-        if (burstActiveRef.current || recognitionRunningRef.current) return;
-        burstActiveRef.current = true;
-        burstStartRef.current = Date.now();
-        intentionalStopRef.current = false;
-        try { recognition.start(); } catch {}
-      };
-
       const disarm = () => {
         armedUntilRef.current = 0;
         setArmed(false);
         if (armTimeoutRef.current) { clearTimeout(armTimeoutRef.current); armTimeoutRef.current = null; }
-        stopBurst();
       };
 
       const arm = () => {
         armedUntilRef.current = Date.now() + ARM_WINDOW_MS;
-        lastLoudRef.current = Date.now();
         setArmed(true);
         if (armTimeoutRef.current) clearTimeout(armTimeoutRef.current);
         armTimeoutRef.current = window.setTimeout(disarm, ARM_WINDOW_MS);
       };
 
-      recognition.onstart = () => { recognitionRunningRef.current = true; };
+      // Logique commune de détection, partagée entre les deux moteurs
+      // (webkitSpeechRecognition dans un navigateur, Vosk dans Electron).
+      const handleTranscript = (raw: string) => {
+        const text = normalize(raw);
+        if (!text) return;
+        console.debug('[JuxAssistant] Entendu:', text);
+
+        const found = findWakeWord(text);
+
+        if (found) {
+          // Mot magique détecté : commande dans la même phrase ("jux pause") ?
+          const after = text.slice(found.index + found.length);
+          const before = text.slice(0, found.index);
+          const cmd = parseCommand(after) ?? parseCommand(before);
+          if (cmd) { executeCommand(cmd); disarm(); return; }
+          arm();
+          return;
+        }
+
+        // Fenêtre d'écoute ouverte : phrase = commande seule
+        if (armedUntilRef.current > Date.now()) {
+          const cmd = parseCommand(text);
+          if (cmd) { executeCommand(cmd); disarm(); return; }
+        }
+      };
+
+      if (electron) {
+        console.log('[JuxAssistant] Moteur: Vosk (local, Electron)');
+        try {
+          const session = await startVoskSession(
+            stream,
+            (text) => handleTranscript(text),
+            (err) => console.error('[JuxAssistant] Erreur Vosk:', err),
+          );
+          if (cancelled || !activeRef.current) { session.stop(); return; }
+          voskSessionRef.current = session;
+        } catch (err) {
+          if (cancelled) return;
+          console.error('[JuxAssistant] Impossible de démarrer la reconnaissance locale (Vosk)', err);
+          toast.error("Assistant vocal indisponible — modèle de reconnaissance local introuvable", { position: 'bottom-center' });
+        }
+        return;
+      }
+
+      console.log('[JuxAssistant] Moteur: WebSpeech (navigateur)');
+      const SR = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+      const recognition = new SR();
+      recognition.lang = 'fr-FR';
+      recognition.continuous = true;
+      recognition.interimResults = false;
+      recognition.maxAlternatives = 3;
 
       recognition.onresult = (event: any) => {
         for (let i = event.resultIndex; i < event.results.length; i++) {
@@ -256,126 +272,45 @@ export default function JuxAssistant() {
           if (!result.isFinal) continue;
           // Tester toutes les alternatives proposées par la reconnaissance
           for (let a = 0; a < result.length; a++) {
-            const text = normalize(result[a].transcript || '');
-            if (!text) continue;
-
-            const found = findWakeWord(text);
-
-            if (found) {
-              // Mot magique détecté : commande dans la même phrase ("jux pause") ?
-              const after = text.slice(found.index + found.length);
-              const before = text.slice(0, found.index);
-              const cmd = parseCommand(after) ?? parseCommand(before);
-              if (cmd) { executeCommand(cmd); disarm(); return; }
-              arm();
-              return;
-            }
-
-            // Fenêtre d'écoute ouverte : phrase = commande seule
-            if (armedUntilRef.current > Date.now()) {
-              const cmd = parseCommand(text);
-              if (cmd) { executeCommand(cmd); disarm(); return; }
-            }
+            handleTranscript(result[a].transcript || '');
           }
         }
       };
 
       recognition.onerror = (e: any) => {
-        // Micro refusé : inutile d'insister
+        // "no-speech" (silence normal) et "aborted" (stop() volontaire) ne sont pas des erreurs à signaler
+        if (e?.error === 'no-speech' || e?.error === 'aborted') return;
         if (e?.error === 'not-allowed' || e?.error === 'service-not-allowed') {
           activeRef.current = false;
           toast.error("Micro refusé — l'assistant vocal ne peut pas fonctionner", { position: 'bottom-center' });
-        }
-      };
-
-      recognition.onend = () => {
-        recognitionRunningRef.current = false;
-        if (!activeRef.current) return;
-        if (intentionalStopRef.current) {
-          // Rafale arrêtée volontairement (silence ou commande traitée) : on
-          // attend simplement le prochain déclenchement du VAD.
-          intentionalStopRef.current = false;
           return;
         }
-        // Fin inattendue côté navigateur (timeout interne) : si la rafale doit
-        // continuer (silence pas encore détecté), on relance immédiatement.
-        if (burstActiveRef.current) {
-          restartTimeoutRef.current = window.setTimeout(() => {
-            if (!activeRef.current || !burstActiveRef.current) return;
-            try { recognition.start(); } catch {}
-          }, 150);
+        console.error('[JuxAssistant] Erreur reconnaissance vocale:', e?.error);
+        if (e?.error === 'network') {
+          toast.error('Assistant vocal : pas de connexion — la reconnaissance a besoin d\'internet', { position: 'bottom-center' });
+        } else if (e?.error === 'audio-capture') {
+          toast.error('Assistant vocal : aucun micro détecté', { position: 'bottom-center' });
+        } else if (e?.error === 'language-not-supported') {
+          toast.error('Assistant vocal : reconnaissance en français non disponible sur cet appareil', { position: 'bottom-center' });
         }
       };
 
-      // ── Détection d'activité vocale sur notre flux brut ──
-      const audioCtx = new AudioContext();
-      const source = audioCtx.createMediaStreamSource(stream);
-      const analyser = audioCtx.createAnalyser();
-      analyser.fftSize = 256;
-      source.connect(analyser);
-      vadAudioCtxRef.current = audioCtx;
-      vadAnalyserRef.current = analyser;
-      vadDataRef.current = new Uint8Array(analyser.frequencyBinCount);
-
-      // Restreint l'analyse à la bande de fréquences de la voix humaine
-      // (≈300–3400 Hz) pour mieux distinguer une voix des basses de la musique.
-      const nyquist = audioCtx.sampleRate / 2;
-      const binHz = nyquist / analyser.frequencyBinCount;
-      const voiceLowBin = Math.max(1, Math.floor(300 / binHz));
-      const voiceHighBin = Math.min(analyser.frequencyBinCount - 1, Math.ceil(3400 / binHz));
-
-      const tick = () => {
-        vadRafRef.current = requestAnimationFrame(tick);
-        const data = vadDataRef.current;
-        if (!data) return;
-        analyser.getByteFrequencyData(data);
-        let sum = 0;
-        for (let i = voiceLowBin; i <= voiceHighBin; i++) sum += data[i];
-        const level = sum / (voiceHighBin - voiceLowBin + 1);
-
-        const now = Date.now();
-        const dt = lastFrameTsRef.current ? now - lastFrameTsRef.current : 16;
-        lastFrameTsRef.current = now;
-
-        if (!burstActiveRef.current) {
-          // Le niveau ambiant (bruit/musique de fond) n'est mis à jour qu'en dehors
-          // des rafales pour ne pas se laisser polluer par la voix elle-même.
-          const alpha = 1 - Math.exp(-dt / AMBIENT_TAU_MS);
-          ambientLevelRef.current += (level - ambientLevelRef.current) * alpha;
-        }
-
-        const enterThreshold = Math.max(VAD_MIN_ENTER_LEVEL, ambientLevelRef.current + VAD_ENTER_MARGIN);
-        const sustainThreshold = Math.max(VAD_MIN_ENTER_LEVEL - 6, ambientLevelRef.current + VAD_SUSTAIN_MARGIN);
-
-        if (!burstActiveRef.current) {
-          if (level >= enterThreshold) {
-            if (enterSinceRef.current == null) enterSinceRef.current = now;
-            if (now - enterSinceRef.current >= VAD_ENTER_DEBOUNCE_MS) {
-              enterSinceRef.current = null;
-              lastLoudRef.current = now;
-              startBurst();
-            }
-          } else {
-            enterSinceRef.current = null;
-          }
-        } else {
-          if (level >= sustainThreshold) lastLoudRef.current = now;
-          const waitingForCommand = armedUntilRef.current > now;
-          const burstDuration = now - burstStartRef.current;
-          const silentFor = now - lastLoudRef.current;
-          if (burstDuration >= VAD_MAX_BURST_MS) {
-            stopBurst();
-          } else if (!waitingForCommand && silentFor >= VAD_SILENCE_STOP_MS) {
-            stopBurst();
-          }
-        }
+      // Chrome coupe la reconnaissance régulièrement : on relance tant qu'on est actif
+      recognition.onend = () => {
+        if (!activeRef.current) return;
+        restartTimeoutRef.current = window.setTimeout(() => {
+          if (!activeRef.current) return;
+          try { recognition.start(); } catch {}
+        }, 300);
       };
-      vadRafRef.current = requestAnimationFrame(tick);
+
+      try { recognition.start(); } catch {}
+      recognitionRef.current = recognition;
     })();
 
     return () => { cancelled = true; cleanup(); };
     // Redémarre l'écoute si le périphérique micro choisi change dans les paramètres
-  }, [shouldListen, micDeviceId]);
+  }, [shouldListen, micDeviceId, electron]);
 
   // Indicateur discret quand l'assistant attend une commande
   if (!armed) return null;

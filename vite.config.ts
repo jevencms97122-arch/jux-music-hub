@@ -8,6 +8,10 @@ export default defineConfig(({ mode }) => ({
   server: {
     host: true,
     port: 8080,
+    // Autorise l'accès via un tunnel (Ngrok, LocalTunnel, trycloudflare...) dont
+    // l'URL/l'hôte change à chaque relance — sans ça Vite bloque la requête
+    // avec "Blocked request. This host is not allowed" en mode dev.
+    allowedHosts: true,
     hmr: {
       overlay: false,
       clientPort: 8080,
@@ -60,6 +64,10 @@ export default defineConfig(({ mode }) => ({
       },
       workbox: {
         globPatterns: ["**/*.{js,css,html,ico,png,svg,woff2,woff}"],
+        // Le moteur Vosk (WASM) n'est chargé qu'en dynamique et uniquement dans
+        // l'app Electron (voir src/lib/voskEngine.ts) — jamais utile aux
+        // utilisateurs web/PWA, on évite donc de le précharger (~5,8 Mo).
+        globIgnores: ["**/vosk-*.js"],
         navigateFallbackDenylist: [/^\/~oauth/],
         navigateFallback: "/index.html",
         clientsClaim: true,

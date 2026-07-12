@@ -1,6 +1,6 @@
 'use strict';
 
-const { app, BrowserWindow, ipcMain } = require('electron');
+const { app, BrowserWindow, ipcMain, session, systemPreferences } = require('electron');
 const path = require('path');
 
 const DISCORD_CLIENT_ID = '1501360327122620548';
@@ -83,6 +83,41 @@ ipcMain.on('discord:clearPresence', () => {
   removeActivity();
 });
 
+// ── Permissions micro ─────────────────────────────────────────────────────────
+// Sans ce gestionnaire, Electron/Chromium refuse SILENCIEUSEMENT toute demande
+// getUserMedia() (micro) — aucune popup ne s'affiche, ça échoue juste. C'est
+// nécessaire pour l'assistant vocal (JuxAssistant) et le test micro des paramètres.
+
+function setupMicPermissions() {
+  const allowedPermissions = ['media', 'microphone', 'audioCapture'];
+
+  session.defaultSession.setPermissionRequestHandler((webContents, permission, callback) => {
+    const allowed = allowedPermissions.includes(permission);
+    console.log('[Permissions] Demande:', permission, '→', allowed ? 'autorisée' : 'refusée');
+    callback(allowed);
+  });
+
+  if (typeof session.defaultSession.setPermissionCheckHandler === 'function') {
+    session.defaultSession.setPermissionCheckHandler((webContents, permission) => {
+      return allowedPermissions.includes(permission);
+    });
+  }
+}
+
+async function requestMacMicAccess() {
+  if (process.platform !== 'darwin' || !systemPreferences.askForMediaAccess) return;
+  try {
+    const status = systemPreferences.getMediaAccessStatus('microphone');
+    console.log('[Permissions] Statut micro macOS:', status);
+    if (status !== 'granted') {
+      const granted = await systemPreferences.askForMediaAccess('microphone');
+      console.log('[Permissions] Micro macOS accordé:', granted);
+    }
+  } catch (err) {
+    console.warn('[Permissions] Erreur demande accès micro macOS:', err.message);
+  }
+}
+
 // ── Window ────────────────────────────────────────────────────────────────────
 
 function createWindow() {
@@ -115,7 +150,9 @@ function createWindow() {
   });
 }
 
-app.whenReady().then(() => {
+app.whenReady().then(async () => {
+  setupMicPermissions();
+  await requestMacMicAccess();
   createWindow();
   initDiscord();
 

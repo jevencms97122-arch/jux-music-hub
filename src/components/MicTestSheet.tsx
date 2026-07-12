@@ -3,6 +3,7 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from '@/co
 import { Mic, MicOff, CheckCircle2, Loader2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useVoiceAssistantSettings, isSpeechRecognitionSupported } from '@/hooks/useVoiceAssistant';
+import { startVoskSession, type VoskSession } from '@/lib/voskEngine';
 
 interface MicDevice {
   deviceId: string;
@@ -10,6 +11,11 @@ interface MicDevice {
 }
 
 type TestState = 'idle' | 'listening' | 'detected';
+
+/** L'app est chargée dans le wrapper Electron (exposé par preload.cjs) ? */
+function isElectronApp(): boolean {
+  return typeof window !== 'undefined' && !!(window as any).electronAPI?.isElectron;
+}
 
 export default function MicTestSheet({ trigger }: { trigger: React.ReactNode }) {
   const [open, setOpen] = useState(false);
@@ -25,11 +31,14 @@ export default function MicTestSheet({ trigger }: { trigger: React.ReactNode }) 
   const analyserRef = useRef<AnalyserNode | null>(null);
   const rafRef = useRef<number | null>(null);
   const recognitionRef = useRef<any>(null);
+  const voskSessionRef = useRef<VoskSession | null>(null);
   const detectedTimeoutRef = useRef<number | null>(null);
+  const electron = isElectronApp();
 
   const stopAll = () => {
     if (rafRef.current) { cancelAnimationFrame(rafRef.current); rafRef.current = null; }
     if (recognitionRef.current) { try { recognitionRef.current.stop(); } catch {} recognitionRef.current = null; }
+    if (voskSessionRef.current) { try { voskSessionRef.current.stop(); } catch {} voskSessionRef.current = null; }
     if (streamRef.current) { streamRef.current.getTracks().forEach((t) => t.stop()); streamRef.current = null; }
     if (audioCtxRef.current) { audioCtxRef.current.close().catch(() => {}); audioCtxRef.current = null; }
     if (detectedTimeoutRef.current) { clearTimeout(detectedTimeoutRef.current); detectedTimeoutRef.current = null; }
@@ -91,7 +100,30 @@ export default function MicTestSheet({ trigger }: { trigger: React.ReactNode }) 
       tick();
 
       // ── Test de détection vocale réel ──
-      if (isSpeechRecognitionSupported()) {
+      const markDetected = (text: string) => {
+        setTranscript(text);
+        setTestState('detected');
+        if (detectedTimeoutRef.current) clearTimeout(detectedTimeoutRef.current);
+        detectedTimeoutRef.current = window.setTimeout(() => setTestState('listening'), 2000);
+      };
+
+      if (electron) {
+        // Dans Electron, webkitSpeechRecognition échoue toujours ("network") :
+        // le service de Google n'est accessible qu'aux builds officiels de
+        // Chrome. On teste avec le même moteur local (Vosk) que l'assistant.
+        setTestState('listening');
+        try {
+          const session = await startVoskSession(
+            stream,
+            (text) => markDetected(text),
+            (err) => console.error('[MicTestSheet] Erreur Vosk:', err),
+            (partial) => setTranscript(partial),
+          );
+          voskSessionRef.current = session;
+        } catch (err) {
+          console.error('[MicTestSheet] Modèle de reconnaissance local indisponible', err);
+        }
+      } else if (isSpeechRecognitionSupported()) {
         setTestState('listening');
         const SR = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
         const recognition = new SR();
@@ -102,11 +134,7 @@ export default function MicTestSheet({ trigger }: { trigger: React.ReactNode }) 
           const result = event.results[event.results.length - 1];
           const text = result[0]?.transcript || '';
           setTranscript(text);
-          if (result.isFinal && text.trim()) {
-            setTestState('detected');
-            if (detectedTimeoutRef.current) clearTimeout(detectedTimeoutRef.current);
-            detectedTimeoutRef.current = window.setTimeout(() => setTestState('listening'), 2000);
-          }
+          if (result.isFinal && text.trim()) markDetected(text);
         };
         recognition.onend = () => { if (streamRef.current) { try { recognition.start(); } catch {} } };
         try { recognition.start(); } catch {}
@@ -132,7 +160,7 @@ export default function MicTestSheet({ trigger }: { trigger: React.ReactNode }) 
           <SheetTitle>Microphone</SheetTitle>
         </SheetHeader>
 
-        {!isSpeechRecognitionSupported() ? (
+        {!electron && !isSpeechRecognitionSupported() ? (
           <p className="rounded-2xl border border-dashed border-border/60 bg-card/30 px-4 py-8 text-center text-sm text-muted-foreground">
             Reconnaissance vocale non disponible sur ce navigateur.
           </p>

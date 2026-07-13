@@ -171,10 +171,27 @@ export interface ListenSession {
   };
 }
 
+export interface ChatMessage {
+  id: string;
+  sender_id: string;
+  recipient_id: string;
+  type: 'text' | 'voice' | 'song_share';
+  text: string | null;
+  voice: string | null;          // fichier audio PocketBase (message vocal)
+  voice_duration: number | null; // durée du vocal en secondes
+  song_id: string | null;        // pour type song_share
+  clip_start: number | null;     // début du clip partagé (s)
+  clip_end: number | null;       // fin du clip partagé (s)
+  is_read: boolean;
+  created_at: string;
+  collectionId?: string;
+  collectionName?: string;
+}
+
 export interface AppNotification {
   id: string;
   recipient_id: string;
-  type: 'new_song' | 'milestone' | 'friend_request' | 'like' | 'comment' | 'story_view' | 'session_invite';
+  type: 'new_song' | 'milestone' | 'friend_request' | 'like' | 'comment' | 'story_view' | 'session_invite' | 'message';
   title: string;
   body: string | null;
   data: Record<string, any>;

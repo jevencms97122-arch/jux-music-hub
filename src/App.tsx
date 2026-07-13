@@ -21,6 +21,7 @@ import UserProfile from '@/pages/UserProfile';
 import Playlists from '@/pages/Playlists';
 import PlaylistDetail from '@/pages/PlaylistDetail';
 import Social from '@/pages/Social';
+import Chat from '@/pages/Chat';
 import ListenTogether from '@/pages/ListenTogether';
 import Search from '@/pages/Search';
 import Notifications from '@/pages/Notifications';
@@ -186,6 +187,50 @@ function AppContent() {
     return () => { if (unsub) unsub(); };
   }, [user, navigate]);
 
+  // Messages privés temps réel → notification
+  const pathRef = useRef(location.pathname);
+  useEffect(() => { pathRef.current = location.pathname; }, [location.pathname]);
+  const shownMsgIds = useRef<Set<string>>(new Set());
+  useEffect(() => {
+    if (!user) return;
+    let unsub: (() => void) | undefined;
+    (async () => {
+      try {
+        unsub = await pb.collection('messages').subscribe('*', async (e) => {
+          if (e.action !== 'create') return;
+          const m: any = e.record;
+          if (m.recipient_id !== user.id) return;
+          if (shownMsgIds.current.has(m.id)) return;
+          shownMsgIds.current.add(m.id);
+          // Pas de notif si on est déjà dans cette conversation
+          if (pathRef.current === `/chat/${m.sender_id}`) return;
+
+          let pseudo = 'Nouveau message';
+          try {
+            const res = await pb.collection('profiles').getList(1, 1, { filter: `user_id = "${m.sender_id}"`, requestKey: null });
+            if (res.items[0]?.pseudo) pseudo = res.items[0].pseudo as string;
+          } catch {}
+
+          const body = m.type === 'voice' ? '🎤 Message vocal'
+            : m.type === 'song_share' ? '🎵 T\'a partagé une musique'
+            : (m.text || 'Nouveau message');
+
+          if ('Notification' in window && Notification.permission === 'granted') {
+            new Notification(`Message de ${pseudo}`, { body });
+          }
+          toast(`Message de ${pseudo}`, {
+            description: body,
+            duration: 8000,
+            action: { label: 'Ouvrir', onClick: () => navigate(`/chat/${m.sender_id}`) },
+          });
+        });
+      } catch (err) {
+        console.error('messages subscribe', err);
+      }
+    })();
+    return () => { if (unsub) unsub(); };
+  }, [user, navigate]);
+
   let mainContent: React.ReactNode;
 
   if (!offline && loading) {
@@ -216,7 +261,8 @@ function AppContent() {
       '/notifications': 'home',
       '/playlists': 'playlists',
     };
-    const active = pathToActive[location.pathname] || (location.pathname.startsWith('/playlist/') ? 'playlists' : location.pathname.startsWith('/u/') ? 'social' : 'home');
+    const active = pathToActive[location.pathname] || (location.pathname.startsWith('/playlist/') ? 'playlists' : (location.pathname.startsWith('/u/') || location.pathname.startsWith('/chat/')) ? 'social' : 'home');
+    const hideBottomNav = location.pathname.startsWith('/chat/');
 
     const guard = (el: JSX.Element) => profileCompleted ? <PageWrap>{el}</PageWrap> : <Navigate to="/profile-setup" replace />;
     const backendGuard = (el: JSX.Element) => offline ? <PageWrap><RequiresBackend /></PageWrap> : guard(el);
@@ -245,6 +291,7 @@ function AppContent() {
                 <Route path="/playlists" element={offline ? guard(<OfflinePlaylists />) : guard(<Playlists />)} />
                 <Route path="/playlist/:id" element={offline ? guard(<OfflinePlaylistDetail />) : guard(<PlaylistDetail />)} />
                 <Route path="/social" element={offline ? <Navigate to="/jux" replace /> : guard(<Social />)} />
+                <Route path="/chat/:userId" element={offline ? <Navigate to="/jux" replace /> : guard(<Chat />)} />
                 <Route path="/listen-together" element={offline ? <Navigate to="/jux" replace /> : guard(<ListenTogether />)} />
                 <Route path="/search" element={backendGuard(<Search />)} />
                 <Route path="/notifications" element={backendGuard(<Notifications />)} />
@@ -259,7 +306,7 @@ function AppContent() {
           </main>
           <MiniPlayer />
           <PlayerPage />
-          {profileCompleted && (
+          {profileCompleted && !hideBottomNav && (
             <BottomNav
               active={active}
               hideSocial={offline}

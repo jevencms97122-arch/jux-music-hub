@@ -6,9 +6,11 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
+import { Dialog, DialogContent } from '@/components/ui/dialog';
 import { avatarUrl, songCoverUrl } from '@/lib/storage';
 import { toast } from 'sonner';
-import { Headphones, Users, Search, Clock, UserPlus, UserCheck, Check, X, ChevronRight, Compass, Heart, Music2, Activity, Radio, Copy, LogOut, Send } from 'lucide-react';
+import { Headphones, Users, Search, Clock, UserPlus, UserCheck, Check, X, ChevronRight, Compass, Heart, Music2, Activity, Radio, Copy, LogOut, Send, MessageCircle, User as UserIcon } from 'lucide-react';
+import { useUnreadMessages } from '@/hooks/useChat';
 import { cn } from '@/lib/utils';
 import type { Profile, Follow, Song } from '@/types/music';
 import { useSeo } from '@/lib/useSeo';
@@ -69,6 +71,10 @@ export default function Social() {
   const [showSessionSheet, setShowSessionSheet] = useState(false);
   const [sessionCreating, setSessionCreating] = useState(false);
   const [invitedIds, setInvitedIds] = useState<Set<string>>(new Set());
+
+  // Messagerie
+  const { unreadTotal, unreadBySender } = useUnreadMessages();
+  const [selectedFriend, setSelectedFriend] = useState<Profile | null>(null);
 
   // Requêtes groupées (1 requête par lot de 50 au lieu d'une par utilisateur)
   const fetchProfiles = async (ids: string[]) => {
@@ -415,6 +421,18 @@ export default function Social() {
       {tab === 'friends' ? (
         <div key={tab} className="relative px-5 mt-5 space-y-6 animate-fade-slide-up delay-2">
 
+          {/* ── Nouveaux messages ── */}
+          {unreadTotal > 0 && (
+            <div className="flex items-center gap-3 rounded-2xl border border-primary/30 bg-primary/10 p-3">
+              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-primary/20">
+                <MessageCircle className="h-4.5 w-4.5 text-primary" />
+              </div>
+              <p className="text-sm font-bold text-primary">
+                {unreadTotal} nouveau{unreadTotal > 1 ? 'x' : ''} message{unreadTotal > 1 ? 's' : ''}
+              </p>
+            </div>
+          )}
+
           {/* ── Écoute partagée ── */}
           <button
             onClick={openSession}
@@ -553,10 +571,11 @@ export default function Social() {
                 {displayedFollowing.map((f) => {
                   const presence = presences.get(f.user_id);
                   const listening = presence?.is_listening && isPresenceFresh(presence) && presence.current_song_title;
+                  const unread = unreadBySender[f.user_id] || 0;
                   return (
                     <button
                       key={f.user_id}
-                      onClick={() => navigate(`/u/${f.user_id}`)}
+                      onClick={() => setSelectedFriend(f)}
                       className="group flex w-full items-center gap-3 rounded-2xl border border-border/40 bg-card/50 p-3 text-left transition-colors hover:bg-card active:scale-[0.99]"
                     >
                       <div className="relative shrink-0">
@@ -568,7 +587,12 @@ export default function Social() {
                       </div>
                       <div className="min-w-0 flex-1">
                         <p className="truncate text-sm font-semibold">{f.pseudo || 'Anonyme'}</p>
-                        {listening ? (
+                        {unread > 0 ? (
+                          <p className="flex items-center gap-1 truncate text-xs font-semibold text-primary">
+                            <MessageCircle className="h-3 w-3 shrink-0" />
+                            {unread} nouveau{unread > 1 ? 'x' : ''} message{unread > 1 ? 's' : ''}
+                          </p>
+                        ) : listening ? (
                           <p className="flex items-center gap-1 truncate text-xs text-muted-foreground">
                             <Headphones className="h-3 w-3 shrink-0 text-green-500" />
                             <span className="truncate">{presence!.current_song_title}</span>
@@ -577,6 +601,11 @@ export default function Social() {
                           <p className="text-xs text-muted-foreground">Hors ligne</p>
                         )}
                       </div>
+                      {unread > 0 && (
+                        <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-primary px-1.5 text-[10px] font-bold text-primary-foreground shrink-0">
+                          {unread}
+                        </span>
+                      )}
                       <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground transition-transform group-hover:translate-x-0.5" />
                     </button>
                   );
@@ -729,6 +758,53 @@ export default function Social() {
           )}
         </div>
       )}
+
+      {/* ── Modal ami : profil ou chat ── */}
+      <Dialog open={!!selectedFriend} onOpenChange={(open) => { if (!open) setSelectedFriend(null); }}>
+        <DialogContent className="max-w-xs mx-auto rounded-3xl">
+          {selectedFriend && (
+            <div className="flex flex-col items-center gap-4 pt-2">
+              <div className="relative">
+                <Avatar className="h-20 w-20 ring-4 ring-primary/20">
+                  <AvatarImage src={avatarUrl(selectedFriend as any)} />
+                  <AvatarFallback className="text-2xl">{selectedFriend.pseudo?.[0] || '?'}</AvatarFallback>
+                </Avatar>
+                {(unreadBySender[selectedFriend.user_id] || 0) > 0 && (
+                  <span className="absolute -right-1 -top-1 flex h-6 min-w-6 items-center justify-center rounded-full bg-primary px-1.5 text-[11px] font-bold text-primary-foreground ring-2 ring-background">
+                    {unreadBySender[selectedFriend.user_id]}
+                  </span>
+                )}
+              </div>
+              <div className="text-center">
+                <p className="text-lg font-extrabold">{selectedFriend.pseudo || 'Anonyme'}</p>
+                {selectedFriend.bio && <p className="mt-0.5 text-xs text-muted-foreground line-clamp-2">{selectedFriend.bio}</p>}
+              </div>
+              <div className="flex w-full flex-col gap-2">
+                <Button
+                  className="w-full rounded-xl bg-gradient-primary font-semibold shadow-elegant-sm"
+                  onClick={() => { const id = selectedFriend.user_id; setSelectedFriend(null); navigate(`/chat/${id}`); }}
+                >
+                  <MessageCircle className="mr-2 h-4 w-4" />
+                  Ouvrir le chat
+                  {(unreadBySender[selectedFriend.user_id] || 0) > 0 && (
+                    <span className="ml-2 rounded-full bg-white/20 px-2 py-0.5 text-[10px] font-bold">
+                      {unreadBySender[selectedFriend.user_id]}
+                    </span>
+                  )}
+                </Button>
+                <Button
+                  variant="outline"
+                  className="w-full rounded-xl font-semibold"
+                  onClick={() => { const id = selectedFriend.user_id; setSelectedFriend(null); navigate(`/u/${id}`); }}
+                >
+                  <UserIcon className="mr-2 h-4 w-4" />
+                  Voir le profil
+                </Button>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
 
       {/* ── Sheet Écoute partagée ── */}
       <Sheet open={showSessionSheet} onOpenChange={setShowSessionSheet}>

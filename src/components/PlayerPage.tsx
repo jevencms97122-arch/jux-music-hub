@@ -8,7 +8,7 @@ import { useReactiveBg } from '@/hooks/useReactiveBg';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import {
   Play, Pause, SkipBack, SkipForward, Shuffle, Repeat,
-  Volume2, ChevronDown, Music2, Wifi, WifiOff, AlertCircle, ListPlus, Gauge, Heart, MoreHorizontal, MessageSquare, ListMusic, Disc3, Repeat2, Share2, Download, Camera, Moon
+  Volume2, ChevronDown, Music2, Wifi, WifiOff, AlertCircle, ListPlus, Gauge, Heart, MoreHorizontal, MessageSquare, ListMusic, Disc3, Repeat2, Share2, Download, Camera, Moon, Send, Link2
 } from 'lucide-react';
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
@@ -22,6 +22,7 @@ import SleepTimerSheet from './SleepTimerSheet';
 import PlaybackRateControl from './PlaybackRateControl';
 import AddToPlaylistModal from './AddToPlaylistModal';
 import CreateStoryModal from './CreateStoryModal';
+import ShareToFriendSheet from './ShareToFriendSheet';
 import { detectPlatform } from '@/lib/platform';
 import { cn } from '@/lib/utils';
 
@@ -59,13 +60,20 @@ export default function PlayerPage() {
   const [similarTab, setSimilarTab] = useState<'genre' | 'author'>('genre');
   const [closing, setClosing] = useState(false);
   const [shareUrl, setShareUrl] = useState<string | null>(null);
+  const [showShareChooser, setShowShareChooser] = useState(false);
+  const [showShareToFriend, setShowShareToFriend] = useState(false);
   const [publisherProfile, setPublisherProfile] = useState<{ pseudo: string; avatar_url: string | null; user_id: string } | null>(null);
 
   const shareSong = () => {
     if (!currentSong) return;
-    const url = `${window.location.origin}/song/${currentSong.id}`;
-    setShareUrl(url);
     setShowMenu(false);
+    setShowShareChooser(true);
+  };
+
+  const copyShareLink = () => {
+    if (!currentSong) return;
+    setShowShareChooser(false);
+    setShareUrl(`${window.location.origin}/song/${currentSong.id}`);
   };
 
   const copyShareUrl = async (url: string) => {
@@ -558,6 +566,47 @@ export default function PlayerPage() {
       <AddToPlaylistModal open={showAddToPlaylist} onOpenChange={setShowAddToPlaylist} songId={currentSong.id} />
       <CommentsModal open={showComments} onOpenChange={setShowComments} songId={currentSong.id} />
       <CreateStoryModal open={showCreateStory} onOpenChange={setShowCreateStory} />
+
+      {/* Choix du mode de partage */}
+      <Sheet open={showShareChooser} onOpenChange={setShowShareChooser}>
+        <SheetContent side="bottom" className="rounded-t-3xl pb-safe">
+          <SheetHeader className="mb-4">
+            <SheetTitle className="flex items-center gap-2">
+              <Share2 className="h-4 w-4 text-primary" />
+              Partager « {currentSong.title} »
+            </SheetTitle>
+          </SheetHeader>
+          <div className="space-y-2 pb-2">
+            <button
+              onClick={() => { setShowShareChooser(false); setShowShareToFriend(true); }}
+              className="flex w-full items-center gap-4 rounded-2xl border border-border/40 bg-card/50 px-4 py-4 hover:bg-card transition-colors text-left"
+            >
+              <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-primary/15">
+                <Send className="h-5 w-5 text-primary" />
+              </div>
+              <div className="min-w-0 flex-1">
+                <p className="text-sm font-bold">Envoyer à un ami</p>
+                <p className="text-xs text-muted-foreground">Choisis tes amis et personnalise l'extrait</p>
+              </div>
+            </button>
+            <button
+              onClick={copyShareLink}
+              className="flex w-full items-center gap-4 rounded-2xl border border-border/40 bg-card/50 px-4 py-4 hover:bg-card transition-colors text-left"
+            >
+              <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-secondary">
+                <Link2 className="h-5 w-5 text-muted-foreground" />
+              </div>
+              <div className="min-w-0 flex-1">
+                <p className="text-sm font-bold">Copier le lien</p>
+                <p className="text-xs text-muted-foreground">Partage le lien où tu veux</p>
+              </div>
+            </button>
+          </div>
+        </SheetContent>
+      </Sheet>
+
+      {/* Envoyer à un ami */}
+      <ShareToFriendSheet open={showShareToFriend} onOpenChange={setShowShareToFriend} song={currentSong} />
 
       {/* Dialog partage */}
       <Dialog open={!!shareUrl} onOpenChange={(open) => { if (!open) setShareUrl(null); }}>

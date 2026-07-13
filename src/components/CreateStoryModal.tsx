@@ -6,35 +6,45 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sh
 import { Play, Pause, Camera } from 'lucide-react';
 import { usePlayer } from '@/contexts/PlayerContext';
 import { toast } from 'sonner';
+import { cn } from '@/lib/utils';
 
 interface Props {
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }
 
+/** Durée max d'un extrait de story, comme sur Instagram. */
+const CLIP_SECONDS = 15;
+
 export default function CreateStoryModal({ open, onOpenChange }: Props) {
   const { user } = useAuth();
   const { currentSong, duration } = usePlayer();
   const [comment, setComment] = useState('');
   const [startTime, setStartTime] = useState(0);
-  const [endTime, setEndTime] = useState(duration);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isPreviewPlaying, setIsPreviewPlaying] = useState(false);
   const [previewProgress, setPreviewProgress] = useState(0);
+  const [dragging, setDragging] = useState(false);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const rangeRef = useRef<HTMLDivElement>(null);
   const rafRef = useRef<number>(0);
+
+  // Longueur fixe de l'extrait — on ne fait que déplacer la fenêtre, pas la redimensionner
+  const clipLength = Math.max(1, Math.min(CLIP_SECONDS, duration || CLIP_SECONDS));
+  const endTime = Math.min(startTime + clipLength, duration);
+
   // Refs pour éviter les closures périmées dans les handlers de drag
   const startTimeRef = useRef(startTime);
   const endTimeRef = useRef(endTime);
+  const clipLengthRef = useRef(clipLength);
 
   useEffect(() => { startTimeRef.current = startTime; }, [startTime]);
   useEffect(() => { endTimeRef.current = endTime; }, [endTime]);
+  useEffect(() => { clipLengthRef.current = clipLength; }, [clipLength]);
 
   useEffect(() => {
     if (open) {
       setStartTime(0);
-      setEndTime(duration);
       setComment('');
       setPreviewProgress(0);
       setIsPreviewPlaying(false);
@@ -60,39 +70,26 @@ export default function CreateStoryModal({ open, onOpenChange }: Props) {
   const getClientX = (e: MouseEvent | TouchEvent): number =>
     'touches' in e ? e.touches[0].clientX : e.clientX;
 
-  const handleStartDrag = (e: React.MouseEvent | React.TouchEvent) => {
+  // Glisse toute la fenêtre le long de la piste, comme le sélecteur de musique d'Instagram —
+  // la durée de l'extrait reste fixe, seule sa position change.
+  const handleWindowDrag = (e: React.MouseEvent | React.TouchEvent) => {
     e.preventDefault();
     e.stopPropagation();
     const rect = rangeRef.current?.getBoundingClientRect();
     if (!rect || duration <= 0) return;
 
-    const onMove = (ev: MouseEvent | TouchEvent) => {
-      const x = Math.max(0, Math.min(1, (getClientX(ev) - rect.left) / rect.width));
-      setStartTime(Math.max(0, Math.min(x * duration, endTimeRef.current - 1)));
-    };
-    const onUp = () => {
-      document.removeEventListener('mousemove', onMove);
-      document.removeEventListener('mouseup', onUp);
-      document.removeEventListener('touchmove', onMove);
-      document.removeEventListener('touchend', onUp);
-    };
-    document.addEventListener('mousemove', onMove);
-    document.addEventListener('mouseup', onUp);
-    document.addEventListener('touchmove', onMove, { passive: false });
-    document.addEventListener('touchend', onUp);
-  };
-
-  const handleEndDrag = (e: React.MouseEvent | React.TouchEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    const rect = rangeRef.current?.getBoundingClientRect();
-    if (!rect || duration <= 0) return;
+    const pointerStartX = getClientX(e.nativeEvent as MouseEvent | TouchEvent);
+    const timeAtPointerStart = startTimeRef.current;
+    setDragging(true);
 
     const onMove = (ev: MouseEvent | TouchEvent) => {
-      const x = Math.max(0, Math.min(1, (getClientX(ev) - rect.left) / rect.width));
-      setEndTime(Math.min(duration, Math.max(x * duration, startTimeRef.current + 1)));
+      const deltaX = getClientX(ev) - pointerStartX;
+      const deltaTime = (deltaX / rect.width) * duration;
+      const maxStart = Math.max(0, duration - clipLengthRef.current);
+      setStartTime(Math.max(0, Math.min(timeAtPointerStart + deltaTime, maxStart)));
     };
     const onUp = () => {
+      setDragging(false);
       document.removeEventListener('mousemove', onMove);
       document.removeEventListener('mouseup', onUp);
       document.removeEventListener('touchmove', onMove);
@@ -204,42 +201,40 @@ export default function CreateStoryModal({ open, onOpenChange }: Props) {
                 </span>
               </div>
 
-              <div ref={rangeRef} className="relative h-12 w-full rounded-xl bg-muted overflow-visible select-none">
-                {/* Fond track */}
-                <div className="absolute inset-0 rounded-xl bg-white/[0.06]" />
-
-                {/* Zone sélectionnée */}
-                <div
-                  className="absolute top-0 bottom-0 bg-primary/20"
-                  style={{ left: `${startPercent}%`, width: `${endPercent - startPercent}%` }}
-                />
+              <div ref={rangeRef} className="relative h-14 w-full rounded-xl bg-muted overflow-hidden select-none touch-none">
+                {/* Fond track — fausse waveform pour repère visuel */}
+                <div className="absolute inset-0 flex items-center justify-between gap-[2px] px-2 opacity-40">
+                  {Array.from({ length: 40 }).map((_, i) => (
+                    <span
+                      key={i}
+                      className="w-full rounded-full bg-muted-foreground/50"
+                      style={{ height: `${20 + ((i * 37) % 60)}%` }}
+                    />
+                  ))}
+                </div>
 
                 {/* Curseur preview */}
                 {isPreviewPlaying && (
                   <div
-                    className="absolute top-0 bottom-0 w-0.5 bg-white/80 z-20 pointer-events-none"
+                    className="absolute top-0 bottom-0 w-0.5 bg-white/90 z-20 pointer-events-none"
                     style={{ left: `${duration > 0 ? (previewProgress / duration) * 100 : 0}%` }}
                   />
                 )}
 
-                {/* Handle début */}
+                {/* Fenêtre d'extrait — largeur fixe, on la fait glisser sur toute la piste */}
                 <div
-                  className="absolute top-0 bottom-0 z-10 flex items-center justify-center cursor-ew-resize"
-                  style={{ left: `${startPercent}%`, transform: 'translateX(-50%)', width: '28px' }}
-                  onMouseDown={handleStartDrag}
-                  onTouchStart={handleStartDrag}
+                  className={cn(
+                    'absolute top-0 bottom-0 z-10 flex cursor-grab items-center justify-center rounded-lg border-2 border-primary bg-primary/15 shadow-lg active:cursor-grabbing',
+                    dragging && 'ring-2 ring-primary/40'
+                  )}
+                  style={{ left: `${startPercent}%`, width: `${endPercent - startPercent}%` }}
+                  onMouseDown={handleWindowDrag}
+                  onTouchStart={handleWindowDrag}
                 >
-                  <div className="h-8 w-2.5 rounded-full bg-primary shadow-lg" />
-                </div>
-
-                {/* Handle fin */}
-                <div
-                  className="absolute top-0 bottom-0 z-10 flex items-center justify-center cursor-ew-resize"
-                  style={{ left: `${endPercent}%`, transform: 'translateX(-50%)', width: '28px' }}
-                  onMouseDown={handleEndDrag}
-                  onTouchStart={handleEndDrag}
-                >
-                  <div className="h-8 w-2.5 rounded-full bg-primary shadow-lg" />
+                  <div className="flex items-center gap-1 rounded-full bg-primary/90 px-1.5 py-2.5">
+                    <span className="h-3 w-0.5 rounded-full bg-primary-foreground/90" />
+                    <span className="h-3 w-0.5 rounded-full bg-primary-foreground/90" />
+                  </div>
                 </div>
               </div>
 

@@ -134,7 +134,7 @@ export default function Notifications() {
       )}
 
       {!loading && notifs.length === 0 && (
-        <div className="flex flex-col items-center mt-20 text-muted-foreground gap-3">
+        <div className="flex flex-col items-center mt-20 text-muted-foreground gap-3 animate-fade-in">
           <Bell className="h-12 w-12 opacity-30" />
           <p className="text-sm">Aucune notification</p>
         </div>
@@ -142,12 +142,13 @@ export default function Notifications() {
 
       {!loading && notifs.length > 0 && (
         <div className="space-y-2">
-          {notifs.map((n) => (
+          {notifs.map((n, i) => (
             <div
               key={n.id}
-              className={`flex items-center gap-3 rounded-2xl p-3 transition-colors ${
+              className={`flex items-center gap-3 rounded-2xl p-3 transition-colors animate-card-in ${
                 n.is_read ? 'bg-card/40' : 'bg-card border border-primary/20'
               } ${(n.sender || n.data?.sender_id) ? 'cursor-pointer hover:bg-card' : ''}`}
+              style={{ animationDelay: `${Math.min(i, 12) * 30}ms` }}
               onClick={() => {
                 const uid = n.sender?.user_id || n.data?.sender_id;
                 if (uid) navigate(`/u/${uid}`);

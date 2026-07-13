@@ -2,6 +2,7 @@
 import { pb, getPbUrl } from '@/lib/pocketbase';
 import { songAudioUrl, songCoverUrl } from '@/lib/storage';
 import { useAuth } from '@/contexts/AuthContext';
+import { useOfflineMode } from '@/contexts/OfflineModeContext';
 import { extractDominantHsl, applyAccentHsl } from '@/lib/dominantColor';
 import { updateStreak } from '@/lib/streaks';
 import { setMediaSessionMetadata, setMediaSessionHandlers, setMediaSessionPosition, setMediaSessionPlaybackState, clearMediaSession } from '@/lib/notifications';
@@ -129,6 +130,9 @@ function recordToSong(r: any): Song {
 
 export function PlayerProvider({ children }: { children: React.ReactNode }) {
   const { user: authUser } = useAuth();
+  const { offline } = useOfflineMode();
+  const offlineRef = useRef(offline);
+  useEffect(() => { offlineRef.current = offline; }, [offline]);
   const audioARef = useRef<HTMLAudioElement | null>(null);
   const audioBRef = useRef<HTMLAudioElement | null>(null);
   const activeRef = useRef<'A' | 'B'>('A');
@@ -691,6 +695,7 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
 
   // Ping PocketBase toutes les 3 secondes pour vérifier la qualité de la connexion
   const checkConnectionStatus = useCallback(async () => {
+    if (offlineRef.current) { setConnectionStatus('stable'); return; }
     const url = getPbUrl();
     const start = performance.now();
     try {

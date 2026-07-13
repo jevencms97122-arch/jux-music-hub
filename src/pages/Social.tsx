@@ -413,7 +413,7 @@ export default function Social() {
       </div>
 
       {tab === 'friends' ? (
-        <div className="relative px-5 mt-5 space-y-6 animate-fade-slide-up delay-2">
+        <div key={tab} className="relative px-5 mt-5 space-y-6 animate-fade-slide-up delay-2">
 
           {/* ── Écoute partagée ── */}
           <button
@@ -591,7 +591,7 @@ export default function Social() {
           </section>
         </div>
       ) : tab === 'activity' ? (
-        <div className="relative px-5 mt-5 space-y-3 animate-fade-slide-up delay-2">
+        <div key={tab} className="relative px-5 mt-5 space-y-3 animate-fade-slide-up delay-2">
           {activityLoading ? (
             <div className="space-y-3">
               {Array.from({ length: 5 }).map((_, i) => (
@@ -656,7 +656,7 @@ export default function Social() {
           )}
         </div>
       ) : (
-        <div className="relative px-5 mt-5 space-y-4 animate-fade-slide-up delay-2">
+        <div key={tab} className="relative px-5 mt-5 space-y-4 animate-fade-slide-up delay-2">
           {/* ── Recherche ── */}
           <div className="relative">
             <Search className="absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />

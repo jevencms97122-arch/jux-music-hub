@@ -1,4 +1,7 @@
 import { useAuth } from '@/contexts/AuthContext';
+import { useOfflineMode } from '@/contexts/OfflineModeContext';
+import { getLocalTracks, deleteLocalTrack } from '@/lib/offlineLibrary';
+import { toast } from 'sonner';
 import { useSeo } from '@/lib/useSeo';
 import { Button } from '@/components/ui/button';
 import { useNavigate, useLocation } from 'react-router-dom';
@@ -23,6 +26,7 @@ import { recordToSong } from '@/lib/pbUtils';
 import PinnedTrack from '@/components/PinnedTrack';
 import ProfileQrCode from '@/components/ProfileQrCode';
 import SettingsSheet from '@/components/SettingsSheet';
+import TabFade from '@/components/TabFade';
 import { cn } from '@/lib/utils';
 
 
@@ -31,6 +35,7 @@ type Tab = 'tracks' | 'reposts' | 'history';
 export default function ProfilePage() {
   useSeo({ title: 'Profil — Nexora Music', description: 'Ton profil Nexora Music.', path: '/profile' });
   const { profile, user } = useAuth();
+  const { offline } = useOfflineMode();
   const navigate = useNavigate();
   const location = useLocation();
   const { playSongFromList } = usePlayer();
@@ -46,6 +51,11 @@ export default function ProfilePage() {
   const [tab, setTab] = useState<Tab>('tracks');
 
   useEffect(() => {
+    if (offline) {
+      setLoading(true);
+      getLocalTracks().then(setSongs).finally(() => setLoading(false));
+      return;
+    }
     if (!user) return;
     setSongs([]);
     setLoading(true);
@@ -97,7 +107,18 @@ export default function ProfilePage() {
         setLoading(false);
       }
     })();
-  }, [user, location.pathname]);
+  }, [user, location.pathname, offline]);
+
+  const handleDeleteLocalTrack = async (songId: string) => {
+    if (!window.confirm('Supprimer ce son de ta bibliothèque hors ligne ?')) return;
+    try {
+      await deleteLocalTrack(songId);
+      setSongs((prev) => prev.filter((s) => s.id !== songId));
+      toast.success('Son supprimé');
+    } catch {
+      toast.error('Erreur lors de la suppression');
+    }
+  };
 
   const tabs: { id: Tab; label: string; icon: typeof Music2; count: number }[] = [
     { id: 'tracks', label: 'Morceaux', icon: Music2, count: songs.length },
@@ -187,9 +208,9 @@ export default function ProfilePage() {
           <Button size="sm" className="flex-1 rounded-xl bg-gradient-primary font-semibold shadow-elegant-sm" onClick={() => navigate('/profile-edit')}>
             <Pencil className="mr-1.5 h-4 w-4" />Modifier
           </Button>
-          {profile?.badge && (
+          {(offline || profile?.badge) && (
             <Button size="sm" variant="outline" className="flex-1 rounded-xl font-semibold" onClick={() => navigate('/upload')}>
-              <PlusCircle className="mr-1.5 h-4 w-4" />Publier
+              <PlusCircle className="mr-1.5 h-4 w-4" />{offline ? 'Ajouter un son' : 'Publier'}
             </Button>
           )}
         </div>
@@ -312,23 +333,33 @@ export default function ProfilePage() {
               </div>
             ))}
           </div>
-        ) : tab === 'tracks' ? (
+        ) : (
+        <TabFade tabKey={tab}>
+        {tab === 'tracks' ? (
           songs.length > 0 ? (
             <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3">
-              {songs.map((s) => (<SongCard key={s.id} song={s} onPlay={() => playSongFromList(s, songs)} />))}
+              {songs.map((s, i) => (
+                <SongCard
+                  key={s.id}
+                  song={s}
+                  index={i}
+                  onPlay={() => playSongFromList(s, songs)}
+                  onDelete={offline ? () => handleDeleteLocalTrack(s.id) : undefined}
+                />
+              ))}
             </div>
           ) : (
             <EmptyState
               icon={<Music2 className="h-6 w-6 text-primary" />}
               title="Aucun morceau"
-              subtitle={profile?.badge ? "Publie ton premier son pour le voir ici." : "Seuls les membres avec le badge PDG de Jux Music peuvent publier."}
-              action={profile?.badge ? <Button size="sm" className="rounded-xl bg-gradient-primary" onClick={() => navigate('/upload')}><PlusCircle className="mr-1.5 h-4 w-4" />Publier un son</Button> : undefined}
+              subtitle={offline ? "Ajoute un son depuis tes fichiers pour le voir ici." : profile?.badge ? "Publie ton premier son pour le voir ici." : "Seuls les membres avec le badge PDG de Jux Music peuvent publier."}
+              action={(offline || profile?.badge) ? <Button size="sm" className="rounded-xl bg-gradient-primary" onClick={() => navigate('/upload')}><PlusCircle className="mr-1.5 h-4 w-4" />{offline ? 'Ajouter un son' : 'Publier un son'}</Button> : undefined}
             />
           )
         ) : tab === 'reposts' ? (
           repostedSongs.length > 0 ? (
             <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3">
-              {repostedSongs.map((s) => (<SongCard key={s.id} song={s} onPlay={() => playSongFromList(s, repostedSongs)} />))}
+              {repostedSongs.map((s, i) => (<SongCard key={s.id} song={s} index={i} onPlay={() => playSongFromList(s, repostedSongs)} />))}
             </div>
           ) : (
             <EmptyState
@@ -367,6 +398,8 @@ export default function ProfilePage() {
             title="Aucune écoute récente"
             subtitle="Ton historique d'écoute apparaîtra ici."
           />
+        )}
+        </TabFade>
         )}
       </section>
 

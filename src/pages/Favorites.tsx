@@ -72,13 +72,13 @@ export default function Favorites() {
         <h1 className="text-xl font-bold">Mes favoris</h1>
       </header>
       {songs.length === 0 ? (
-        <div className="flex flex-col items-center justify-center mt-20 text-muted-foreground">
+        <div className="flex flex-col items-center justify-center mt-20 text-muted-foreground animate-fade-in">
           <Heart className="h-12 w-12 mb-4" />
           <p>Aucun favori pour l'instant</p>
         </div>
       ) : (
         <div className="grid grid-cols-2 gap-3">
-          {songs.map((s) => (<SongCard key={s.id} song={s} onPlay={() => playSongFromList(s, songs)} />))}
+          {songs.map((s, i) => (<SongCard key={s.id} song={s} index={i} onPlay={() => playSongFromList(s, songs)} />))}
         </div>
       )}
     </div>

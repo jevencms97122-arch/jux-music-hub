@@ -6,6 +6,7 @@ type Tab = 'home' | 'search' | 'social' | 'playlists' | 'profile';
 interface Props {
   active: Tab;
   onNavigate: (page: Tab) => void;
+  hideSocial?: boolean;
 }
 
 const items: { key: Tab; label: string; icon: React.ElementType }[] = [
@@ -16,11 +17,12 @@ const items: { key: Tab; label: string; icon: React.ElementType }[] = [
   { key: 'profile', label: 'Profil', icon: User },
 ];
 
-export default function BottomNav({ active, onNavigate }: Props) {
+export default function BottomNav({ active, onNavigate, hideSocial }: Props) {
+  const visibleItems = hideSocial ? items.filter((i) => i.key !== 'social') : items;
   return (
     <nav className="fixed bottom-3 left-3 right-3 z-40 safe-bottom">
       <div className="glass flex rounded-2xl">
-        {items.map(({ key, label, icon: Icon }) => {
+        {visibleItems.map(({ key, label, icon: Icon }) => {
           const isActive = active === key;
           return (
             <button

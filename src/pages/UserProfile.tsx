@@ -14,6 +14,7 @@ import { getRankProgress, type RankProgress } from '@/lib/ranks';
 import RankBadge from '@/components/RankBadge';
 import ProfileBadge from '@/components/ProfileBadge';
 import PinnedTrack from '@/components/PinnedTrack';
+import TabFade from '@/components/TabFade';
 import { cn } from '@/lib/utils';
 import type { Profile, Song } from '@/types/music';
 
@@ -324,21 +325,23 @@ export default function UserProfile() {
           ))}
         </div>
 
+        <TabFade tabKey={tab}>
         {tab === 'tracks' ? (
           songs.length > 0 ? (
             <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3">
-              {songs.map((s) => (<SongCard key={s.id} song={s} onPlay={() => playSongFromList(s, songs)} />))}
+              {songs.map((s, i) => (<SongCard key={s.id} song={s} index={i} onPlay={() => playSongFromList(s, songs)} />))}
             </div>
           ) : (
             <EmptyState icon={<Music2 className="h-6 w-6 text-primary" />} title="Aucun morceau" subtitle="Cet artiste n'a encore rien publié." />
           )
         ) : repostedSongs.length > 0 ? (
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3">
-            {repostedSongs.map((s) => (<SongCard key={s.id} song={s} onPlay={() => playSongFromList(s, repostedSongs)} />))}
+            {repostedSongs.map((s, i) => (<SongCard key={s.id} song={s} index={i} onPlay={() => playSongFromList(s, repostedSongs)} />))}
           </div>
         ) : (
           <EmptyState icon={<Repeat2 className="h-6 w-6 text-primary" />} title="Aucune republication" subtitle="Les sons repostés apparaîtront ici." />
         )}
+        </TabFade>
       </section>
     </div>
   );

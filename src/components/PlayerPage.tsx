@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
+import { AnimatePresence, motion } from 'framer-motion';
 import { pb } from '@/lib/pocketbase';
 import { songCoverUrl, avatarUrl, songAudioUrl } from '@/lib/storage';
 import { usePlayer } from '@/contexts/PlayerContext';
@@ -79,14 +80,12 @@ export default function PlayerPage() {
     }
   };
   const [opening, setOpening] = useState(false);
-  const [songChangeAnim, setSongChangeAnim] = useState(false);
   const [isLiked, setIsLiked] = useState(false);
   const [likeId, setLikeId] = useState<string | null>(null);
   const [isReposted, setIsReposted] = useState(false);
   const [repostId, setRepostId] = useState<string | null>(null);
   const [reposters, setReposters] = useState<{ id: string; pseudo: string; avatar_url: string | null; user_id: string }[]>([]);
   const [showReposters, setShowReposters] = useState(false);
-  const prevSongIdRef = useRef<string | null>(null);
   const progressRef = useRef<HTMLDivElement>(null);
   const bgRef = useRef<HTMLDivElement>(null);
   const rafRef = useRef<number>(0);
@@ -233,19 +232,6 @@ export default function PlayerPage() {
     }
   };
 
-  // Song change animation fires ONLY when song changes while the player is already open
-  useEffect(() => {
-    if (!currentSong?.id) return;
-    const prev = prevSongIdRef.current;
-    prevSongIdRef.current = currentSong.id;
-    if (prev && prev !== currentSong.id && isPlayerOpen) {
-      setSongChangeAnim(true);
-      const t = setTimeout(() => setSongChangeAnim(false), 520);
-      return () => clearTimeout(t);
-    }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentSong?.id]);
-
   // Reactive background — frequency-driven animation via Web Audio API analyser
   useEffect(() => {
     if (!reactiveBg || !isPlaying) {
@@ -327,13 +313,19 @@ export default function PlayerPage() {
         closing ? 'animate-slide-out-down' : opening ? 'animate-slide-in-up' : ''
       )}
     >
-      {/* Blurred background — key force le remount à chaque chanson, l'animation cible opacity 0.25 directement */}
-      <div
-        ref={bgRef}
-        key={currentSong.id + '-bg'}
-        className="absolute inset-0 bg-cover bg-center blur-xl animate-bg-cover-in scale-110"
-        style={{ backgroundImage: `url(${songCoverUrl(currentSong)})` }}
-      />
+      {/* Blurred background — crossfade réel entre la pochette précédente et la nouvelle */}
+      <AnimatePresence>
+        <motion.div
+          ref={bgRef}
+          key={currentSong.id + '-bg'}
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 0.25 }}
+          exit={{ opacity: 0 }}
+          transition={{ duration: 0.6, ease: 'easeInOut' }}
+          className="absolute inset-0 bg-cover bg-center blur-xl scale-110"
+          style={{ backgroundImage: `url(${songCoverUrl(currentSong)})` }}
+        />
+      </AnimatePresence>
       <div className="absolute inset-0 bg-background/35" />
 
       {/* Header */}
@@ -357,19 +349,22 @@ export default function PlayerPage() {
       {/* Cover art */}
       <div className="relative z-10 flex flex-1 items-center justify-center px-8">
         <div className="relative w-full max-w-xs">
-          <div
-            key={currentSong.id}
-            className={cn(
-              'aspect-square w-full overflow-hidden rounded-3xl shadow-2xl shadow-black/50 ring-1 ring-white/[0.08]',
-              songChangeAnim && 'animate-scale-in'
-            )}
-          >
-            <img
-              src={songCoverUrl(currentSong)}
-              alt={currentSong.title}
-              className="h-full w-full object-cover"
-            />
-          </div>
+          <AnimatePresence mode="popLayout" initial={false}>
+            <motion.div
+              key={currentSong.id}
+              initial={{ opacity: 0, scale: 0.92 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 1.04 }}
+              transition={{ duration: 0.4, ease: [0.22, 1, 0.36, 1] }}
+              className="aspect-square w-full overflow-hidden rounded-3xl shadow-2xl shadow-black/50 ring-1 ring-white/[0.08]"
+            >
+              <img
+                src={songCoverUrl(currentSong)}
+                alt={currentSong.title}
+                className="h-full w-full object-cover"
+              />
+            </motion.div>
+          </AnimatePresence>
           {/* Glow */}
           <div
             className="absolute -inset-6 -z-10 rounded-[3rem] opacity-25 blur-2xl"
@@ -382,10 +377,15 @@ export default function PlayerPage() {
       <div className="glass-strong relative z-10 mx-4 mb-4 overflow-hidden rounded-3xl">
         {/* Song info + volume */}
         <div className="flex items-center justify-between px-6 pt-5">
-          <div
-            key={currentSong.id}
-            className={cn('min-w-0 flex-1', songChangeAnim && 'animate-slide-up-stagger')}
-          >
+          <div className="min-w-0 flex-1 overflow-hidden">
+          <AnimatePresence mode="wait" initial={false}>
+            <motion.div
+              key={currentSong.id}
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -10 }}
+              transition={{ duration: 0.24, ease: [0.22, 1, 0.36, 1] }}
+            >
             <h2 className="truncate text-xl font-bold tracking-tight text-foreground">{currentSong.title}</h2>
             <div className="mt-0.5 flex items-center gap-2 min-w-0">
               <p className="truncate text-sm text-muted-foreground">{currentSong.author}</p>
@@ -409,6 +409,8 @@ export default function PlayerPage() {
                 </button>
               )}
             </div>
+            </motion.div>
+          </AnimatePresence>
           </div>
           <div className="ml-3 flex flex-shrink-0 items-center gap-1">
             <button

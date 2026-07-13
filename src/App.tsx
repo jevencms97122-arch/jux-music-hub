@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import SplashScreen from '@/components/SplashScreen';
 import { AuthProvider, useAuth } from '@/contexts/AuthContext';
+import { OfflineModeProvider, useOfflineMode } from '@/contexts/OfflineModeContext';
 import { PlayerProvider } from '@/contexts/PlayerContext';
 import { ThemeProvider, useTheme } from '@/contexts/ThemeContext';
 import { BrowserRouter, Routes, Route, Navigate, useNavigate, useLocation } from 'react-router-dom';
@@ -37,6 +38,9 @@ import WebDeprecatedScreen from '@/components/WebDeprecatedScreen';
 import GamepadController from '@/components/GamepadController';
 import JuxAssistant from '@/components/JuxAssistant';
 import BannedScreen from '@/components/BannedScreen';
+import RequiresBackend from '@/components/RequiresBackend';
+import OfflinePlaylists from '@/pages/OfflinePlaylists';
+import OfflinePlaylistDetail from '@/pages/OfflinePlaylistDetail';
 import { detectPlatform } from '@/lib/platform';
 import { isVRModeEnabled } from '@/hooks/useVRMode';
 import { Toaster } from '@/components/ui/sonner';
@@ -48,19 +52,13 @@ function shouldShowWebDeprecated(): boolean {
 }
 
 const pageVariants = {
-  initial: { opacity: 0, y: 8 },
-  in: { opacity: 1, y: 0 },
-  out: { opacity: 0, y: -8 },
+  initial: { opacity: 0, y: 10, scale: 0.985 },
+  in: { opacity: 1, y: 0, scale: 1, transition: { duration: 0.28, ease: [0.22, 1, 0.36, 1] } },
+  out: { opacity: 0, y: -6, scale: 0.99, transition: { duration: 0.14, ease: [0.4, 0, 1, 1] } },
 };
 
 const PageWrap = ({ children }: { children: React.ReactNode }) => (
-  <motion.div
-    initial="initial"
-    animate="in"
-    exit="out"
-    variants={pageVariants}
-    transition={{ duration: 0.22, ease: 'easeOut' }}
-  >
+  <motion.div initial="initial" animate="in" exit="out" variants={pageVariants}>
     {children}
   </motion.div>
 );
@@ -107,6 +105,7 @@ function ScrollToTop() {
 
 function AppContent() {
   const { user, profile, loading, logout } = useAuth();
+  const { offline } = useOfflineMode();
   const navigate = useNavigate();
   const location = useLocation();
   const [unreadCount, setUnreadCount] = useState(0);
@@ -189,18 +188,18 @@ function AppContent() {
 
   let mainContent: React.ReactNode;
 
-  if (loading) {
+  if (!offline && loading) {
     mainContent = (
       <div className="flex min-h-screen items-center justify-center">
         <div className="h-8 w-8 rounded-full border-2 border-primary border-t-transparent animate-spin" />
       </div>
     );
-  } else if (!user) {
+  } else if (!offline && !user) {
     mainContent = <Login />;
-  } else if (profile?.ban_status) {
+  } else if (!offline && profile?.ban_status) {
     mainContent = <BannedScreen onLogout={logout} />;
   } else {
-    const profileCompleted = profile?.profile_completed ?? false;
+    const profileCompleted = offline ? true : (profile?.profile_completed ?? false);
 
     const pathToActive: Record<string, 'home' | 'search' | 'social' | 'playlists' | 'profile'> = {
       '/jux': 'home',
@@ -220,6 +219,7 @@ function AppContent() {
     const active = pathToActive[location.pathname] || (location.pathname.startsWith('/playlist/') ? 'playlists' : location.pathname.startsWith('/u/') ? 'social' : 'home');
 
     const guard = (el: JSX.Element) => profileCompleted ? <PageWrap>{el}</PageWrap> : <Navigate to="/profile-setup" replace />;
+    const backendGuard = (el: JSX.Element) => offline ? <PageWrap><RequiresBackend /></PageWrap> : guard(el);
 
     mainContent = (
       <PlayerProvider>
@@ -238,21 +238,21 @@ function AppContent() {
                 <Route path="/jux" element={guard(<Home />)} />
                 <Route path="/home" element={<Navigate to="/jux" replace />} />
                 <Route path="/upload" element={guard(<Upload />)} />
-                <Route path="/u/:userId" element={guard(<UserProfile />)} />
+                <Route path="/u/:userId" element={backendGuard(<UserProfile />)} />
                 <Route path="/profile" element={guard(<ProfilePage />)} />
                 <Route path="/profile-edit" element={guard(<ProfileEdit onBack={() => navigate('/profile')} />)} />
                 <Route path="/profile/setup" element={<Navigate to="/profile-setup" replace />} />
-                <Route path="/playlists" element={guard(<Playlists />)} />
-                <Route path="/playlist/:id" element={guard(<PlaylistDetail />)} />
-                <Route path="/social" element={guard(<Social />)} />
-                <Route path="/listen-together" element={guard(<ListenTogether />)} />
-                <Route path="/search" element={guard(<Search />)} />
-                <Route path="/notifications" element={guard(<Notifications />)} />
-                <Route path="/favorites" element={guard(<Favorites />)} />
-                <Route path="/wrapped" element={guard(<Wrapped />)} />
+                <Route path="/playlists" element={offline ? guard(<OfflinePlaylists />) : guard(<Playlists />)} />
+                <Route path="/playlist/:id" element={offline ? guard(<OfflinePlaylistDetail />) : guard(<PlaylistDetail />)} />
+                <Route path="/social" element={offline ? <Navigate to="/jux" replace /> : guard(<Social />)} />
+                <Route path="/listen-together" element={offline ? <Navigate to="/jux" replace /> : guard(<ListenTogether />)} />
+                <Route path="/search" element={backendGuard(<Search />)} />
+                <Route path="/notifications" element={backendGuard(<Notifications />)} />
+                <Route path="/favorites" element={backendGuard(<Favorites />)} />
+                <Route path="/wrapped" element={backendGuard(<Wrapped />)} />
                 <Route path="/car-mode" element={guard(<CarMode />)} />
-                <Route path="/rank" element={guard(<Rank />)} />
-                <Route path="/song/:id" element={guard(<SongPlayer />)} />
+                <Route path="/rank" element={backendGuard(<Rank />)} />
+                <Route path="/song/:id" element={backendGuard(<SongPlayer />)} />
                 <Route path="*" element={<Navigate to="/jux" replace />} />
               </Routes>
             </AnimatePresence>
@@ -262,6 +262,7 @@ function AppContent() {
           {profileCompleted && (
             <BottomNav
               active={active}
+              hideSocial={offline}
               onNavigate={(page) => {
                 if (page === 'home') navigate('/jux');
                 else navigate(`/${page}`);
@@ -324,11 +325,13 @@ export default function App() {
   }
   return (
     <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
-      <ThemeProvider>
-        <AuthProvider>
-          <AppWithTheme />
-        </AuthProvider>
-      </ThemeProvider>
+      <OfflineModeProvider>
+        <ThemeProvider>
+          <AuthProvider>
+            <AppWithTheme />
+          </AuthProvider>
+        </ThemeProvider>
+      </OfflineModeProvider>
     </BrowserRouter>
   );
 }

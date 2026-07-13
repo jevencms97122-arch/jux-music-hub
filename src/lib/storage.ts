@@ -16,9 +16,10 @@ export function songCoverUrl(song: { cover?: string; cover_url?: string | null; 
       return publicUrl(song.collectionName, song.id, song.cover);
     }
   }
-  // Ancien champ texte "cover_url" (rétrocompatibilité)
+  // Ancien champ texte "cover_url" (rétrocompatibilité) — aussi utilisé pour
+  // les blob: URLs des sons locaux du mode hors ligne.
   if (song.cover_url) {
-    if (song.cover_url.startsWith('http')) return song.cover_url;
+    if (song.cover_url.startsWith('http') || song.cover_url.startsWith('blob:')) return song.cover_url;
     if (song.collectionName && song.id) {
       return publicUrl(song.collectionName, song.id, song.cover_url);
     }
@@ -34,9 +35,10 @@ export function songAudioUrl(song: { audio?: string; audio_url?: string; id?: st
       return publicUrl(song.collectionName, song.id, song.audio);
     }
   }
-  // Ancien champ texte "audio_url" (rétrocompatibilité)
+  // Ancien champ texte "audio_url" (rétrocompatibilité) — aussi utilisé pour
+  // les blob: URLs des sons locaux du mode hors ligne.
   if (song.audio_url) {
-    if (song.audio_url.startsWith('http')) return song.audio_url;
+    if (song.audio_url.startsWith('http') || song.audio_url.startsWith('blob:')) return song.audio_url;
     if (song.collectionName && song.id) {
       return publicUrl(song.collectionName, song.id, song.audio_url);
     }

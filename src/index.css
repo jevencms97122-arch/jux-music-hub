@@ -98,12 +98,12 @@
 
   * {
     transition-property: color, background-color, border-color, opacity, transform, box-shadow;
-    transition-duration: 120ms;
-    transition-timing-function: ease;
+    transition-duration: 160ms;
+    transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
   }
 
   input, button, a, [role="button"] {
-    transition-duration: 150ms;
+    transition-duration: 180ms;
   }
 }
 
@@ -413,6 +413,15 @@
 
 .animate-scale-in {
   animation: scaleIn 0.5s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+@keyframes cardIn {
+  0% { opacity: 0; transform: translateY(10px) scale(0.96); }
+  100% { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+.animate-card-in {
+  animation: cardIn 0.4s cubic-bezier(0.16, 1, 0.3, 1) both;
 }
 
 .animate-fade-out {

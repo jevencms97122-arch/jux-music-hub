@@ -61,6 +61,7 @@ export interface Song {
   created?: string;
   collectionId?: string;
   collectionName?: string;
+  is_local?: boolean;
   expand?: {
     uploadedBy?: PBUser;
   };

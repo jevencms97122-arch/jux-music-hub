@@ -1,6 +1,8 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { pb } from '@/lib/pocketbase';
 import { useAuth } from '@/contexts/AuthContext';
+import { useOfflineMode } from '@/contexts/OfflineModeContext';
+import { addLocalTrack } from '@/lib/offlineLibrary';
 import { useSeo } from '@/lib/useSeo';
 import { extractYoutubeId } from '@/lib/storage';
 import { Button } from '@/components/ui/button';
@@ -20,6 +22,7 @@ interface ArtistEntry {
 export default function Upload() {
   useSeo({ title: 'Upload — Nexora Music', description: 'Partage ta musique avec la communauté Nexora Music.', path: '/upload' });
   const { user, profile } = useAuth();
+  const { offline } = useOfflineMode();
   const navigate = useNavigate();
   const [title, setTitle] = useState('');
   const [artists, setArtists] = useState<ArtistEntry[]>([]);
@@ -174,9 +177,30 @@ export default function Upload() {
   };
 
   const submit = async () => {
+    if (!title.trim() || artists.length === 0) { toast.error('Titre et au moins un artiste requis'); return; }
+
+    if (offline) {
+      if (!audioFile) { toast.error('Ajoute un fichier audio'); return; }
+      setUploading(true);
+      try {
+        await addLocalTrack({
+          title: title.trim(),
+          author: artists.map(a => a.name).join(', '),
+          genre: genre || null,
+          audioFile,
+          coverFile,
+        });
+        toast.success('Musique ajoutée à ta bibliothèque locale !');
+        navigate('/jux');
+      } catch (e: any) {
+        toast.error(e.message || 'Erreur ajout local');
+      }
+      setUploading(false);
+      return;
+    }
+
     if (!user) { toast.error('Connecte-toi d\'abord'); return; }
     if (!profile?.badge) { toast.error('Réservé aux membres avec le badge PDG de Jux Music'); return; }
-    if (!title.trim() || artists.length === 0) { toast.error('Titre et au moins un artiste requis'); return; }
     if (!audioFile && !youtubeUrl.trim()) { toast.error('Ajoute un fichier audio ou une URL YouTube'); return; }
     setUploading(true);
     try {
@@ -216,7 +240,7 @@ export default function Upload() {
     setUploading(false);
   };
 
-  if (!profile?.badge) {
+  if (!offline && !profile?.badge) {
     return (
       <div className="relative min-h-screen pb-40 p-4">
         <header className="flex items-center gap-3 mb-6">

@@ -8,6 +8,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   isElectron: true,
   updateDiscordPresence: (data) => ipcRenderer.send('discord:updatePresence', data),
   clearDiscordPresence: () => ipcRenderer.send('discord:clearPresence'),
+  quitApp: () => ipcRenderer.send('app:quit'),
 });
 
 // Bridge lu par versionCheck.ts pour savoir si une MAJ est dispo

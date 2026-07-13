@@ -9,6 +9,7 @@ import { toast } from 'sonner';
 import { Input } from '@/components/ui/input';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { cn } from '@/lib/utils';
+import TabFade from '@/components/TabFade';
 import type { Playlist } from '@/types/music';
 
 function recordToPlaylist(r: any): Playlist {
@@ -171,39 +172,43 @@ export default function Playlists() {
               </div>
             ))}
           </div>
-        ) : tab === 'mine' ? (
-          myPlaylists.length > 0 ? (
-            <PlaylistList playlists={myPlaylists} onOpen={(id) => navigate(`/playlist/${id}`)} showVisibility />
-          ) : (
-            <EmptyState
-              icon={<ListMusic className="h-6 w-6 text-primary" />}
-              title="Aucune playlist"
-              subtitle="Crée ta première playlist pour organiser tes sons."
-              action={
-                <Button size="sm" className="rounded-xl bg-gradient-primary" onClick={() => setCreateOpen(true)}>
-                  <Plus className="mr-1.5 h-4 w-4" />Créer une playlist
-                </Button>
-              }
-            />
-          )
-        ) : tab === 'liked' ? (
-          likedPlaylists.length > 0 ? (
-            <PlaylistList playlists={likedPlaylists} onOpen={(id) => navigate(`/playlist/${id}`)} />
-          ) : (
-            <EmptyState
-              icon={<Heart className="h-6 w-6 text-primary" />}
-              title="Aucune playlist aimée"
-              subtitle="Like des playlists publiques pour les retrouver ici."
-            />
-          )
-        ) : publicPlaylists.length > 0 ? (
-          <PlaylistList playlists={publicPlaylists} onOpen={(id) => navigate(`/playlist/${id}`)} />
         ) : (
-          <EmptyState
-            icon={<Globe className="h-6 w-6 text-primary" />}
-            title="Rien à découvrir"
-            subtitle="Aucune playlist publique pour l'instant."
-          />
+          <TabFade tabKey={tab}>
+            {tab === 'mine' ? (
+              myPlaylists.length > 0 ? (
+                <PlaylistList playlists={myPlaylists} onOpen={(id) => navigate(`/playlist/${id}`)} showVisibility />
+              ) : (
+                <EmptyState
+                  icon={<ListMusic className="h-6 w-6 text-primary" />}
+                  title="Aucune playlist"
+                  subtitle="Crée ta première playlist pour organiser tes sons."
+                  action={
+                    <Button size="sm" className="rounded-xl bg-gradient-primary" onClick={() => setCreateOpen(true)}>
+                      <Plus className="mr-1.5 h-4 w-4" />Créer une playlist
+                    </Button>
+                  }
+                />
+              )
+            ) : tab === 'liked' ? (
+              likedPlaylists.length > 0 ? (
+                <PlaylistList playlists={likedPlaylists} onOpen={(id) => navigate(`/playlist/${id}`)} />
+              ) : (
+                <EmptyState
+                  icon={<Heart className="h-6 w-6 text-primary" />}
+                  title="Aucune playlist aimée"
+                  subtitle="Like des playlists publiques pour les retrouver ici."
+                />
+              )
+            ) : publicPlaylists.length > 0 ? (
+              <PlaylistList playlists={publicPlaylists} onOpen={(id) => navigate(`/playlist/${id}`)} />
+            ) : (
+              <EmptyState
+                icon={<Globe className="h-6 w-6 text-primary" />}
+                title="Rien à découvrir"
+                subtitle="Aucune playlist publique pour l'instant."
+              />
+            )}
+          </TabFade>
         )}
       </section>
     </div>
@@ -213,11 +218,12 @@ export default function Playlists() {
 function PlaylistList({ playlists, onOpen, showVisibility }: { playlists: Playlist[]; onOpen: (id: string) => void; showVisibility?: boolean }) {
   return (
     <div className="space-y-2">
-      {playlists.map((p) => (
+      {playlists.map((p, i) => (
         <button
           key={p.id}
           onClick={() => onOpen(p.id)}
-          className="group flex w-full items-center gap-3 rounded-2xl border border-border/40 bg-card/50 p-3 text-left transition-colors hover:bg-card active:scale-[0.99]"
+          className="group flex w-full items-center gap-3 rounded-2xl border border-border/40 bg-card/50 p-3 text-left transition-colors hover:bg-card active:scale-[0.99] animate-card-in"
+          style={{ animationDelay: `${Math.min(i, 12) * 30}ms` }}
         >
           <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-gradient-primary shadow-soft">
             <ListMusic className="h-5 w-5 text-primary-foreground" />

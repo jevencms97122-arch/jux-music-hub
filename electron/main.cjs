@@ -83,6 +83,10 @@ ipcMain.on('discord:clearPresence', () => {
   removeActivity();
 });
 
+ipcMain.on('app:quit', () => {
+  app.quit();
+});
+
 // ── Permissions micro ─────────────────────────────────────────────────────────
 // Sans ce gestionnaire, Electron/Chromium refuse SILENCIEUSEMENT toute demande
 // getUserMedia() (micro) — aucune popup ne s'affiche, ça échoue juste. C'est

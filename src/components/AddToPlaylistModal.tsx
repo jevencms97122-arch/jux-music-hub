@@ -1,11 +1,13 @@
 import { useEffect, useState } from 'react';
 import { pb } from '@/lib/pocketbase';
 import { useAuth } from '@/contexts/AuthContext';
+import { useOfflineMode } from '@/contexts/OfflineModeContext';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { ListMusic, Plus } from 'lucide-react';
 import { toast } from 'sonner';
 import type { Playlist } from '@/types/music';
+import { getLocalPlaylists, addTrackToLocalPlaylist, type LocalPlaylist } from '@/lib/offlinePlaylists';
 
 interface PlaylistEntry {
   playlist: Playlist;
@@ -21,10 +23,17 @@ interface Props {
 
 export default function AddToPlaylistModal({ open, onOpenChange, songId }: Props) {
   const { user } = useAuth();
+  const { offline } = useOfflineMode();
   const [entries, setEntries] = useState<PlaylistEntry[]>([]);
+  const [localPlaylists, setLocalPlaylists] = useState<LocalPlaylist[]>([]);
 
   useEffect(() => {
-    if (!open || !user) return;
+    if (!open) return;
+    if (offline) {
+      getLocalPlaylists().then(setLocalPlaylists);
+      return;
+    }
+    if (!user) return;
     (async () => {
       const toPlaylist = (r: any): Playlist => ({
         id: r.id, title: r.title, description: r.description, is_public: r.is_public,
@@ -71,6 +80,16 @@ export default function AddToPlaylistModal({ open, onOpenChange, songId }: Props
     })();
   }, [open, user]);
 
+  const addLocal = async (playlist: LocalPlaylist) => {
+    if (playlist.trackIds.includes(songId)) {
+      toast.error('Ce son est déjà dans la playlist');
+      return;
+    }
+    await addTrackToLocalPlaylist(playlist.id, songId);
+    toast.success('Ajouté à la playlist');
+    onOpenChange(false);
+  };
+
   const add = async (entry: PlaylistEntry) => {
     if (!user) return;
     try {
@@ -109,7 +128,23 @@ export default function AddToPlaylistModal({ open, onOpenChange, songId }: Props
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent>
         <DialogHeader><DialogTitle>Ajouter à une playlist</DialogTitle></DialogHeader>
-        {entries.length === 0 ? (
+        {offline ? (
+          localPlaylists.length === 0 ? (
+            <p className="text-sm text-muted-foreground">Crée d'abord une playlist depuis l'onglet Playlists.</p>
+          ) : (
+            <div className="space-y-1">
+              {localPlaylists.map((p) => (
+                <Button key={p.id} variant="ghost" className="w-full justify-start h-auto py-2.5 px-3" onClick={() => addLocal(p)}>
+                  <ListMusic className="mr-2 h-4 w-4 shrink-0" />
+                  <div className="flex-1 text-left min-w-0">
+                    <p className="text-sm font-medium truncate">{p.title}</p>
+                  </div>
+                  <Plus className="ml-2 h-4 w-4 shrink-0" />
+                </Button>
+              ))}
+            </div>
+          )
+        ) : entries.length === 0 ? (
           <p className="text-sm text-muted-foreground">Crée d'abord une playlist depuis l'onglet Playlists.</p>
         ) : (
           <div className="space-y-1">

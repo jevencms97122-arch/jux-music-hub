@@ -45,12 +45,16 @@ export default function SettingsSheet({ trigger }: { trigger: React.ReactNode })
   return (
     <Sheet>
       <SheetTrigger asChild>{trigger}</SheetTrigger>
-      <SheetContent side="bottom" className="rounded-t-3xl pb-safe">
-        <SheetHeader className="mb-6">
+      <SheetContent
+        side="bottom"
+        className="rounded-t-3xl pb-safe max-h-[85vh] flex flex-col overflow-hidden"
+      >
+        <SheetHeader className="mb-6 flex-shrink-0">
           <SheetTitle>Paramètres</SheetTitle>
         </SheetHeader>
 
-        <div className="space-y-2">
+        <div className="flex-1 overflow-y-auto pr-1">
+          <div className="space-y-2">
           {/* Mode Performance */}
           <div className="rounded-2xl bg-card/60 overflow-hidden">
             <div className="flex items-center justify-between px-4 py-3.5">
@@ -253,21 +257,22 @@ export default function SettingsSheet({ trigger }: { trigger: React.ReactNode })
               />
             </div>
           </div>
+
+          {/* Séparateur */}
+          <div className="my-6 h-px bg-border/50" />
+
+          {/* Déconnexion */}
+          <button
+            onClick={logout}
+            className="flex w-full items-center gap-3 rounded-2xl px-4 py-3.5 text-red-400 hover:bg-red-500/10 transition-colors"
+          >
+            <LogOut className="h-5 w-5" />
+            <span className="text-sm font-semibold">Se déconnecter</span>
+          </button>
+          </div>
         </div>
 
-        {/* Séparateur */}
-        <div className="my-6 h-px bg-border/50" />
-
         <EqualizerSheet open={showEq} onClose={() => setShowEq(false)} />
-
-        {/* Déconnexion */}
-        <button
-          onClick={logout}
-          className="flex w-full items-center gap-3 rounded-2xl px-4 py-3.5 text-red-400 hover:bg-red-500/10 transition-colors"
-        >
-          <LogOut className="h-5 w-5" />
-          <span className="text-sm font-semibold">Se déconnecter</span>
-        </button>
       </SheetContent>
     </Sheet>
   );

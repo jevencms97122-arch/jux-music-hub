@@ -11,6 +11,8 @@ import {
   ListMusic, Globe, ArrowRight, Music2, Upload, Bell, Tag, ChevronDown, ScrollText, Mic2, Car
 } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
+import { useOfflineMode } from '@/contexts/OfflineModeContext';
+import { getLocalTracks } from '@/lib/offlineLibrary';
 import TrendingSection from '@/components/TrendingSection';
 import AppBanner from '@/components/AppBanner';
 import PatchNotesSheet from '@/components/PatchNotesSheet';
@@ -90,6 +92,7 @@ const TUTORIAL_SEEN_KEY = 'jux_tutorial_seen';
 
 export default function Home() {
   const { user, profile } = useAuth();
+  const { offline } = useOfflineMode();
   const { playSongFromList } = usePlayer();
   const navigate = useNavigate();
   const [songs, setSongs] = useState<Song[]>([]);
@@ -125,6 +128,13 @@ export default function Home() {
   };
 
   useEffect(() => {
+    if (offline) {
+      getLocalTracks().then((tracks) => {
+        setSongs(tracks);
+        setArtistSongs(tracks);
+      }).finally(() => setLoading(false));
+      return;
+    }
     (async () => {
       const [recentRes, trendingRes] = await Promise.all([
         pb.collection('songs').getList(1, 100, { sort: '-created', requestKey: null }),
@@ -156,9 +166,10 @@ export default function Home() {
 
       setLoading(false);
     })();
-  }, []);
+  }, [offline]);
 
   useEffect(() => {
+    if (offline) { setPlaylistsLoading(false); return; }
     (async () => {
       const result = await pb.collection('playlists').getList(1, 30, {
         filter: 'is_public = true',
@@ -181,7 +192,7 @@ export default function Home() {
       setPublicPlaylists(seededShuffle(all, daySeed()).slice(0, 10));
       setPlaylistsLoading(false);
     })();
-  }, []);
+  }, [offline]);
 
   useEffect(() => {
     if (!user) { setDailyMixLoading(false); return; }
@@ -410,8 +421,8 @@ export default function Home() {
           {selectedGenre ? (
             <div className="px-4">
               <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5">
-                {filteredSongs.map((s) => (
-                  <SongCard key={s.id} song={s} onPlay={() => playSongFromList(s, filteredSongs)} />
+                {filteredSongs.map((s, i) => (
+                  <SongCard key={s.id} song={s} index={i} onPlay={() => playSongFromList(s, filteredSongs)} />
                 ))}
               </div>
             </div>
@@ -628,8 +639,8 @@ export default function Home() {
           ) : (
             <>
               <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5">
-                {songs.slice(0, visibleCount).map((s) => (
-                  <SongCard key={s.id} song={s} onPlay={() => playSongFromList(s, songs)} />
+                {songs.slice(0, visibleCount).map((s, i) => (
+                  <SongCard key={s.id} song={s} index={i} onPlay={() => playSongFromList(s, songs)} />
                 ))}
               </div>
               {songs.length > visibleCount && (

@@ -11,6 +11,18 @@ export type AppTheme = {
   /** Animation CSS optionnelle pour le fond (ex: "gradient-shift 8s ease infinite") */
   backgroundAnimation?: string;
 
+  /**
+   * Thème "Ultra" : fond animé en composant React (canvas/DOM), bien plus
+   * gourmand en ressources que backgroundAnimation (simple CSS). Quand
+   * défini, `ultraId` sélectionne le composant de fond à monter.
+   */
+  isUltra?: boolean;
+  ultraId?: string;
+  /** Ce thème Ultra propose une personnalisation (voir ThemeSelectorSheet) */
+  customizable?: boolean;
+  /** Type de personnalisation : 'color' = color picker + aléatoire (défaut), 'preset' = choix parmi des presets d'animation */
+  customizeType?: 'color' | 'preset';
+
   /** HSL triplets compatibles avec tailwind config actuelle (hsl(var(--…))) */
   hsl: {
     primary: string; // "h s% l%"
@@ -3205,6 +3217,256 @@ export const APP_THEMES: AppTheme[] = [
         accentForeground: '0 0% 92%',
         border: '200 30% 22%',
         ring: '200 88% 58%',
+      },
+    },
+  },
+
+  // ==== Thèmes ULTRA (fonds animés en composant, plus gourmands) ====
+
+  // 1. Pluie Stellaire — pluie de particules bleu néon + halo chromatique tournant
+  {
+    id: 'ultra-pluie-stellaire',
+    name: 'Pluie Stellaire',
+    isUltra: true,
+    ultraId: 'starfall-rain',
+    background: 'radial-gradient(circle at 50% 0%, #062038 0%, #000000 70%)',
+    textColor: 'rgba(255,255,255,0.98)',
+    accentColor: '#33aaff',
+    hsl: {
+      primary: '203 100% 60%',
+      primaryForeground: '0 0% 100%',
+      accent: '203 100% 60%',
+      accentForeground: '0 0% 100%',
+      ring: '203 100% 60%',
+
+      border: '205 40% 24%',
+      input: '205 40% 24%',
+      background: '210 60% 3%',
+      foreground: '0 0% 98%',
+
+      secondary: '205 35% 10%',
+      secondaryForeground: '0 0% 92%',
+
+      muted: '205 25% 16%',
+      mutedForeground: '0 0% 62%',
+
+      destructive: '0 84% 60%',
+      destructiveForeground: '0 0% 100%',
+
+      card: '210 45% 6%',
+      cardForeground: '0 0% 98%',
+
+      popover: '210 45% 6%',
+      popoverForeground: '0 0% 98%',
+
+      sidebar: {
+        background: '210 55% 4%',
+        foreground: '0 0% 92%',
+        primary: '203 100% 60%',
+        primaryForeground: '0 0% 100%',
+        accent: '205 30% 10%',
+        accentForeground: '0 0% 92%',
+        border: '205 40% 24%',
+        ring: '203 100% 60%',
+      },
+    },
+  },
+
+  // 2. Pluie Matricielle — colonnes de katakana vert néon qui tombent (façon Matrix)
+  {
+    id: 'ultra-pluie-matricielle',
+    name: 'Pluie Matricielle',
+    isUltra: true,
+    ultraId: 'matrix-rain',
+    background: 'radial-gradient(circle at 50% 0%, #021a08 0%, #000000 70%)',
+    textColor: 'rgba(255,255,255,0.98)',
+    accentColor: '#00ff41',
+    hsl: {
+      primary: '135 100% 50%',
+      primaryForeground: '0 0% 0%',
+      accent: '135 100% 50%',
+      accentForeground: '0 0% 0%',
+      ring: '135 100% 50%',
+
+      border: '135 40% 20%',
+      input: '135 40% 20%',
+      background: '135 60% 2%',
+      foreground: '0 0% 98%',
+
+      secondary: '135 30% 8%',
+      secondaryForeground: '0 0% 92%',
+
+      muted: '135 22% 14%',
+      mutedForeground: '0 0% 62%',
+
+      destructive: '0 84% 60%',
+      destructiveForeground: '0 0% 100%',
+
+      card: '135 45% 4%',
+      cardForeground: '0 0% 98%',
+
+      popover: '135 45% 4%',
+      popoverForeground: '0 0% 98%',
+
+      sidebar: {
+        background: '135 55% 3%',
+        foreground: '0 0% 92%',
+        primary: '135 100% 50%',
+        primaryForeground: '0 0% 0%',
+        accent: '135 26% 8%',
+        accentForeground: '0 0% 92%',
+        border: '135 40% 20%',
+        ring: '135 100% 50%',
+      },
+    },
+  },
+
+  // 3. Ciel Étoilé — 3 couches d'étoiles qui défilent en boucle infinie
+  {
+    id: 'ultra-ciel-etoile',
+    name: 'Ciel Étoilé',
+    isUltra: true,
+    ultraId: 'star-field',
+    background: 'radial-gradient(ellipse at bottom, #1b2735 0%, #090a0f 100%)',
+    textColor: 'rgba(255,255,255,0.98)',
+    accentColor: '#9fc8ff',
+    hsl: {
+      primary: '213 100% 82%',
+      primaryForeground: '220 40% 8%',
+      accent: '213 100% 82%',
+      accentForeground: '220 40% 8%',
+      ring: '213 100% 82%',
+
+      border: '215 30% 22%',
+      input: '215 30% 22%',
+      background: '218 45% 5%',
+      foreground: '0 0% 98%',
+
+      secondary: '215 28% 11%',
+      secondaryForeground: '0 0% 92%',
+
+      muted: '215 22% 17%',
+      mutedForeground: '0 0% 62%',
+
+      destructive: '0 84% 60%',
+      destructiveForeground: '0 0% 100%',
+
+      card: '218 38% 7%',
+      cardForeground: '0 0% 98%',
+
+      popover: '218 38% 7%',
+      popoverForeground: '0 0% 98%',
+
+      sidebar: {
+        background: '218 48% 4%',
+        foreground: '0 0% 92%',
+        primary: '213 100% 82%',
+        primaryForeground: '220 40% 8%',
+        accent: '215 24% 11%',
+        accentForeground: '0 0% 92%',
+        border: '215 30% 22%',
+        ring: '213 100% 82%',
+      },
+    },
+  },
+
+  // 4. Nébuleuse Cosmique — halos radiaux personnalisables (couleur d'accent au choix ou aléatoire)
+  {
+    id: 'ultra-nebuleuse-cosmique',
+    name: 'Nébuleuse Cosmique',
+    isUltra: true,
+    ultraId: 'aurora-nebula',
+    customizable: true,
+    background: 'linear-gradient(135deg, #000000 0%, #0a0520 100%)',
+    textColor: 'rgba(255,255,255,0.98)',
+    accentColor: '#8a2be2',
+    hsl: {
+      primary: '271 76% 53%',
+      primaryForeground: '0 0% 100%',
+      accent: '271 76% 53%',
+      accentForeground: '0 0% 100%',
+      ring: '271 76% 53%',
+
+      border: '265 35% 24%',
+      input: '265 35% 24%',
+      background: '260 55% 5%',
+      foreground: '0 0% 98%',
+
+      secondary: '265 30% 12%',
+      secondaryForeground: '0 0% 92%',
+
+      muted: '265 22% 18%',
+      mutedForeground: '0 0% 62%',
+
+      destructive: '0 84% 60%',
+      destructiveForeground: '0 0% 100%',
+
+      card: '262 40% 8%',
+      cardForeground: '0 0% 98%',
+
+      popover: '262 40% 8%',
+      popoverForeground: '0 0% 98%',
+
+      sidebar: {
+        background: '260 50% 4%',
+        foreground: '0 0% 92%',
+        primary: '271 76% 53%',
+        primaryForeground: '0 0% 100%',
+        accent: '265 26% 12%',
+        accentForeground: '0 0% 92%',
+        border: '265 35% 24%',
+        ring: '271 76% 53%',
+      },
+    },
+  },
+
+  // 5. Grille Symbolique — mur de symboles mathématiques/physiques qui pulsent (presets d'animation)
+  {
+    id: 'ultra-grille-symbolique',
+    name: 'Grille Symbolique',
+    isUltra: true,
+    ultraId: 'symbol-matrix',
+    customizable: true,
+    customizeType: 'preset',
+    background: '#05050a',
+    textColor: 'rgba(255,255,255,0.98)',
+    accentColor: '#0096ff',
+    hsl: {
+      primary: '204 100% 50%',
+      primaryForeground: '0 0% 100%',
+      accent: '204 100% 50%',
+      accentForeground: '0 0% 100%',
+      ring: '204 100% 50%',
+
+      border: '204 35% 22%',
+      input: '204 35% 22%',
+      background: '230 40% 3%',
+      foreground: '0 0% 98%',
+
+      secondary: '204 28% 10%',
+      secondaryForeground: '0 0% 92%',
+
+      muted: '204 22% 16%',
+      mutedForeground: '0 0% 62%',
+
+      destructive: '0 84% 60%',
+      destructiveForeground: '0 0% 100%',
+
+      card: '225 35% 6%',
+      cardForeground: '0 0% 98%',
+
+      popover: '225 35% 6%',
+      popoverForeground: '0 0% 98%',
+
+      sidebar: {
+        background: '230 45% 3%',
+        foreground: '0 0% 92%',
+        primary: '204 100% 50%',
+        primaryForeground: '0 0% 100%',
+        accent: '204 24% 10%',
+        accentForeground: '0 0% 92%',
+        border: '204 35% 22%',
+        ring: '204 100% 50%',
       },
     },
   },

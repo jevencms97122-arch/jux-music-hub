@@ -121,6 +121,25 @@ export async function getLocalTracks(): Promise<Song[]> {
     .map(toSong);
 }
 
+/**
+ * Vide entièrement la librairie locale (sons uploadés en mode hors ligne).
+ * Appelé à la resynchronisation en ligne pour libérer le stockage de l'appareil.
+ */
+export async function clearLocalLibrary(): Promise<void> {
+  for (const [, urls] of blobUrlCache) {
+    URL.revokeObjectURL(urls.audio);
+    if (urls.cover) URL.revokeObjectURL(urls.cover);
+  }
+  blobUrlCache.clear();
+  const db = await openDb();
+  await new Promise<void>((resolve, reject) => {
+    const tx = db.transaction(STORE_NAME, 'readwrite');
+    tx.objectStore(STORE_NAME).clear();
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error);
+  });
+}
+
 export async function deleteLocalTrack(id: string): Promise<void> {
   const cached = blobUrlCache.get(id);
   if (cached) {

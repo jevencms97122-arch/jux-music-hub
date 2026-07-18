@@ -6,6 +6,7 @@ import { usePlayer } from '@/contexts/PlayerContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { useReactiveBg } from '@/hooks/useReactiveBg';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+import CachedImage from '@/components/CachedImage';
 import {
   Play, Pause, SkipBack, SkipForward, Shuffle, Repeat,
   Volume2, ChevronDown, Music2, Wifi, WifiOff, AlertCircle, ListPlus, Gauge, Heart, MoreHorizontal, MessageSquare, ListMusic, Disc3, Repeat2, Share2, Download, Camera, Moon, Send, Link2
@@ -25,6 +26,7 @@ import CreateStoryModal from './CreateStoryModal';
 import ShareToFriendSheet from './ShareToFriendSheet';
 import { detectPlatform } from '@/lib/platform';
 import { cn } from '@/lib/utils';
+import ThemeBackgroundLayer from '@/components/ThemeBackgroundLayer';
 
 const isAndroidNative = () => detectPlatform() === 'android-app';
 
@@ -244,7 +246,7 @@ export default function PlayerPage() {
   useEffect(() => {
     if (!reactiveBg || !isPlaying) {
       cancelAnimationFrame(rafRef.current);
-      // Reset inline transform so the CSS class scale-110 takes over
+      // Reset : le wrapper overscanné (-inset-[10%]) couvre l'écran sans transform
       if (bgRef.current) bgRef.current.style.transform = '';
       return;
     }
@@ -253,14 +255,23 @@ export default function PlayerPage() {
     const dataArray = analyser ? new Uint8Array(analyser.frequencyBinCount) : null;
 
     let startTime: number | null = null;
-    // Lerped values for smooth transitions
-    let smoothScale = 1.1; // matches scale-110 base
+    let lastNow: number | null = null;
+    // Zoom piloté par un ressort amorti : l'accélération et la décélération sont
+    // continues, donc aucune cassure au sommet du zoom (contrairement à un lerp
+    // à deux taux montée/descente qui bascule brutalement).
+    let smoothScale = 1; // le wrapper déborde déjà de 10 %, pas besoin de pré-zoom
+    let scaleVel = 0;
     let smoothX = 0;
     let smoothY = 0;
+
+    const SPRING_STIFFNESS = 55; // rappel vers la cible (s⁻²)
+    const SPRING_DAMPING = 13; // proche de l'amortissement critique (2·√55 ≈ 14.8)
 
     const animate = (now: number) => {
       if (!startTime) startTime = now;
       const t = (now - startTime) / 1000;
+      const dt = Math.min(0.05, lastNow != null ? (now - lastNow) / 1000 : 1 / 60);
+      lastNow = now;
 
       let bassEnergy = 0;
 
@@ -274,12 +285,14 @@ export default function PlayerPage() {
         bassEnergy = Math.pow(Math.max(0, bassEnergy - threshold) / (1 - threshold), 3);
       }
 
-      const targetScale = 1.1 + bassEnergy * 0.52;
-      const targetX = Math.sin(t * 0.28) * 5 + Math.sin(t * 0.13) * 3;
-      const targetY = Math.cos(t * 0.21) * 5 + Math.cos(t * 0.09) * 3;
+      const targetScale = 1 + bassEnergy * 0.45;
+      // Amplitude max ±6 % : reste dans la marge d'overscan de 10 %, aucun bord noir possible
+      const targetX = Math.sin(t * 0.28) * 4 + Math.sin(t * 0.13) * 2;
+      const targetY = Math.cos(t * 0.21) * 4 + Math.cos(t * 0.09) * 2;
 
-      const lerpRate = targetScale > smoothScale ? 0.14 : 0.03;
-      smoothScale += (targetScale - smoothScale) * lerpRate;
+      // Intégration du ressort (semi-implicite) — mouvement fluide dans les deux sens
+      scaleVel += ((targetScale - smoothScale) * SPRING_STIFFNESS - scaleVel * SPRING_DAMPING) * dt;
+      smoothScale += scaleVel * dt;
       smoothX += (targetX - smoothX) * 0.04;
       smoothY += (targetY - smoothY) * 0.04;
 
@@ -314,6 +327,8 @@ export default function PlayerPage() {
 
   if (!currentSong || !isPlayerOpen) return null;
 
+  const coverUrl = songCoverUrl(currentSong);
+
   return (
     <div
       className={cn(
@@ -321,20 +336,37 @@ export default function PlayerPage() {
         closing ? 'animate-slide-out-down' : opening ? 'animate-slide-in-up' : ''
       )}
     >
-      {/* Blurred background — crossfade réel entre la pochette précédente et la nouvelle */}
-      <AnimatePresence>
-        <motion.div
-          ref={bgRef}
-          key={currentSong.id + '-bg'}
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 0.25 }}
-          exit={{ opacity: 0 }}
-          transition={{ duration: 0.6, ease: 'easeInOut' }}
-          className="absolute inset-0 bg-cover bg-center blur-xl scale-110"
-          style={{ backgroundImage: `url(${songCoverUrl(currentSong)})` }}
-        />
-      </AnimatePresence>
-      <div className="absolute inset-0 bg-background/35" />
+      {/* Backdrop — cover floutée ou fond du thème (animé/Ultra) sans cover.
+          Le wrapper bgRef est stable (jamais démonté au changement de morceau) et déborde
+          de 10% de chaque côté : l'effet réactif au son peut le déplacer/zoomer sans
+          jamais révéler de bord noir (source du flickering). */}
+      <div ref={bgRef} className="absolute -inset-[10%] will-change-transform">
+        <AnimatePresence>
+          {coverUrl ? (
+            <motion.div
+              key={currentSong.id + '-bg'}
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 0.25 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.6, ease: 'easeInOut' }}
+              className="absolute inset-0 bg-cover bg-center blur-xl"
+              style={{ backgroundImage: `url(${coverUrl})` }}
+            />
+          ) : (
+            <motion.div
+              key="theme-bg"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.6, ease: 'easeInOut' }}
+              className="absolute inset-0 overflow-hidden"
+            >
+              <ThemeBackgroundLayer />
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </div>
+      {coverUrl && <div className="absolute inset-0 bg-background/35" />}
 
       {/* Header */}
       <div className="relative z-10 flex items-center justify-between px-4 pt-4 pb-2">
@@ -366,18 +398,20 @@ export default function PlayerPage() {
               transition={{ duration: 0.4, ease: [0.22, 1, 0.36, 1] }}
               className="aspect-square w-full overflow-hidden rounded-3xl shadow-2xl shadow-black/50 ring-1 ring-white/[0.08]"
             >
-              <img
-                src={songCoverUrl(currentSong)}
+              <CachedImage
+                src={coverUrl}
                 alt={currentSong.title}
                 className="h-full w-full object-cover"
               />
             </motion.div>
           </AnimatePresence>
           {/* Glow */}
-          <div
-            className="absolute -inset-6 -z-10 rounded-[3rem] opacity-25 blur-2xl"
-            style={{ backgroundImage: `url(${songCoverUrl(currentSong)})`, backgroundSize: 'cover' }}
-          />
+          {coverUrl && (
+            <div
+              className="absolute -inset-6 -z-10 rounded-[3rem] opacity-25 blur-2xl"
+              style={{ backgroundImage: `url(${coverUrl})`, backgroundSize: 'cover' }}
+            />
+          )}
         </div>
       </div>
 
@@ -718,13 +752,7 @@ export default function PlayerPage() {
                   {similarByGenre.map((s) => (
                     <div key={s.id} className="flex flex-col gap-1 rounded-2xl bg-card p-2 cursor-pointer active:scale-95 transition-transform"
                       onClick={() => { playSong(s); setShowSimilar(false); }}>
-                      {songCoverUrl(s) ? (
-                        <img src={songCoverUrl(s)} alt={s.title} className="w-full aspect-square rounded-xl object-cover" />
-                      ) : (
-                        <div className="w-full aspect-square rounded-xl bg-muted flex items-center justify-center">
-                          <Music2 className="h-8 w-8 text-muted-foreground/40" />
-                        </div>
-                      )}
+                      <CachedImage src={songCoverUrl(s)} alt={s.title} className="w-full aspect-square rounded-xl object-cover" />
                       <p className="text-xs font-semibold truncate mt-1 px-1">{s.title}</p>
                       <p className="text-xs text-muted-foreground truncate px-1">{s.author}</p>
                     </div>
@@ -742,13 +770,7 @@ export default function PlayerPage() {
                   {similarByAuthor.map((s) => (
                     <div key={s.id} className="flex flex-col gap-1 rounded-2xl bg-card p-2 cursor-pointer active:scale-95 transition-transform"
                       onClick={() => { playSong(s); setShowSimilar(false); }}>
-                      {songCoverUrl(s) ? (
-                        <img src={songCoverUrl(s)} alt={s.title} className="w-full aspect-square rounded-xl object-cover" />
-                      ) : (
-                        <div className="w-full aspect-square rounded-xl bg-muted flex items-center justify-center">
-                          <Music2 className="h-8 w-8 text-muted-foreground/40" />
-                        </div>
-                      )}
+                      <CachedImage src={songCoverUrl(s)} alt={s.title} className="w-full aspect-square rounded-xl object-cover" />
                       <p className="text-xs font-semibold truncate mt-1 px-1">{s.title}</p>
                       <p className="text-xs text-muted-foreground truncate px-1">{s.author}</p>
                     </div>

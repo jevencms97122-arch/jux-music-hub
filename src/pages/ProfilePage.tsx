@@ -49,6 +49,8 @@ export default function ProfilePage() {
   const [repostedSongs, setRepostedSongs] = useState<Song[]>([]);
   const [loading, setLoading] = useState(true);
   const [tab, setTab] = useState<Tab>('tracks');
+  const [repostsLoaded, setRepostsLoaded] = useState(false);
+  const [historyLoaded, setHistoryLoaded] = useState(false);
 
   useEffect(() => {
     if (offline) {
@@ -66,18 +68,30 @@ export default function ProfilePage() {
       setTotalListens(s?.total_listens ?? 0);
     });
 
+    setRepostsLoaded(false);
+    setHistoryLoaded(false);
     (async () => {
       try {
-        const [songRes, followersRes, followingRes, historyRes, repostsRes] = await Promise.all([
+        const [songRes, followersRes, followingRes] = await Promise.all([
           pb.collection('songs').getList(1, 100, { filter: `uploaded_by = "${user.id}"`, sort: '-created', requestKey: null }),
           pb.collection('follows').getList(1, 1, { filter: `following_id = "${user.id}" && status = "accepted"`, requestKey: null }),
           pb.collection('follows').getList(1, 1, { filter: `follower_id = "${user.id}" && status = "accepted"`, requestKey: null }),
-          pb.collection('listen_history').getList(1, 10, { filter: `user_id = "${user.id}"`, sort: '-listened_at', requestKey: null }),
-          pb.collection('repost').getList(1, 50, { filter: `user_id = "${user.id}"`, sort: '-created', requestKey: null }),
         ]);
         setSongs(songRes.items.map(recordToSong));
         setCounts({ followers: followersRes.totalItems, following: followingRes.totalItems });
+      } finally {
+        setLoading(false);
+      }
+    })();
+  }, [user, location.pathname, offline]);
 
+  // Reposts — chargés seulement quand l'onglet est ouvert (lazy)
+  useEffect(() => {
+    if (offline || !user || tab !== 'reposts' || repostsLoaded) return;
+    setRepostsLoaded(true);
+    (async () => {
+      try {
+        const repostsRes = await pb.collection('repost').getList(1, 50, { filter: `user_id = "${user.id}"`, sort: '-created', requestKey: null });
         if (repostsRes.items.length > 0) {
           const repostSongIds = [...new Set(repostsRes.items.map((r: any) => r.song_id))].filter(Boolean) as string[];
           const filter = repostSongIds.map((id) => `id = "${id}"`).join(' || ');
@@ -86,7 +100,17 @@ export default function ProfilePage() {
         } else {
           setRepostedSongs([]);
         }
+      } catch {}
+    })();
+  }, [offline, user, tab, repostsLoaded]);
 
+  // Historique récent — chargé seulement quand l'onglet est ouvert (lazy)
+  useEffect(() => {
+    if (offline || !user || tab !== 'history' || historyLoaded) return;
+    setHistoryLoaded(true);
+    (async () => {
+      try {
+        const historyRes = await pb.collection('listen_history').getList(1, 10, { filter: `user_id = "${user.id}"`, sort: '-listened_at', requestKey: null });
         if (historyRes.items.length > 0) {
           const songIds = [...new Set(historyRes.items.map((r: any) => r.song_id))].filter(Boolean) as string[];
           const songMap: Record<string, Song> = {};
@@ -103,11 +127,9 @@ export default function ProfilePage() {
         } else {
           setRecentHistory([]);
         }
-      } finally {
-        setLoading(false);
-      }
+      } catch {}
     })();
-  }, [user, location.pathname, offline]);
+  }, [offline, user, tab, historyLoaded]);
 
   const handleDeleteLocalTrack = async (songId: string) => {
     if (!window.confirm('Supprimer ce son de ta bibliothèque hors ligne ?')) return;

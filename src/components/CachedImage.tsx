@@ -5,7 +5,6 @@ import { Music2 } from 'lucide-react';
 
 interface CachedImageProps extends React.ImgHTMLAttributes<HTMLImageElement> {
   src: string;
-  fallbackSrc?: string;
   className?: string;
   alt?: string;
   /** Si true, le mode performance n'affecte pas cette image (ex: avatars) */
@@ -14,16 +13,15 @@ interface CachedImageProps extends React.ImgHTMLAttributes<HTMLImageElement> {
 
 export default function CachedImage({
   src,
-  fallbackSrc = '/placeholder.svg',
   className = '',
   alt = '',
   exempt = false,
   ...imgProps
 }: CachedImageProps) {
   const performanceMode = !exempt && isPerformanceModeEnabled();
-  const [displaySrc, setDisplaySrc] = useState<string>(src || fallbackSrc);
+  const [displaySrc, setDisplaySrc] = useState<string>(src);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(false);
+  const [error, setError] = useState(!src);
   const mountedRef = useRef(true);
 
   useEffect(() => {
@@ -37,7 +35,7 @@ export default function CachedImage({
 
     async function load() {
       if (!src) {
-        setDisplaySrc(fallbackSrc);
+        setError(true);
         setLoading(false);
         return;
       }
@@ -54,12 +52,10 @@ export default function CachedImage({
           setDisplaySrc(cachedUrl);
           setError(false);
         } else {
-          setDisplaySrc(fallbackSrc);
           setError(true);
         }
       } catch {
         if (!mountedRef.current || cancelled) return;
-        setDisplaySrc(fallbackSrc);
         setError(true);
       } finally {
         if (!mountedRef.current || cancelled) return;
@@ -70,9 +66,10 @@ export default function CachedImage({
     load();
 
     return () => { cancelled = true; };
-  }, [src, fallbackSrc, performanceMode]);
+  }, [src, performanceMode]);
 
-  if (performanceMode) {
+  // Pas de cover (vide ou en échec) : logo musique plutôt qu'une image cassée
+  if (performanceMode || error) {
     return (
       <div className={`bg-secondary flex items-center justify-center ${className}`} aria-label={alt}>
         <Music2 className="h-1/3 w-1/3 text-muted-foreground/30" />
@@ -86,12 +83,7 @@ export default function CachedImage({
       alt={alt}
       className={className}
       loading="lazy"
-      onError={() => {
-        if (!error && displaySrc !== fallbackSrc) {
-          setDisplaySrc(fallbackSrc);
-          setError(true);
-        }
-      }}
+      onError={() => setError(true)}
       {...imgProps}
     />
   );

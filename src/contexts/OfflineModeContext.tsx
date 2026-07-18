@@ -1,5 +1,8 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { checkBackendReachable, quitApp } from '@/lib/offlineMode';
+import { clearLocalLibrary } from '@/lib/offlineLibrary';
+import { clearLocalPlaylists } from '@/lib/offlinePlaylists';
+import { pruneLocalOnlyListenHistory } from '@/lib/localListenHistory';
 
 interface OfflineModeContextType {
   /** true une fois que le joueur a accepté le mode hors connexion */
@@ -19,7 +22,16 @@ export function OfflineModeProvider({ children }: { children: React.ReactNode })
   useEffect(() => {
     let cancelled = false;
     checkBackendReachable(10000).then((reachable) => {
-      if (cancelled || reachable) return;
+      if (cancelled) return;
+      if (reachable) {
+        // Resynchronisation en ligne : on purge tout le stockage hors ligne
+        // (sons uploadés localement, playlists locales, historique local_…)
+        // pour libérer l'espace de l'appareil, comme si on n'y était jamais allé.
+        clearLocalLibrary().catch(() => {});
+        clearLocalPlaylists().catch(() => {});
+        pruneLocalOnlyListenHistory();
+        return;
+      }
       setShowDialog(true);
     });
     return () => { cancelled = true; };

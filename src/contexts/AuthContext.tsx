@@ -17,6 +17,66 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | null>(null);
 
+// Verrou en mémoire : évite que deux appels concurrents à loadProfile (ex : le
+// listener onChange de l'auth store + l'appel explicite après signUp) créent
+// chacun un profil pour le même utilisateur → doublons dans `profiles`.
+const profileLoadLocks = new Map<string, Promise<RecordModel>>();
+
+/**
+ * Récupère le profil d'un utilisateur, ou le crée s'il n'existe pas encore.
+ * Sûr en cas d'appels concurrents (verrou par userId) et auto-répare les
+ * doublons déjà présents en base en gardant le plus complet et supprimant les autres.
+ */
+async function fetchOrCreateProfile(userId: string): Promise<RecordModel> {
+  const inFlight = profileLoadLocks.get(userId);
+  if (inFlight) return inFlight;
+
+  const task = (async () => {
+    const records = await pb.collection('profiles').getList(1, 10, {
+      filter: `user_id = "${userId}"`,
+      sort: '-updated',
+    });
+
+    if (records.items.length > 1) {
+      // Doublon existant (ancien bug de race condition) : on garde le profil le
+      // plus complet/récent et on supprime les autres pour éviter que les mises
+      // à jour futures (pseudo, avatar…) atterrissent sur le mauvais record.
+      const [keep, ...duplicates] = [...records.items].sort((a: any, b: any) => {
+        const score = (r: any) => (r.profile_completed ? 2 : 0) + (r.avatar ? 1 : 0);
+        const diff = score(b) - score(a);
+        return diff !== 0 ? diff : String(b.updated).localeCompare(String(a.updated));
+      });
+      for (const dup of duplicates) {
+        pb.collection('profiles').delete(dup.id).catch(() => {});
+      }
+      return keep;
+    }
+
+    if (records.items.length === 1) return records.items[0];
+
+    // Aucun profil : on le crée.
+    try {
+      return await pb.collection('profiles').create({
+        user_id: userId,
+        pseudo: pb.authStore.model?.email?.split('@')[0] || 'user',
+        profile_completed: false,
+      });
+    } catch {
+      // Un appel concurrent (hors de ce verrou, ex. ancien onglet) l'a créé entre-temps.
+      const retry = await pb.collection('profiles').getList(1, 1, { filter: `user_id = "${userId}"` });
+      if (retry.items.length > 0) return retry.items[0];
+      throw new Error('Impossible de créer le profil');
+    }
+  })();
+
+  profileLoadLocks.set(userId, task);
+  try {
+    return await task;
+  } finally {
+    profileLoadLocks.delete(userId);
+  }
+}
+
 function recordToProfile(r: any): Profile {
   return {
     id: r.id,
@@ -57,25 +117,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const loadProfile = useCallback(async (userId: string) => {
     try {
-      const records = await pb.collection('profiles').getList(1, 1, {
-        filter: `user_id = "${userId}"`,
-      });
-      
-      if (records.items.length > 0) {
-        const p = recordToProfile(records.items[0]);
-        setProfile(p);
-        setUser(profileToPBUser(p));
-      } else {
-        // Créer un profil par défaut
-        const newProfile = await pb.collection('profiles').create({
-          user_id: userId,
-          pseudo: pb.authStore.model?.email?.split('@')[0] || 'user',
-          profile_completed: false,
-        });
-        const p = recordToProfile(newProfile);
-        setProfile(p);
-        setUser(profileToPBUser(p));
-      }
+      const record = await fetchOrCreateProfile(userId);
+      const p = recordToProfile(record);
+      setProfile(p);
+      setUser(profileToPBUser(p));
     } catch (e) {
       console.error('loadProfile', e);
     }
@@ -84,14 +129,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const refreshUser = useCallback(async () => {
     if (!pb.authStore.isValid || !pb.authStore.model?.id) return;
     try {
-      const records = await pb.collection('profiles').getList(1, 1, {
-        filter: `user_id = "${pb.authStore.model.id}"`,
-      });
-      if (records.items.length > 0) {
-        const p = recordToProfile(records.items[0]);
-        setProfile(p);
-        setUser(profileToPBUser(p));
-      }
+      const record = await fetchOrCreateProfile(pb.authStore.model.id);
+      const p = recordToProfile(record);
+      setProfile(p);
+      setUser(profileToPBUser(p));
     } catch (e) {
       console.error('refreshUser', e);
     }
@@ -135,16 +176,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       passwordConfirm: password,
     });
     
-    // Authentifier
+    // Authentifier (déclenche aussi le listener onChange qui appelle loadProfile —
+    // fetchOrCreateProfile est sûr en cas d'appels concurrents, donc pas de doublon)
     await pb.collection('users').authWithPassword(email, password);
-    
-    // Créer le profil automatiquement
+
     if (newUser.id) {
-      await pb.collection('profiles').create({
-        user_id: newUser.id,
-        pseudo: email.split('@')[0],
-        profile_completed: false,
-      });
       await loadProfile(newUser.id);
     }
   };
@@ -159,13 +195,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const updateProfile = async (data: Partial<Profile>, avatarFile?: File) => {
     if (!pb.authStore.isValid || !pb.authStore.model?.id) throw new Error('Non connecté');
 
-    const records = await pb.collection('profiles').getList(1, 1, {
-      filter: `user_id = "${pb.authStore.model.id}"`,
-    });
-
-    if (records.items.length === 0) throw new Error('Profil non trouvé');
-
-    const record = records.items[0];
+    // Passe par fetchOrCreateProfile (et non un getList brut) pour cibler le bon
+    // record même s'il restait un doublon historique — et pour ne pas planter si
+    // le profil n'a pas encore été créé.
+    const record = await fetchOrCreateProfile(pb.authStore.model.id);
 
     // Utiliser FormData pour pouvoir envoyer un fichier binaire
     const formData = new FormData();

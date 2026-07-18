@@ -35,35 +35,57 @@ export default function Playlists() {
   const [title, setTitle] = useState('');
   const [loading, setLoading] = useState(true);
   const [tab, setTab] = useState<Tab>('mine');
+  const [likedLoaded, setLikedLoaded] = useState(false);
+  const [discoverLoaded, setDiscoverLoaded] = useState(false);
 
+  // Onglet par défaut ("À moi") : seulement mes playlists + compteur de titres likés
   const load = async () => {
     if (!user) return;
     setLoading(true);
     try {
-      const [mine, likes, songLikes, pubs] = await Promise.all([
+      const [mine, songLikes] = await Promise.all([
         pb.collection('playlists').getList(1, 50, { filter: `owner_id = "${user.id}"`, sort: '-created', requestKey: null }),
-        pb.collection('playlist_likes').getList(1, 200, { filter: `user_id = "${user.id}"`, requestKey: null }),
         pb.collection('song_likes').getList(1, 1, { filter: `user_id = "${user.id}"`, requestKey: null }),
-        pb.collection('playlists').getList(1, 30, { filter: 'is_public = true', sort: '-likes_count', requestKey: null }),
       ]);
       setLikedSongsCount(songLikes.totalItems);
       setMyPlaylists(mine.items.map(recordToPlaylist));
-      setPublicPlaylists(pubs.items.map(recordToPlaylist));
-
-      const likedIds = likes.items.map((r: any) => r.playlist_id).filter(Boolean);
-      if (likedIds.length > 0) {
-        const filters = likedIds.map((id: string) => `id = "${id}"`).join(' || ');
-        const res = await pb.collection('playlists').getList(1, 50, { filter: filters, requestKey: null });
-        setLikedPlaylists(res.items.map(recordToPlaylist));
-      } else {
-        setLikedPlaylists([]);
-      }
     } catch {} finally {
       setLoading(false);
     }
   };
 
   useEffect(() => { load(); }, [user]);
+
+  // Playlists aimées — chargées seulement quand l'onglet est ouvert (lazy)
+  useEffect(() => {
+    if (!user || tab !== 'liked' || likedLoaded) return;
+    setLikedLoaded(true);
+    (async () => {
+      try {
+        const likes = await pb.collection('playlist_likes').getList(1, 200, { filter: `user_id = "${user.id}"`, requestKey: null });
+        const likedIds = likes.items.map((r: any) => r.playlist_id).filter(Boolean);
+        if (likedIds.length > 0) {
+          const filters = likedIds.map((id: string) => `id = "${id}"`).join(' || ');
+          const res = await pb.collection('playlists').getList(1, 50, { filter: filters, requestKey: null });
+          setLikedPlaylists(res.items.map(recordToPlaylist));
+        } else {
+          setLikedPlaylists([]);
+        }
+      } catch {}
+    })();
+  }, [user, tab, likedLoaded]);
+
+  // Playlists publiques — chargées seulement quand l'onglet Découvrir est ouvert (lazy)
+  useEffect(() => {
+    if (!user || tab !== 'discover' || discoverLoaded) return;
+    setDiscoverLoaded(true);
+    (async () => {
+      try {
+        const pubs = await pb.collection('playlists').getList(1, 30, { filter: 'is_public = true', sort: '-likes_count', requestKey: null });
+        setPublicPlaylists(pubs.items.map(recordToPlaylist));
+      } catch {}
+    })();
+  }, [user, tab, discoverLoaded]);
 
   const createPlaylist = async () => {
     if (!user || !title.trim()) return;

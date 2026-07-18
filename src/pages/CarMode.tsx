@@ -7,6 +7,8 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
+import ThemeBackgroundLayer from '@/components/ThemeBackgroundLayer';
+import CachedImage from '@/components/CachedImage';
 import PlaybackRateControl from '@/components/PlaybackRateControl';
 import type { Playlist, Song } from '@/types/music';
 
@@ -272,7 +274,8 @@ export default function CarMode() {
   // ══════════════════════ VUE LECTEUR — plein écran, sans distraction ══════════════════════
   if (view === 'player' && currentSong) {
     return (
-      <div className="fixed inset-0 z-[60] flex flex-col bg-background">
+      <div className="fixed inset-0 z-[60] flex flex-col overflow-hidden bg-background">
+        <ThemeBackgroundLayer />
         <div className="absolute inset-0 bg-gradient-hero opacity-40" />
 
         {/* Header minimal */}
@@ -292,7 +295,7 @@ export default function CarMode() {
         {/* Cover + infos + commandes — s'adapte portrait/paysage */}
         <div className="relative flex min-h-0 flex-1 flex-col items-center justify-evenly gap-4 px-6 pb-[max(1.5rem,env(safe-area-inset-bottom))] landscape:flex-row landscape:justify-center landscape:gap-[6vw]">
           <div className="aspect-square h-auto w-[min(78vw,42vh)] shrink-0 overflow-hidden rounded-[2rem] shadow-2xl landscape:w-[min(38vw,62vh)]">
-            <img src={songCoverUrl(currentSong)} alt={currentSong.title} className="h-full w-full object-cover" />
+            <CachedImage src={songCoverUrl(currentSong)} alt={currentSong.title} className="h-full w-full object-cover" />
           </div>
 
           <div className="flex min-w-0 flex-col items-center gap-[3vh] landscape:max-w-[46vw]">
@@ -332,7 +335,8 @@ export default function CarMode() {
 
   // ══════════════════════ VUE ACCUEIL DU MODE — choix playlist / genre ══════════════════════
   return (
-    <div className="fixed inset-0 z-[60] flex flex-col bg-background">
+    <div className="fixed inset-0 z-[60] flex flex-col overflow-hidden bg-background">
+      <ThemeBackgroundLayer />
       <div className="absolute inset-0 bg-gradient-hero opacity-40" />
 
       <div className="relative flex items-center justify-between px-6 pt-[max(1.25rem,env(safe-area-inset-top))] pb-2" style={{ animation: 'fadeSlideUp 0.6s cubic-bezier(0.16,1,0.3,1) both' }}>
@@ -358,7 +362,7 @@ export default function CarMode() {
               className="mt-4 flex w-full items-center gap-4 rounded-2xl border border-primary/40 bg-primary/10 p-4 text-left transition-colors hover:bg-primary/15 active:scale-[0.99]"
             >
               <div className="h-16 w-16 shrink-0 overflow-hidden rounded-xl shadow-soft">
-                <img src={songCoverUrl(currentSong)} alt={currentSong.title} className="h-full w-full object-cover" />
+                <CachedImage src={songCoverUrl(currentSong)} alt={currentSong.title} className="h-full w-full object-cover" />
               </div>
               <div className="min-w-0 flex-1">
                 <p className="text-sm font-semibold text-primary">{isPlaying ? 'En cours de lecture' : 'En pause'}</p>

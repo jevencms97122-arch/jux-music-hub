@@ -8,11 +8,13 @@ import StoryCircles from '@/components/StoryCircles';
 import { useNavigate } from 'react-router-dom';
 import {
   Play, Heart, Clock, Sparkles,
-  ListMusic, Globe, ArrowRight, Music2, Upload, Bell, Tag, ChevronDown, ScrollText, Mic2, Car
+  ListMusic, Globe, ArrowRight, Music2, Upload, Bell, Tag, ChevronDown, ScrollText, Mic2, Car, History
 } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useOfflineMode } from '@/contexts/OfflineModeContext';
 import { getLocalTracks } from '@/lib/offlineLibrary';
+import { getLocalListenHistory } from '@/lib/localListenHistory';
+import { useLazySection } from '@/hooks/useLazySection';
 import TrendingSection from '@/components/TrendingSection';
 import AppBanner from '@/components/AppBanner';
 import PatchNotesSheet from '@/components/PatchNotesSheet';
@@ -108,6 +110,17 @@ export default function Home() {
   const [selectedGenre, setSelectedGenre] = useState<string | null>(null);
   const [visibleCount, setVisibleCount] = useState(DISCOVER_PAGE);
   const [artistSongs, setArtistSongs] = useState<Song[]>([]);
+  const [artistsLoading, setArtistsLoading] = useState(true);
+  const [trendingLoading, setTrendingLoading] = useState(true);
+  const [replaySongs, setReplaySongs] = useState<Song[]>([]);
+
+  // Lazy loading : chaque section ne déclenche ses requêtes backend que quand
+  // l'utilisateur s'en approche à l'écran (évite de charger ce qu'il ne verra pas)
+  const trendingLazy = useLazySection();
+  const songsLazy = useLazySection();
+  const playlistsLazy = useLazySection();
+  const artistsLazy = useLazySection();
+  const replayLazy = useLazySection();
 
   useSeo({
     title: 'Accueil — Nexora Music',
@@ -127,49 +140,73 @@ export default function Home() {
     try { localStorage.setItem(TUTORIAL_SEEN_KEY, '1'); } catch {}
   };
 
+  // Hors ligne : tout vient de l'appareil, pas de lazy loading nécessaire
   useEffect(() => {
-    if (offline) {
-      getLocalTracks().then((tracks) => {
-        setSongs(tracks);
-        setArtistSongs(tracks);
-      }).finally(() => setLoading(false));
-      return;
-    }
+    if (!offline) return;
+    getLocalTracks().then((tracks) => {
+      setSongs(tracks);
+      setArtistSongs(tracks);
+    }).finally(() => {
+      setLoading(false);
+      setTrendingLoading(false);
+      setArtistsLoading(false);
+    });
+  }, [offline]);
+
+  // Sons récents (sections Par genre + Nouveautés) — chargés à l'approche de la zone
+  useEffect(() => {
+    if (offline || !songsLazy.visible) return;
     (async () => {
-      const [recentRes, trendingRes] = await Promise.all([
-        pb.collection('songs').getList(1, 100, { sort: '-created', requestKey: null }),
-        pb.collection('trending_songs').getList(1, 10, { sort: '-score', requestKey: null }),
-      ]);
-      setSongs(recentRes.items.map(recordToSong));
-
-      // Récupère les songs correspondantes dans l'ordre du score
-      const trendingItems = trendingRes.items;
-      if (trendingItems.length > 0) {
-        const ids = trendingItems.map((t: any) => t.song_id);
-        const filters = ids.map((id: string) => `id = "${id}"`).join(' || ');
-        const songsRes = await pb.collection('songs').getList(1, 10, { filter: filters, requestKey: null });
-        const songsById = Object.fromEntries(songsRes.items.map((s: any) => [s.id, s]));
-        const ordered = ids.map((id: string) => songsById[id]).filter(Boolean).map(recordToSong);
-        setTrending(ordered);
-      } else {
-        // Fallback si trending_songs est vide
-        const fallback = await pb.collection('songs').getList(1, 10, { sort: '-weekly_play_count', requestKey: null });
-        setTrending(fallback.items.map(recordToSong));
-      }
-
-      // Charge tous les sons pour le classement artistes (fields limités pour la perf)
-      const artistRes = await pb.collection('songs').getList(1, 500, {
-        sort: '-play_count',
-        requestKey: 'artist-ranking',
-      });
-      setArtistSongs(artistRes.items.map(recordToSong));
-
+      try {
+        const recentRes = await pb.collection('songs').getList(1, 100, { sort: '-created', requestKey: null });
+        setSongs(recentRes.items.map(recordToSong));
+      } catch {}
       setLoading(false);
     })();
-  }, [offline]);
+  }, [offline, songsLazy.visible]);
+
+  // Tendances — chargées à l'approche de la section
+  useEffect(() => {
+    if (offline || !trendingLazy.visible) return;
+    (async () => {
+      try {
+        const trendingRes = await pb.collection('trending_songs').getList(1, 10, { sort: '-score', requestKey: null });
+        const trendingItems = trendingRes.items;
+        if (trendingItems.length > 0) {
+          const ids = trendingItems.map((t: any) => t.song_id);
+          const filters = ids.map((id: string) => `id = "${id}"`).join(' || ');
+          const songsRes = await pb.collection('songs').getList(1, 10, { filter: filters, requestKey: null });
+          const songsById = Object.fromEntries(songsRes.items.map((s: any) => [s.id, s]));
+          const ordered = ids.map((id: string) => songsById[id]).filter(Boolean).map(recordToSong);
+          setTrending(ordered);
+        } else {
+          // Fallback si trending_songs est vide
+          const fallback = await pb.collection('songs').getList(1, 10, { sort: '-weekly_play_count', requestKey: null });
+          setTrending(fallback.items.map(recordToSong));
+        }
+      } catch {}
+      setTrendingLoading(false);
+    })();
+  }, [offline, trendingLazy.visible]);
+
+  // Classement artistes (requête lourde : 500 sons) — chargé à l'approche de la section
+  useEffect(() => {
+    if (offline || !artistsLazy.visible) return;
+    (async () => {
+      try {
+        const artistRes = await pb.collection('songs').getList(1, 500, {
+          sort: '-play_count',
+          requestKey: 'artist-ranking',
+        });
+        setArtistSongs(artistRes.items.map(recordToSong));
+      } catch {}
+      setArtistsLoading(false);
+    })();
+  }, [offline, artistsLazy.visible]);
 
   useEffect(() => {
     if (offline) { setPlaylistsLoading(false); return; }
+    if (!playlistsLazy.visible) return;
     (async () => {
       const result = await pb.collection('playlists').getList(1, 30, {
         filter: 'is_public = true',
@@ -205,6 +242,50 @@ export default function Home() {
       .catch(() => {})
       .finally(() => setDailyMixLoading(false));
   }, [user]);
+
+  // Section "Réécouter" — pioche aléatoirement dans les sons déjà écoutés
+  useEffect(() => {
+    const shuffleRandom = <T,>(arr: T[]): T[] => {
+      const a = [...arr];
+      for (let i = a.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [a[i], a[j]] = [a[j], a[i]];
+      }
+      return a;
+    };
+
+    if (offline) {
+      // Hors ligne : croise l'historique local avec les sons présents sur l'appareil
+      (async () => {
+        const ids = getLocalListenHistory();
+        if (ids.length === 0) return;
+        const tracks = await getLocalTracks();
+        const listened = tracks.filter((t) => ids.includes(t.id));
+        setReplaySongs(shuffleRandom(listened).slice(0, 12));
+      })().catch(() => {});
+      return;
+    }
+
+    if (!user || !replayLazy.visible) return;
+    (async () => {
+      try {
+        const hist = await pb.collection('listen_history').getList(1, 200, {
+          filter: `user_id = "${user.id}"`,
+          sort: '-listened_at',
+          requestKey: null,
+        });
+        const ids = [...new Set(hist.items.map((h: any) => h.song_id))] as string[];
+        if (ids.length === 0) return;
+        const pick = shuffleRandom(ids).slice(0, 12);
+        const filter = pick.map((id) => `id = "${id}"`).join(' || ');
+        const res = await pb.collection('songs').getList(1, 12, { filter, requestKey: null });
+        const byId = Object.fromEntries(res.items.map((s: any) => [s.id, s]));
+        setReplaySongs(pick.map((id) => byId[id]).filter(Boolean).map(recordToSong));
+      } catch {
+        // silencieux : la section est simplement masquée
+      }
+    })();
+  }, [offline, user, replayLazy.visible]);
 
   // Badge notifications rafraîchi toutes les 30 s
   useEffect(() => {
@@ -363,22 +444,47 @@ export default function Home() {
         </section>
       )}
 
-      {/* Trending */}
-      {loading ? (
+      {/* Trending — requêtes lancées quand la section approche de l'écran */}
+      <div ref={trendingLazy.ref}>
+        {trendingLoading ? (
+          <section className="relative mb-8 px-4">
+            <div className="mb-4 h-5 w-32 animate-pulse rounded bg-secondary" />
+            <div className="flex gap-3 overflow-hidden">
+              {Array.from({ length: 3 }).map((_, i) => (
+                <div key={i} className="w-36 flex-shrink-0 space-y-2">
+                  <div className="aspect-square w-full animate-pulse rounded-xl bg-secondary" />
+                  <div className="h-3 w-3/4 animate-pulse rounded bg-secondary" />
+                  <div className="h-2.5 w-1/2 animate-pulse rounded bg-secondary" />
+                </div>
+              ))}
+            </div>
+          </section>
+        ) : trending.length > 0 && <TrendingSection trending={trending} />}
+      </div>
+
+      {/* Sentinelle lazy pour les sons récents (Par genre + Nouveautés) */}
+      <div ref={songsLazy.ref} aria-hidden />
+
+      {/* Genre playlists */}
+      {loading && !offline && (
         <section className="relative mb-8 px-4">
-          <div className="mb-4 h-5 w-32 animate-pulse rounded bg-secondary" />
+          <div className="mb-4 h-5 w-28 animate-pulse rounded bg-secondary" />
+          <div className="flex gap-2 pb-2">
+            {Array.from({ length: 4 }).map((_, i) => (
+              <div key={i} className="h-7 w-20 animate-pulse rounded-full bg-secondary" />
+            ))}
+          </div>
           <div className="flex gap-3 overflow-hidden">
-            {Array.from({ length: 3 }).map((_, i) => (
-              <div key={i} className="w-36 flex-shrink-0 space-y-2">
+            {Array.from({ length: 4 }).map((_, i) => (
+              <div key={i} className="w-28 flex-shrink-0 space-y-1.5">
                 <div className="aspect-square w-full animate-pulse rounded-xl bg-secondary" />
                 <div className="h-3 w-3/4 animate-pulse rounded bg-secondary" />
+                <div className="h-2.5 w-1/2 animate-pulse rounded bg-secondary" />
               </div>
             ))}
           </div>
         </section>
-      ) : trending.length > 0 && <TrendingSection trending={trending} />}
-
-      {/* Genre playlists */}
+      )}
       {!loading && genreGroups.length > 0 && (
         <section className="relative mb-8 animate-fade-slide-up" style={{ animationDelay: '0.15s' }}>
           <div className="mb-4 flex items-center justify-between px-4">
@@ -478,8 +584,8 @@ export default function Home() {
         </section>
       )}
 
-      {/* Public Playlists */}
-      <section className="relative mb-8 px-4 animate-fade-slide-up" style={{ animationDelay: '0.2s' }}>
+      {/* Public Playlists — requêtes lancées quand la section approche de l'écran */}
+      <section ref={playlistsLazy.ref} className="relative mb-8 px-4 animate-fade-slide-up" style={{ animationDelay: '0.2s' }}>
         <SectionHeader
           icon={Globe}
           title="Playlists Publiques"
@@ -492,7 +598,7 @@ export default function Home() {
             ))}
           </div>
         ) : publicPlaylists.length === 0 ? (
-          <div className="flex flex-col items-center justify-center rounded-xl border border-border bg-gradient-card py-10 text-center">
+          <div className="flex flex-col items-center justify-center rounded-xl border border-border bg-card/40 py-10 text-center backdrop-blur-xl">
             <ListMusic className="mb-3 h-7 w-7 text-muted-foreground/50" />
             <p className="text-sm font-medium text-muted-foreground">Pas encore de playlists publiques</p>
           </div>
@@ -520,8 +626,34 @@ export default function Home() {
         )}
       </section>
 
-      {/* Top Artistes */}
-      {!loading && topArtists.length > 0 && (
+      {/* Top Artistes — requête lourde (500 sons) lancée quand la section approche de l'écran */}
+      <div ref={artistsLazy.ref}>
+      {artistsLoading && !offline && (
+        <section className="relative mb-8 px-4">
+          <div className="mb-4 h-5 w-28 animate-pulse rounded bg-secondary" />
+          <div className="mb-3 flex gap-2.5">
+            {Array.from({ length: 3 }).map((_, i) => (
+              <div key={i} className="flex flex-1 flex-col items-center gap-2 rounded-2xl border border-border/40 p-3">
+                <div className="h-16 w-16 animate-pulse rounded-full bg-secondary" />
+                <div className="h-3 w-16 animate-pulse rounded bg-secondary" />
+                <div className="h-2.5 w-10 animate-pulse rounded bg-secondary" />
+              </div>
+            ))}
+          </div>
+          <div className="space-y-1.5">
+            {Array.from({ length: 3 }).map((_, i) => (
+              <div key={i} className="flex items-center gap-3 rounded-xl bg-card/40 px-3 py-2.5">
+                <div className="h-10 w-10 animate-pulse rounded-full bg-secondary" />
+                <div className="flex-1 space-y-1.5">
+                  <div className="h-3 w-32 animate-pulse rounded bg-secondary" />
+                  <div className="h-2.5 w-24 animate-pulse rounded bg-secondary" />
+                </div>
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
+      {!artistsLoading && topArtists.length > 0 && (
         <section className="relative mb-8 px-4 animate-fade-slide-up" style={{ animationDelay: '0.25s' }}>
           <SectionHeader icon={Mic2} title="Top Artistes" />
 
@@ -610,6 +742,35 @@ export default function Home() {
           </div>
         </section>
       )}
+      </div>
+
+      {/* Réécouter — sélection aléatoire parmi les sons déjà écoutés (chargée à l'approche) */}
+      <div ref={replayLazy.ref} aria-hidden />
+      {!selectedGenre && replaySongs.length > 0 && (
+        <section className="relative mb-8 animate-fade-slide-up" style={{ animationDelay: '0.28s' }}>
+          <div className="px-4">
+            <SectionHeader icon={History} title="Réécouter" />
+          </div>
+          <div className="flex snap-x snap-mandatory gap-3 overflow-x-auto scroll-px-4 px-4 pb-1 scrollbar-hide">
+            {replaySongs.map((s) => (
+              <button
+                key={s.id}
+                onClick={() => playSongFromList(s, replaySongs)}
+                className="group w-28 flex-shrink-0 snap-start text-left"
+              >
+                <div className="relative mb-1.5 aspect-square w-28 overflow-hidden rounded-xl">
+                  <CachedImage src={songCoverUrl(s)} alt="" className="h-full w-full object-cover transition-transform duration-200 group-hover:scale-105" />
+                  <div className="absolute inset-0 flex items-center justify-center bg-black/0 group-hover:bg-black/30 transition-all duration-200">
+                    <Play className="h-7 w-7 fill-white text-white opacity-0 group-hover:opacity-100 transition-opacity duration-200" />
+                  </div>
+                </div>
+                <p className="truncate text-xs font-semibold text-foreground">{s.title}</p>
+                <p className="truncate text-[10px] text-muted-foreground">{s.author}</p>
+              </button>
+            ))}
+          </div>
+        </section>
+      )}
 
       {/* Découverte — masquée quand un genre est filtré (la grille filtrée est déjà au-dessus) */}
       {!selectedGenre && (
@@ -618,11 +779,15 @@ export default function Home() {
           {loading ? (
             <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5">
               {Array.from({ length: 8 }).map((_, i) => (
-                <div key={i} className="aspect-square animate-pulse rounded-2xl bg-secondary" />
+                <div key={i} className="space-y-1.5">
+                  <div className="aspect-square animate-pulse rounded-2xl bg-secondary" />
+                  <div className="h-3 w-3/4 animate-pulse rounded bg-secondary" />
+                  <div className="h-2.5 w-1/2 animate-pulse rounded bg-secondary" />
+                </div>
               ))}
             </div>
           ) : songs.length === 0 ? (
-            <div className="flex flex-col items-center justify-center rounded-2xl border border-border bg-gradient-card py-12 text-center">
+            <div className="flex flex-col items-center justify-center rounded-2xl border border-border bg-card/40 py-12 text-center backdrop-blur-xl">
               <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-2xl bg-muted">
                 <Music2 className="h-5 w-5 text-muted-foreground" />
               </div>

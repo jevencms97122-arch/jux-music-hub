@@ -76,6 +76,20 @@ export async function getLocalPlaylist(id: string): Promise<LocalPlaylist | null
   });
 }
 
+/**
+ * Vide toutes les playlists locales (créées en mode hors ligne).
+ * Appelé à la resynchronisation en ligne pour libérer le stockage de l'appareil.
+ */
+export async function clearLocalPlaylists(): Promise<void> {
+  const db = await openDb();
+  await new Promise<void>((resolve, reject) => {
+    const tx = db.transaction(STORE_NAME, 'readwrite');
+    tx.objectStore(STORE_NAME).clear();
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error);
+  });
+}
+
 export async function deleteLocalPlaylist(id: string): Promise<void> {
   const db = await openDb();
   await new Promise<void>((resolve, reject) => {

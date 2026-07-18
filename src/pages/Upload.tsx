@@ -8,9 +8,15 @@ import { extractYoutubeId } from '@/lib/storage';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, Upload as UploadIcon, Music2, Youtube, X, Camera, User, ShieldAlert, Play, Pause } from 'lucide-react';
+import { ArrowLeft, Upload as UploadIcon, Music2, Youtube, X, Camera, User, ShieldAlert, Play, Pause, FolderOpen, Zap, PenLine } from 'lucide-react';
 import { toast } from 'sonner';
 import { MUSIC_GENRES } from '@/types/music';
+
+// Déduit un titre lisible à partir du nom de fichier (retire l'extension, remplace _ et - par des espaces).
+function titleFromFilename(filename: string): string {
+  const withoutExt = filename.replace(/\.[^/.]+$/, '');
+  return withoutExt.replace(/[_-]+/g, ' ').trim() || filename;
+}
 
 interface ArtistEntry {
   name: string;
@@ -34,8 +40,12 @@ export default function Upload() {
   const [coverFile, setCoverFile] = useState<File | null>(null);
   const [youtubeUrl, setYoutubeUrl] = useState('');
   const [uploading, setUploading] = useState(false);
+  const [offlineMode, setOfflineMode] = useState<'manual' | 'quick'>('manual');
+  const [quickProgress, setQuickProgress] = useState<{ done: number; total: number } | null>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const wrapperRef = useRef<HTMLDivElement>(null);
+  const quickFilesInputRef = useRef<HTMLInputElement>(null);
+  const quickFolderInputRef = useRef<HTMLInputElement>(null);
 
   // Aperçu audio
   const audioPreviewRef = useRef<HTMLAudioElement | null>(null);
@@ -240,6 +250,39 @@ export default function Upload() {
     setUploading(false);
   };
 
+  const quickAddFiles = async (fileList: FileList | null) => {
+    if (!fileList || fileList.length === 0) return;
+    const mp3Files = Array.from(fileList).filter(f => /\.(mp3|opus)$/i.test(f.name) || f.type === 'audio/mpeg' || f.type === 'audio/opus' || f.type === 'audio/ogg');
+    if (mp3Files.length === 0) { toast.error('Aucun fichier mp3 ou opus trouvé'); return; }
+
+    const defaultAuthor = profile?.pseudo || [profile?.first_name, profile?.last_name].filter(Boolean).join(' ') || 'Artiste inconnu';
+    setUploading(true);
+    setQuickProgress({ done: 0, total: mp3Files.length });
+    let successCount = 0;
+    for (let i = 0; i < mp3Files.length; i++) {
+      try {
+        await addLocalTrack({
+          title: titleFromFilename(mp3Files[i].name),
+          author: defaultAuthor,
+          genre: null,
+          audioFile: mp3Files[i],
+        });
+        successCount++;
+      } catch {
+        // on continue avec les fichiers suivants même en cas d'échec
+      }
+      setQuickProgress({ done: i + 1, total: mp3Files.length });
+    }
+    setUploading(false);
+    setQuickProgress(null);
+    if (successCount > 0) {
+      toast.success(`${successCount} musique${successCount > 1 ? 's' : ''} ajoutée${successCount > 1 ? 's' : ''} à ta bibliothèque locale !`);
+      navigate('/jux');
+    } else {
+      toast.error('Aucune musique n\'a pu être ajoutée');
+    }
+  };
+
   if (!offline && !profile?.badge) {
     return (
       <div className="relative min-h-screen pb-40 p-4">
@@ -264,6 +307,80 @@ export default function Upload() {
         <Button variant="ghost" size="icon" onClick={() => navigate(-1)}><ArrowLeft className="h-5 w-5" /></Button>
         <h1 className="text-xl font-bold">Upload</h1>
       </header>
+
+      {offline && (
+        <div className="mb-4 grid grid-cols-2 gap-2">
+          <button
+            type="button"
+            onClick={() => setOfflineMode('manual')}
+            className={`flex items-center justify-center gap-2 rounded-xl border px-3 py-2 text-sm font-medium transition-colors ${offlineMode === 'manual' ? 'border-primary bg-primary/10 text-primary' : 'border-border/50 bg-card/40 text-muted-foreground'}`}
+          >
+            <PenLine className="h-4 w-4" /> Manuel
+          </button>
+          <button
+            type="button"
+            onClick={() => setOfflineMode('quick')}
+            className={`flex items-center justify-center gap-2 rounded-xl border px-3 py-2 text-sm font-medium transition-colors ${offlineMode === 'quick' ? 'border-primary bg-primary/10 text-primary' : 'border-border/50 bg-card/40 text-muted-foreground'}`}
+          >
+            <Zap className="h-4 w-4" /> Ajout rapide
+          </button>
+        </div>
+      )}
+
+      {offline && offlineMode === 'quick' ? (
+        <div className="space-y-4">
+          <p className="text-xs text-muted-foreground">
+            Le titre est déduit automatiquement du nom du fichier, sans passer par le formulaire. Choisis des fichiers mp3/opus ou un dossier entier.
+          </p>
+
+          <input
+            ref={quickFilesInputRef}
+            type="file"
+            accept=".mp3,.opus,audio/mpeg,audio/opus,audio/ogg"
+            multiple
+            className="hidden"
+            onChange={(e) => { quickAddFiles(e.target.files); e.target.value = ''; }}
+          />
+          <input
+            ref={quickFolderInputRef}
+            type="file"
+            multiple
+            className="hidden"
+            // @ts-expect-error attribut non typé mais supporté par les navigateurs pour la sélection de dossier
+            webkitdirectory="true"
+            directory="true"
+            onChange={(e) => { quickAddFiles(e.target.files); e.target.value = ''; }}
+          />
+
+          <button
+            type="button"
+            disabled={uploading}
+            onClick={() => quickFilesInputRef.current?.click()}
+            className="flex w-full flex-col items-center gap-2 rounded-2xl border border-dashed border-border/60 bg-card/30 px-6 py-8 text-center disabled:opacity-50"
+          >
+            <Music2 className="h-6 w-6 text-primary" />
+            <span className="text-sm font-bold">Choisir des fichiers mp3/opus</span>
+            <span className="text-xs text-muted-foreground">Un ou plusieurs fichiers, ajoutés instantanément</span>
+          </button>
+
+          <button
+            type="button"
+            disabled={uploading}
+            onClick={() => quickFolderInputRef.current?.click()}
+            className="flex w-full flex-col items-center gap-2 rounded-2xl border border-dashed border-border/60 bg-card/30 px-6 py-8 text-center disabled:opacity-50"
+          >
+            <FolderOpen className="h-6 w-6 text-primary" />
+            <span className="text-sm font-bold">Choisir un dossier</span>
+            <span className="text-xs text-muted-foreground">Tous les mp3/opus du dossier seront ajoutés</span>
+          </button>
+
+          {quickProgress && (
+            <div className="rounded-xl border border-border/50 bg-card/60 px-4 py-3 text-center text-sm">
+              Ajout en cours... {quickProgress.done} / {quickProgress.total}
+            </div>
+          )}
+        </div>
+      ) : (
       <div className="space-y-4">
         <div>
           <label className="text-sm font-medium">Titre *</label>
@@ -382,6 +499,7 @@ export default function Upload() {
           <UploadIcon className="h-4 w-4 mr-2" /> {uploading ? 'Upload en cours...' : 'Uploader'}
         </Button>
       </div>
+      )}
     </div>
   );
 }

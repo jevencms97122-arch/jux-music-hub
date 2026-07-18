@@ -5,6 +5,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useOfflineMode } from '@/contexts/OfflineModeContext';
 import { extractDominantHsl, applyAccentHsl } from '@/lib/dominantColor';
 import { updateStreak } from '@/lib/streaks';
+import { recordLocalListen } from '@/lib/localListenHistory';
 import { setMediaSessionMetadata, setMediaSessionHandlers, setMediaSessionPosition, setMediaSessionPlaybackState, clearMediaSession } from '@/lib/notifications';
 import { sendNowPlayingToNative, clearNowPlayingOnNative, onNativeCommand, resolveCoverUrl } from '@/lib/androidMediaBridge';
 import type { NativeCommandEvent } from '@/lib/androidMediaBridge';
@@ -607,6 +608,8 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
   const pauseTimeoutRef = useRef<number | null>(null);
 
   const recordPlay = useCallback((song: Song) => {
+    // Historique local (fonctionne aussi hors ligne / sans compte)
+    recordLocalListen(song.id);
     if (!authUser) return;
     if (pauseTimeoutRef.current) { clearTimeout(pauseTimeoutRef.current); pauseTimeoutRef.current = null; }
 

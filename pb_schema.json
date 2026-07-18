@@ -1,0 +1,559 @@
+[
+  {
+    "id": "pbc_users0000001",
+    "name": "users",
+    "type": "auth",
+    "system": false,
+    "listRule": "",
+    "viewRule": "",
+    "createRule": "",
+    "updateRule": "id = @request.auth.id",
+    "deleteRule": "id = @request.auth.id",
+    "authRule": "",
+    "manageRule": null,
+    "passwordAuth": { "enabled": true, "identityFields": ["email"] },
+    "oauth2": { "enabled": false, "providers": [] },
+    "otp": { "enabled": false },
+    "mfa": { "enabled": false },
+    "fields": [
+      { "id": "users_id", "name": "id", "type": "text", "system": true, "required": true, "primaryKey": true, "autogeneratePattern": "[a-z0-9]{15}", "max": 15, "min": 15, "pattern": "^[a-z0-9]+$" },
+      { "id": "users_password", "name": "password", "type": "password", "system": true, "required": true, "hidden": true, "min": 8, "cost": 10 },
+      { "id": "users_tokenkey", "name": "tokenKey", "type": "text", "system": true, "required": true, "hidden": true, "min": 30, "max": 60, "autogeneratePattern": "[a-zA-Z0-9_]{50}" },
+      { "id": "users_email", "name": "email", "type": "email", "system": true, "required": true },
+      { "id": "users_emailvisibility", "name": "emailVisibility", "type": "bool", "system": true },
+      { "id": "users_verified", "name": "verified", "type": "bool", "system": true },
+      { "id": "users_created", "name": "created", "type": "autodate", "system": true, "onCreate": true },
+      { "id": "users_updated", "name": "updated", "type": "autodate", "system": true, "onCreate": true, "onUpdate": true }
+    ]
+  },
+
+  {
+    "id": "pbc_profiles00001",
+    "name": "profiles",
+    "type": "base",
+    "listRule": "",
+    "viewRule": "",
+    "createRule": "",
+    "updateRule": "",
+    "deleteRule": "",
+    "fields": [
+      { "id": "prof_id", "name": "id", "type": "text", "system": true, "required": true, "primaryKey": true, "autogeneratePattern": "[a-z0-9]{15}" },
+      { "id": "prof_user_id", "name": "user_id", "type": "text", "required": true },
+      { "id": "prof_pseudo", "name": "pseudo", "type": "text", "required": false },
+      { "id": "prof_first_name", "name": "first_name", "type": "text", "required": false },
+      { "id": "prof_last_name", "name": "last_name", "type": "text", "required": false },
+      { "id": "prof_avatar", "name": "avatar", "type": "file", "required": false, "maxSelect": 1, "maxSize": 5242880, "mimeTypes": ["image/png", "image/jpeg", "image/webp", "image/gif"] },
+      { "id": "prof_bio", "name": "bio", "type": "text", "required": false, "max": 500 },
+      { "id": "prof_badge", "name": "badge", "type": "text", "required": false },
+      { "id": "prof_ban_status", "name": "ban_status", "type": "bool", "required": false },
+      { "id": "prof_profile_completed", "name": "profile_completed", "type": "bool", "required": false },
+      { "id": "prof_pinned_song_id", "name": "pinned_song_id", "type": "text", "required": false },
+      { "id": "prof_pinned_start", "name": "pinned_start", "type": "number", "required": false },
+      { "id": "prof_pinned_end", "name": "pinned_end", "type": "number", "required": false },
+      { "id": "prof_created", "name": "created", "type": "autodate", "system": true, "onCreate": true },
+      { "id": "prof_updated", "name": "updated", "type": "autodate", "system": true, "onCreate": true, "onUpdate": true }
+    ],
+    "indexes": [
+      "CREATE UNIQUE INDEX idx_profiles_user_id ON profiles (user_id)",
+      "CREATE INDEX idx_profiles_pseudo ON profiles (pseudo)"
+    ]
+  },
+
+  {
+    "id": "pbc_songs0000001",
+    "name": "songs",
+    "type": "base",
+    "listRule": "",
+    "viewRule": "",
+    "createRule": "",
+    "updateRule": "",
+    "deleteRule": "",
+    "fields": [
+      { "id": "song_id", "name": "id", "type": "text", "system": true, "required": true, "primaryKey": true, "autogeneratePattern": "[a-z0-9]{15}" },
+      { "id": "song_title", "name": "title", "type": "text", "required": true },
+      { "id": "song_author", "name": "author", "type": "text", "required": true },
+      { "id": "song_audio", "name": "audio", "type": "file", "required": false, "maxSelect": 1, "maxSize": 52428800, "mimeTypes": ["audio/mpeg", "audio/mp4", "audio/wav", "audio/ogg", "audio/x-m4a", "audio/webm"] },
+      { "id": "song_cover", "name": "cover", "type": "file", "required": false, "maxSelect": 1, "maxSize": 5242880, "mimeTypes": ["image/png", "image/jpeg", "image/webp", "image/gif"] },
+      { "id": "song_audio_url", "name": "audio_url", "type": "text", "required": false },
+      { "id": "song_cover_url", "name": "cover_url", "type": "text", "required": false },
+      { "id": "song_video_url", "name": "video_url", "type": "text", "required": false },
+      { "id": "song_genre", "name": "genre", "type": "text", "required": false },
+      { "id": "song_uploaded_by", "name": "uploaded_by", "type": "text", "required": true },
+      { "id": "song_duration", "name": "duration", "type": "number", "required": false },
+      { "id": "song_play_count", "name": "play_count", "type": "number", "required": false, "onlyInt": true },
+      { "id": "song_weekly_play_count", "name": "weekly_play_count", "type": "number", "required": false, "onlyInt": true },
+      { "id": "song_likes_count", "name": "likes_count", "type": "number", "required": false, "onlyInt": true },
+      { "id": "song_weekly_reset_at", "name": "weekly_reset_at", "type": "text", "required": false },
+      { "id": "song_youtube_id", "name": "youtube_id", "type": "text", "required": false },
+      { "id": "song_created", "name": "created", "type": "autodate", "system": true, "onCreate": true },
+      { "id": "song_updated", "name": "updated", "type": "autodate", "system": true, "onCreate": true, "onUpdate": true }
+    ],
+    "indexes": [
+      "CREATE INDEX idx_songs_uploaded_by ON songs (uploaded_by)",
+      "CREATE INDEX idx_songs_genre ON songs (genre)",
+      "CREATE INDEX idx_songs_play_count ON songs (play_count)",
+      "CREATE INDEX idx_songs_created ON songs (created)"
+    ]
+  },
+
+  {
+    "id": "pbc_playlists0001",
+    "name": "playlists",
+    "type": "base",
+    "listRule": "",
+    "viewRule": "",
+    "createRule": "",
+    "updateRule": "",
+    "deleteRule": "",
+    "fields": [
+      { "id": "pl_id", "name": "id", "type": "text", "system": true, "required": true, "primaryKey": true, "autogeneratePattern": "[a-z0-9]{15}" },
+      { "id": "pl_title", "name": "title", "type": "text", "required": true },
+      { "id": "pl_description", "name": "description", "type": "text", "required": false },
+      { "id": "pl_is_public", "name": "is_public", "type": "bool", "required": false },
+      { "id": "pl_owner_id", "name": "owner_id", "type": "text", "required": true },
+      { "id": "pl_view_count", "name": "view_count", "type": "number", "required": false, "onlyInt": true },
+      { "id": "pl_play_count", "name": "play_count", "type": "number", "required": false, "onlyInt": true },
+      { "id": "pl_likes_count", "name": "likes_count", "type": "number", "required": false, "onlyInt": true },
+      { "id": "pl_thumbnail_mode", "name": "thumbnail_mode", "type": "select", "required": false, "maxSelect": 1, "values": ["grid", "single"] },
+      { "id": "pl_created", "name": "created", "type": "autodate", "system": true, "onCreate": true },
+      { "id": "pl_updated", "name": "updated", "type": "autodate", "system": true, "onCreate": true, "onUpdate": true }
+    ],
+    "indexes": [
+      "CREATE INDEX idx_playlists_owner_id ON playlists (owner_id)",
+      "CREATE INDEX idx_playlists_is_public ON playlists (is_public)"
+    ]
+  },
+
+  {
+    "id": "pbc_playlistsong01",
+    "name": "playlist_songs",
+    "type": "base",
+    "listRule": "",
+    "viewRule": "",
+    "createRule": "",
+    "updateRule": "",
+    "deleteRule": "",
+    "fields": [
+      { "id": "ps_id", "name": "id", "type": "text", "system": true, "required": true, "primaryKey": true, "autogeneratePattern": "[a-z0-9]{15}" },
+      { "id": "ps_playlist_id", "name": "playlist_id", "type": "text", "required": true },
+      { "id": "ps_song_id", "name": "song_id", "type": "text", "required": true },
+      { "id": "ps_added_by", "name": "added_by", "type": "text", "required": true },
+      { "id": "ps_position", "name": "position", "type": "number", "required": false, "onlyInt": true },
+      { "id": "ps_created", "name": "created", "type": "autodate", "system": true, "onCreate": true },
+      { "id": "ps_updated", "name": "updated", "type": "autodate", "system": true, "onCreate": true, "onUpdate": true }
+    ],
+    "indexes": [
+      "CREATE UNIQUE INDEX idx_playlist_songs_unique ON playlist_songs (playlist_id, song_id)",
+      "CREATE INDEX idx_playlist_songs_position ON playlist_songs (playlist_id, position)"
+    ]
+  },
+
+  {
+    "id": "pbc_plcollab00001",
+    "name": "playlist_collaborators",
+    "type": "base",
+    "listRule": "",
+    "viewRule": "",
+    "createRule": "",
+    "updateRule": "",
+    "deleteRule": "",
+    "fields": [
+      { "id": "plc_id", "name": "id", "type": "text", "system": true, "required": true, "primaryKey": true, "autogeneratePattern": "[a-z0-9]{15}" },
+      { "id": "plc_playlist_id", "name": "playlist_id", "type": "text", "required": true },
+      { "id": "plc_user_id", "name": "user_id", "type": "text", "required": true },
+      { "id": "plc_role", "name": "role", "type": "text", "required": false },
+      { "id": "plc_created", "name": "created", "type": "autodate", "system": true, "onCreate": true },
+      { "id": "plc_updated", "name": "updated", "type": "autodate", "system": true, "onCreate": true, "onUpdate": true }
+    ],
+    "indexes": [
+      "CREATE UNIQUE INDEX idx_playlist_collaborators_unique ON playlist_collaborators (playlist_id, user_id)"
+    ]
+  },
+
+  {
+    "id": "pbc_pllikes000001",
+    "name": "playlist_likes",
+    "type": "base",
+    "listRule": "",
+    "viewRule": "",
+    "createRule": "",
+    "updateRule": "",
+    "deleteRule": "",
+    "fields": [
+      { "id": "pll_id", "name": "id", "type": "text", "system": true, "required": true, "primaryKey": true, "autogeneratePattern": "[a-z0-9]{15}" },
+      { "id": "pll_playlist_id", "name": "playlist_id", "type": "text", "required": true },
+      { "id": "pll_user_id", "name": "user_id", "type": "text", "required": true },
+      { "id": "pll_created", "name": "created", "type": "autodate", "system": true, "onCreate": true },
+      { "id": "pll_updated", "name": "updated", "type": "autodate", "system": true, "onCreate": true, "onUpdate": true }
+    ],
+    "indexes": [
+      "CREATE UNIQUE INDEX idx_playlist_likes_unique ON playlist_likes (playlist_id, user_id)"
+    ]
+  },
+
+  {
+    "id": "pbc_songlikes0001",
+    "name": "song_likes",
+    "type": "base",
+    "listRule": "",
+    "viewRule": "",
+    "createRule": "",
+    "updateRule": "",
+    "deleteRule": "",
+    "fields": [
+      { "id": "sl_id", "name": "id", "type": "text", "system": true, "required": true, "primaryKey": true, "autogeneratePattern": "[a-z0-9]{15}" },
+      { "id": "sl_song_id", "name": "song_id", "type": "text", "required": true },
+      { "id": "sl_user_id", "name": "user_id", "type": "text", "required": true },
+      { "id": "sl_created", "name": "created", "type": "autodate", "system": true, "onCreate": true },
+      { "id": "sl_updated", "name": "updated", "type": "autodate", "system": true, "onCreate": true, "onUpdate": true }
+    ],
+    "indexes": [
+      "CREATE UNIQUE INDEX idx_song_likes_unique ON song_likes (song_id, user_id)"
+    ]
+  },
+
+  {
+    "id": "pbc_songcomments01",
+    "name": "song_comments",
+    "type": "base",
+    "listRule": "",
+    "viewRule": "",
+    "createRule": "",
+    "updateRule": "",
+    "deleteRule": "",
+    "fields": [
+      { "id": "sc_id", "name": "id", "type": "text", "system": true, "required": true, "primaryKey": true, "autogeneratePattern": "[a-z0-9]{15}" },
+      { "id": "sc_song_id", "name": "song_id", "type": "text", "required": true },
+      { "id": "sc_user_id", "name": "user_id", "type": "text", "required": true },
+      { "id": "sc_content", "name": "content", "type": "text", "required": true, "max": 1000 },
+      { "id": "sc_created", "name": "created", "type": "autodate", "system": true, "onCreate": true },
+      { "id": "sc_updated", "name": "updated", "type": "autodate", "system": true, "onCreate": true, "onUpdate": true }
+    ],
+    "indexes": [
+      "CREATE INDEX idx_song_comments_song_id ON song_comments (song_id, created)"
+    ]
+  },
+
+  {
+    "id": "pbc_repost0000001",
+    "name": "repost",
+    "type": "base",
+    "listRule": "",
+    "viewRule": "",
+    "createRule": "",
+    "updateRule": "",
+    "deleteRule": "",
+    "fields": [
+      { "id": "rp_id", "name": "id", "type": "text", "system": true, "required": true, "primaryKey": true, "autogeneratePattern": "[a-z0-9]{15}" },
+      { "id": "rp_song_id", "name": "song_id", "type": "text", "required": true },
+      { "id": "rp_user_id", "name": "user_id", "type": "text", "required": true },
+      { "id": "rp_created", "name": "created", "type": "autodate", "system": true, "onCreate": true },
+      { "id": "rp_updated", "name": "updated", "type": "autodate", "system": true, "onCreate": true, "onUpdate": true }
+    ],
+    "indexes": [
+      "CREATE UNIQUE INDEX idx_repost_unique ON repost (song_id, user_id)"
+    ]
+  },
+
+  {
+    "id": "pbc_trendingsong01",
+    "name": "trending_songs",
+    "type": "base",
+    "listRule": "",
+    "viewRule": "",
+    "createRule": "",
+    "updateRule": "",
+    "deleteRule": "",
+    "fields": [
+      { "id": "ts_id", "name": "id", "type": "text", "system": true, "required": true, "primaryKey": true, "autogeneratePattern": "[a-z0-9]{15}" },
+      { "id": "ts_song_id", "name": "song_id", "type": "text", "required": true },
+      { "id": "ts_score", "name": "score", "type": "number", "required": false },
+      { "id": "ts_created", "name": "created", "type": "autodate", "system": true, "onCreate": true },
+      { "id": "ts_updated", "name": "updated", "type": "autodate", "system": true, "onCreate": true, "onUpdate": true }
+    ],
+    "indexes": [
+      "CREATE UNIQUE INDEX idx_trending_songs_song_id ON trending_songs (song_id)",
+      "CREATE INDEX idx_trending_songs_score ON trending_songs (score)"
+    ]
+  },
+
+  {
+    "id": "pbc_listenhistory1",
+    "name": "listen_history",
+    "type": "base",
+    "listRule": "",
+    "viewRule": "",
+    "createRule": "",
+    "updateRule": "",
+    "deleteRule": "",
+    "fields": [
+      { "id": "lh_id", "name": "id", "type": "text", "system": true, "required": true, "primaryKey": true, "autogeneratePattern": "[a-z0-9]{15}" },
+      { "id": "lh_user_id", "name": "user_id", "type": "text", "required": true },
+      { "id": "lh_song_id", "name": "song_id", "type": "text", "required": true },
+      { "id": "lh_listened_at", "name": "listened_at", "type": "date", "required": false },
+      { "id": "lh_created", "name": "created", "type": "autodate", "system": true, "onCreate": true },
+      { "id": "lh_updated", "name": "updated", "type": "autodate", "system": true, "onCreate": true, "onUpdate": true }
+    ],
+    "indexes": [
+      "CREATE INDEX idx_listen_history_user_id ON listen_history (user_id, listened_at)",
+      "CREATE INDEX idx_listen_history_song_id ON listen_history (song_id)"
+    ]
+  },
+
+  {
+    "id": "pbc_userstats0001",
+    "name": "user_stats",
+    "type": "base",
+    "listRule": "",
+    "viewRule": "",
+    "createRule": "",
+    "updateRule": "",
+    "deleteRule": "",
+    "fields": [
+      { "id": "us_id", "name": "id", "type": "text", "system": true, "required": true, "primaryKey": true, "autogeneratePattern": "[a-z0-9]{15}" },
+      { "id": "us_user_id", "name": "user_id", "type": "text", "required": true },
+      { "id": "us_current_streak", "name": "current_streak", "type": "number", "required": false, "onlyInt": true },
+      { "id": "us_longest_streak", "name": "longest_streak", "type": "number", "required": false, "onlyInt": true },
+      { "id": "us_total_listens", "name": "total_listens", "type": "number", "required": false, "onlyInt": true },
+      { "id": "us_last_listen_date", "name": "last_listen_date", "type": "text", "required": false },
+      { "id": "us_created", "name": "created", "type": "autodate", "system": true, "onCreate": true },
+      { "id": "us_updated", "name": "updated", "type": "autodate", "system": true, "onCreate": true, "onUpdate": true }
+    ],
+    "indexes": [
+      "CREATE UNIQUE INDEX idx_user_stats_user_id ON user_stats (user_id)"
+    ]
+  },
+
+  {
+    "id": "pbc_notifications1",
+    "name": "notifications",
+    "type": "base",
+    "listRule": "",
+    "viewRule": "",
+    "createRule": "",
+    "updateRule": "",
+    "deleteRule": "",
+    "fields": [
+      { "id": "no_id", "name": "id", "type": "text", "system": true, "required": true, "primaryKey": true, "autogeneratePattern": "[a-z0-9]{15}" },
+      { "id": "no_recipient_id", "name": "recipient_id", "type": "text", "required": true },
+      {
+        "id": "no_type", "name": "type", "type": "select", "required": true, "maxSelect": 1,
+        "values": ["new_song", "milestone", "friend_request", "like", "comment", "story_view", "session_invite", "message"]
+      },
+      { "id": "no_title", "name": "title", "type": "text", "required": true },
+      { "id": "no_body", "name": "body", "type": "text", "required": false },
+      { "id": "no_data", "name": "data", "type": "json", "required": false, "maxSize": 2000000 },
+      { "id": "no_is_read", "name": "is_read", "type": "bool", "required": false },
+      { "id": "no_created", "name": "created", "type": "autodate", "system": true, "onCreate": true },
+      { "id": "no_updated", "name": "updated", "type": "autodate", "system": true, "onCreate": true, "onUpdate": true }
+    ],
+    "indexes": [
+      "CREATE INDEX idx_notifications_recipient_id ON notifications (recipient_id, is_read)"
+    ]
+  },
+
+  {
+    "id": "pbc_stories000001",
+    "name": "stories",
+    "type": "base",
+    "listRule": "",
+    "viewRule": "",
+    "createRule": "",
+    "updateRule": "",
+    "deleteRule": "",
+    "fields": [
+      { "id": "st_id", "name": "id", "type": "text", "system": true, "required": true, "primaryKey": true, "autogeneratePattern": "[a-z0-9]{15}" },
+      { "id": "st_user_id", "name": "user_id", "type": "text", "required": true },
+      { "id": "st_song_id", "name": "song_id", "type": "text", "required": true },
+      { "id": "st_start_time", "name": "start_time", "type": "number", "required": false },
+      { "id": "st_end_time", "name": "end_time", "type": "number", "required": false },
+      { "id": "st_comment", "name": "comment", "type": "text", "required": false },
+      { "id": "st_expires_at", "name": "expires_at", "type": "date", "required": false },
+      { "id": "st_created", "name": "created", "type": "autodate", "system": true, "onCreate": true },
+      { "id": "st_updated", "name": "updated", "type": "autodate", "system": true, "onCreate": true, "onUpdate": true }
+    ],
+    "indexes": [
+      "CREATE INDEX idx_stories_user_id ON stories (user_id)",
+      "CREATE INDEX idx_stories_expires_at ON stories (expires_at)"
+    ]
+  },
+
+  {
+    "id": "pbc_storyviews0001",
+    "name": "story_views",
+    "type": "base",
+    "listRule": "",
+    "viewRule": "",
+    "createRule": "",
+    "updateRule": "",
+    "deleteRule": "",
+    "fields": [
+      { "id": "sv_id", "name": "id", "type": "text", "system": true, "required": true, "primaryKey": true, "autogeneratePattern": "[a-z0-9]{15}" },
+      { "id": "sv_story_id", "name": "story_id", "type": "text", "required": true },
+      { "id": "sv_viewer_id", "name": "viewer_id", "type": "text", "required": true },
+      { "id": "sv_created", "name": "created", "type": "autodate", "system": true, "onCreate": true },
+      { "id": "sv_updated", "name": "updated", "type": "autodate", "system": true, "onCreate": true, "onUpdate": true }
+    ],
+    "indexes": [
+      "CREATE UNIQUE INDEX idx_story_views_unique ON story_views (story_id, viewer_id)"
+    ]
+  },
+
+  {
+    "id": "pbc_userpresence01",
+    "name": "user_presence",
+    "type": "base",
+    "listRule": "",
+    "viewRule": "",
+    "createRule": "",
+    "updateRule": "",
+    "deleteRule": "",
+    "fields": [
+      { "id": "up_id", "name": "id", "type": "text", "system": true, "required": true, "primaryKey": true, "autogeneratePattern": "[a-z0-9]{15}" },
+      { "id": "up_user_id", "name": "user_id", "type": "text", "required": true },
+      { "id": "up_is_listening", "name": "is_listening", "type": "bool", "required": false },
+      { "id": "up_current_song_id", "name": "current_song_id", "type": "text", "required": false },
+      { "id": "up_current_song_title", "name": "current_song_title", "type": "text", "required": false },
+      { "id": "up_current_song_author", "name": "current_song_author", "type": "text", "required": false },
+      { "id": "up_current_song_cover_url", "name": "current_song_cover_url", "type": "text", "required": false },
+      { "id": "up_last_seen_at", "name": "last_seen_at", "type": "date", "required": false },
+      { "id": "up_created", "name": "created", "type": "autodate", "system": true, "onCreate": true },
+      { "id": "up_updated", "name": "updated", "type": "autodate", "system": true, "onCreate": true, "onUpdate": true }
+    ],
+    "indexes": [
+      "CREATE UNIQUE INDEX idx_user_presence_user_id ON user_presence (user_id)"
+    ]
+  },
+
+  {
+    "id": "pbc_follows0000001",
+    "name": "follows",
+    "type": "base",
+    "listRule": "",
+    "viewRule": "",
+    "createRule": "",
+    "updateRule": "",
+    "deleteRule": "",
+    "fields": [
+      { "id": "fo_id", "name": "id", "type": "text", "system": true, "required": true, "primaryKey": true, "autogeneratePattern": "[a-z0-9]{15}" },
+      { "id": "fo_follower_id", "name": "follower_id", "type": "text", "required": true },
+      { "id": "fo_following_id", "name": "following_id", "type": "text", "required": true },
+      { "id": "fo_status", "name": "status", "type": "select", "required": false, "maxSelect": 1, "values": ["pending", "accepted"] },
+      { "id": "fo_created", "name": "created", "type": "autodate", "system": true, "onCreate": true },
+      { "id": "fo_updated", "name": "updated", "type": "autodate", "system": true, "onCreate": true, "onUpdate": true }
+    ],
+    "indexes": [
+      "CREATE UNIQUE INDEX idx_follows_unique ON follows (follower_id, following_id)",
+      "CREATE INDEX idx_follows_following_id ON follows (following_id, status)"
+    ]
+  },
+
+  {
+    "id": "pbc_listensessions1",
+    "name": "listen_sessions",
+    "type": "base",
+    "listRule": "@request.auth.id != \"\"",
+    "viewRule": "@request.auth.id != \"\"",
+    "createRule": "@request.auth.id != \"\"",
+    "updateRule": "@request.auth.id != \"\"",
+    "deleteRule": "@request.auth.id != \"\" && host_id = @request.auth.id",
+    "fields": [
+      { "id": "ls_id", "name": "id", "type": "text", "system": true, "required": true, "primaryKey": true, "autogeneratePattern": "[a-z0-9]{15}" },
+      { "id": "ls_host_id", "name": "host_id", "type": "text", "required": true },
+      { "id": "ls_code", "name": "code", "type": "text", "required": false },
+      { "id": "ls_song_id", "name": "song_id", "type": "text", "required": false },
+      { "id": "ls_position", "name": "position", "type": "number", "required": false },
+      { "id": "ls_tempo", "name": "tempo", "type": "number", "required": false },
+      { "id": "ls_is_playing", "name": "is_playing", "type": "bool", "required": false },
+      { "id": "ls_is_active", "name": "is_active", "type": "bool", "required": false },
+      { "id": "ls_participants", "name": "participants", "type": "json", "required": false, "maxSize": 2000000 },
+      { "id": "ls_created", "name": "created", "type": "autodate", "system": true, "onCreate": true },
+      { "id": "ls_updated", "name": "updated", "type": "autodate", "system": true, "onCreate": true, "onUpdate": true }
+    ],
+    "indexes": [
+      "CREATE INDEX idx_listen_sessions_is_active ON listen_sessions (is_active)",
+      "CREATE INDEX idx_listen_sessions_code ON listen_sessions (code)"
+    ]
+  },
+
+  {
+    "id": "pbc_messages000001",
+    "name": "messages",
+    "type": "base",
+    "listRule": "",
+    "viewRule": "",
+    "createRule": "",
+    "updateRule": "",
+    "deleteRule": "",
+    "fields": [
+      { "id": "ms_id", "name": "id", "type": "text", "system": true, "required": true, "primaryKey": true, "autogeneratePattern": "[a-z0-9]{15}" },
+      { "id": "ms_sender_id", "name": "sender_id", "type": "text", "required": true },
+      { "id": "ms_recipient_id", "name": "recipient_id", "type": "text", "required": true },
+      { "id": "ms_type", "name": "type", "type": "select", "required": true, "maxSelect": 1, "values": ["text", "voice", "song_share"] },
+      { "id": "ms_text", "name": "text", "type": "text", "required": false },
+      { "id": "ms_voice", "name": "voice", "type": "file", "required": false, "maxSelect": 1, "maxSize": 15728640, "mimeTypes": ["audio/webm", "audio/ogg", "audio/mp4", "audio/x-m4a", "audio/mpeg"] },
+      { "id": "ms_voice_duration", "name": "voice_duration", "type": "number", "required": false },
+      { "id": "ms_song_id", "name": "song_id", "type": "text", "required": false },
+      { "id": "ms_clip_start", "name": "clip_start", "type": "number", "required": false },
+      { "id": "ms_clip_end", "name": "clip_end", "type": "number", "required": false },
+      { "id": "ms_is_read", "name": "is_read", "type": "bool", "required": false },
+      { "id": "ms_created", "name": "created", "type": "autodate", "system": true, "onCreate": true },
+      { "id": "ms_updated", "name": "updated", "type": "autodate", "system": true, "onCreate": true, "onUpdate": true }
+    ],
+    "indexes": [
+      "CREATE INDEX idx_messages_recipient_id ON messages (recipient_id, is_read)",
+      "CREATE INDEX idx_messages_sender_id ON messages (sender_id)",
+      "CREATE INDEX idx_messages_created ON messages (created)"
+    ]
+  },
+
+  {
+    "id": "pbc_appbanners0001",
+    "name": "app_banners",
+    "type": "base",
+    "listRule": "",
+    "viewRule": "",
+    "createRule": null,
+    "updateRule": null,
+    "deleteRule": null,
+    "fields": [
+      { "id": "ab_id", "name": "id", "type": "text", "system": true, "required": true, "primaryKey": true, "autogeneratePattern": "[a-z0-9]{15}" },
+      { "id": "ab_active", "name": "active", "type": "bool", "required": false },
+      { "id": "ab_title", "name": "title", "type": "text", "required": false },
+      { "id": "ab_message", "name": "message", "type": "text", "required": false },
+      { "id": "ab_color", "name": "color", "type": "select", "required": false, "maxSelect": 1, "values": ["info", "success", "warning", "error", "primary"] },
+      { "id": "ab_dismissible", "name": "dismissible", "type": "bool", "required": false },
+      { "id": "ab_button1_label", "name": "button1_label", "type": "text", "required": false },
+      { "id": "ab_button1_url", "name": "button1_url", "type": "text", "required": false },
+      { "id": "ab_button2_label", "name": "button2_label", "type": "text", "required": false },
+      { "id": "ab_button2_url", "name": "button2_url", "type": "text", "required": false },
+      { "id": "ab_version_webapp", "name": "version_webapp", "type": "text", "required": false },
+      { "id": "ab_created", "name": "created", "type": "autodate", "system": true, "onCreate": true },
+      { "id": "ab_updated", "name": "updated", "type": "autodate", "system": true, "onCreate": true, "onUpdate": true }
+    ],
+    "indexes": [
+      "CREATE INDEX idx_app_banners_active ON app_banners (active, updated)"
+    ]
+  },
+
+  {
+    "id": "pbc_artists0000001",
+    "name": "artists",
+    "type": "base",
+    "listRule": "",
+    "viewRule": "",
+    "createRule": "",
+    "updateRule": "",
+    "deleteRule": "",
+    "fields": [
+      { "id": "ar_id", "name": "id", "type": "text", "system": true, "required": true, "primaryKey": true, "autogeneratePattern": "[a-z0-9]{15}" },
+      { "id": "ar_name", "name": "name", "type": "text", "required": true },
+      { "id": "ar_cover", "name": "cover", "type": "file", "required": false, "maxSelect": 1, "maxSize": 5242880, "mimeTypes": ["image/png", "image/jpeg", "image/webp", "image/gif"] },
+      { "id": "ar_created", "name": "created", "type": "autodate", "system": true, "onCreate": true },
+      { "id": "ar_updated", "name": "updated", "type": "autodate", "system": true, "onCreate": true, "onUpdate": true }
+    ],
+    "indexes": [
+      "CREATE UNIQUE INDEX idx_artists_name ON artists (name)"
+    ]
+  }
+]

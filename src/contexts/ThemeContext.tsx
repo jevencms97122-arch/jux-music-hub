@@ -2,16 +2,43 @@ import React, { createContext, useCallback, useContext, useEffect, useMemo, useR
 import { toast } from 'sonner';
 import { APP_THEMES, type AppTheme } from '@/themes/appThemes';
 import { storeThemeAccents } from '@/lib/dominantColor';
+import UltraBackground from '@/components/ultraThemes/UltraBackground';
+import {
+  nebulaPaletteFromHex,
+  randomNebulaHex,
+  NEBULA_DEFAULT_HEX,
+  type NebulaColors,
+} from '@/lib/ultraNebulaPalette';
+import { SYMBOL_PRESET_DEFAULT_ID } from '@/lib/ultraSymbolPresets';
 
 type ThemeContextValue = {
   themes: AppTheme[];
   currentTheme: AppTheme;
   setTheme: (id: string) => void;
+  /** Personnalisation du thème Ultra "Nébuleuse Cosmique" (null = couleurs par défaut) */
+  nebulaBaseHex: string | null;
+  setNebulaColor: (hex: string) => void;
+  randomizeNebulaColor: () => void;
+  resetNebulaColor: () => void;
+  /** Multiplicateur de vitesse de l'animation (0.25x = très lent, 3x = rapide, 1 = par défaut) */
+  nebulaSpeed: number;
+  setNebulaSpeed: (speed: number) => void;
+  /** Personnalisation du thème Ultra "Grille Symbolique" (preset d'animation) */
+  symbolPresetId: string;
+  setSymbolPreset: (id: string) => void;
+  /** Palette dérivée de nebulaBaseHex, prête à passer à UltraBackground */
+  nebulaColors: NebulaColors | null;
+  /** Vrai quand l'app est en arrière-plan/hors focus : les animations doivent se figer */
+  animPaused: boolean;
 };
 
 const ThemeContext = createContext<ThemeContextValue | null>(null);
 
 const STORAGE_KEY = 'app_theme_id';
+const NEBULA_STORAGE_KEY = 'ultra_nebula_base_hex';
+const NEBULA_SPEED_STORAGE_KEY = 'ultra_nebula_speed';
+const NEBULA_SPEED_DEFAULT = 1;
+const SYMBOL_PRESET_STORAGE_KEY = 'ultra_symbol_preset_id';
 
 function readSavedThemeId(): string {
   try {
@@ -21,6 +48,33 @@ function readSavedThemeId(): string {
     // ignore
   }
   return APP_THEMES[0]?.id ?? 'dark-classique';
+}
+
+function readSavedNebulaHex(): string | null {
+  try {
+    return localStorage.getItem(NEBULA_STORAGE_KEY);
+  } catch {
+    return null;
+  }
+}
+
+function readSavedNebulaSpeed(): number {
+  try {
+    const saved = localStorage.getItem(NEBULA_SPEED_STORAGE_KEY);
+    const parsed = saved ? parseFloat(saved) : NaN;
+    if (!Number.isNaN(parsed) && parsed > 0) return parsed;
+  } catch {
+    // ignore
+  }
+  return NEBULA_SPEED_DEFAULT;
+}
+
+function readSavedSymbolPreset(): string {
+  try {
+    return localStorage.getItem(SYMBOL_PRESET_STORAGE_KEY) ?? SYMBOL_PRESET_DEFAULT_ID;
+  } catch {
+    return SYMBOL_PRESET_DEFAULT_ID;
+  }
 }
 
 /**
@@ -94,6 +148,9 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
 
   const [currentThemeId, setCurrentThemeId] = useState<string>(readSavedThemeId);
   const [animPaused, setAnimPaused] = useState(false);
+  const [nebulaBaseHex, setNebulaBaseHex] = useState<string | null>(readSavedNebulaHex);
+  const [nebulaSpeed, setNebulaSpeedState] = useState<number>(readSavedNebulaSpeed);
+  const [symbolPresetId, setSymbolPresetState] = useState<string>(readSavedSymbolPreset);
 
   const currentTheme = useMemo(() => {
     return themes.find((t) => t.id === currentThemeId) ?? themes[0];
@@ -167,9 +224,83 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     notifyRestart();
   }, [themes, notifyRestart]);
 
+  const setNebulaColor = useCallback((hex: string) => {
+    setNebulaBaseHex(hex);
+    try {
+      localStorage.setItem(NEBULA_STORAGE_KEY, hex);
+    } catch {
+      // ignore
+    }
+  }, []);
+
+  const randomizeNebulaColor = useCallback(() => {
+    setNebulaColor(randomNebulaHex());
+  }, [setNebulaColor]);
+
+  const resetNebulaColor = useCallback(() => {
+    setNebulaBaseHex(null);
+    try {
+      localStorage.removeItem(NEBULA_STORAGE_KEY);
+    } catch {
+      // ignore
+    }
+  }, []);
+
+  const setNebulaSpeed = useCallback((speed: number) => {
+    const clamped = Math.min(3, Math.max(0.25, speed));
+    setNebulaSpeedState(clamped);
+    try {
+      localStorage.setItem(NEBULA_SPEED_STORAGE_KEY, String(clamped));
+    } catch {
+      // ignore
+    }
+  }, []);
+
+  const setSymbolPreset = useCallback((id: string) => {
+    setSymbolPresetState(id);
+    try {
+      localStorage.setItem(SYMBOL_PRESET_STORAGE_KEY, id);
+    } catch {
+      // ignore
+    }
+  }, []);
+
+  const nebulaColors = useMemo<NebulaColors | null>(
+    () => (nebulaBaseHex ? nebulaPaletteFromHex(nebulaBaseHex) : null),
+    [nebulaBaseHex],
+  );
+
   const value = useMemo<ThemeContextValue>(
-    () => ({ themes, currentTheme, setTheme }),
-    [themes, currentTheme, setTheme],
+    () => ({
+      themes,
+      currentTheme,
+      setTheme,
+      nebulaBaseHex,
+      setNebulaColor,
+      randomizeNebulaColor,
+      resetNebulaColor,
+      nebulaSpeed,
+      setNebulaSpeed,
+      symbolPresetId,
+      setSymbolPreset,
+      nebulaColors,
+      animPaused,
+    }),
+    [
+      themes,
+      currentTheme,
+      setTheme,
+      nebulaBaseHex,
+      setNebulaColor,
+      randomizeNebulaColor,
+      resetNebulaColor,
+      nebulaSpeed,
+      setNebulaSpeed,
+      symbolPresetId,
+      setSymbolPreset,
+      nebulaColors,
+      animPaused,
+    ],
   );
 
   return (
@@ -188,6 +319,15 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
             animation: currentTheme.backgroundAnimation,
             animationPlayState: animPaused ? 'paused' : 'running',
           }}
+        />
+      )}
+      {currentTheme.isUltra && (
+        <UltraBackground
+          theme={currentTheme}
+          paused={animPaused}
+          nebulaColors={nebulaColors}
+          nebulaSpeed={nebulaSpeed}
+          symbolPresetId={symbolPresetId}
         />
       )}
       {children}

@@ -5,6 +5,20 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import juxLogo from '@/assets/jux-logo.png';
 import { cn } from '@/lib/utils';
 
+function emailIssue(email: string): string | null {
+  const value = email.trim();
+  if (!value) return null;
+  if (!value.includes('@')) return "Adresse email incomplète : il manque le « @ » (ex. ton@email.com).";
+  const [local, domain = ''] = value.split('@');
+  if (!local) return "Adresse email incomplète : il manque la partie avant le « @ ».";
+  if (!domain) return "Adresse email incomplète : il manque la partie après le « @ » (ex. gmail.com).";
+  if (!domain.includes('.') || domain.endsWith('.') || domain.startsWith('.')) {
+    return "Adresse email incomplète : le domaine semble invalide (ex. gmail.com).";
+  }
+  if (/\s/.test(value)) return "L'adresse email ne doit pas contenir d'espaces.";
+  return null;
+}
+
 export default function Login() {
   const { signIn, signUp } = useAuth();
   const [email, setEmail] = useState('');
@@ -12,9 +26,18 @@ export default function Login() {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const [mode, setMode] = useState<'signin' | 'signup'>('signin');
+  const [emailTouched, setEmailTouched] = useState(false);
+
+  const emailError = emailTouched ? emailIssue(email) : null;
+  const emailValid = email.trim() !== '' && emailIssue(email) === null;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    const issue = emailIssue(email);
+    if (issue) {
+      setEmailTouched(true);
+      return;
+    }
     setError('');
     setLoading(true);
     try {
@@ -86,10 +109,20 @@ export default function Login() {
                     placeholder="ton@email.com"
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
+                    onBlur={() => setEmailTouched(true)}
                     required
                     autoComplete="email"
-                    className="h-11 border-white/10 bg-white/[0.05] text-foreground placeholder:text-muted-foreground/50 focus:border-primary/50 focus:bg-white/[0.07]"
+                    aria-invalid={!!emailError}
+                    className={cn(
+                      'h-11 border-white/10 bg-white/[0.05] text-foreground placeholder:text-muted-foreground/50 focus:bg-white/[0.07]',
+                      emailError
+                        ? 'border-destructive/60 focus:border-destructive'
+                        : 'focus:border-primary/50',
+                    )}
                   />
+                  {emailError && (
+                    <p className="text-xs text-destructive">{emailError}</p>
+                  )}
                 </div>
 
                 <div className="space-y-1.5">
@@ -116,7 +149,7 @@ export default function Login() {
 
                 <button
                   type="submit"
-                  disabled={loading || !email || !password}
+                  disabled={loading || !emailValid || !password}
                   className={cn(
                     'mt-2 flex h-11 w-full items-center justify-center rounded-xl bg-gradient-primary text-sm font-semibold text-primary-foreground shadow-elegant-sm',
                     'transition-all duration-150 hover:shadow-glow active:scale-[0.98]',

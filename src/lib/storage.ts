@@ -24,7 +24,7 @@ export function songCoverUrl(song: { cover?: string; cover_url?: string | null; 
       return publicUrl(song.collectionName, song.id, song.cover_url);
     }
   }
-  return '/placeholder.svg';
+  return '';
 }
 
 export function songAudioUrl(song: { audio?: string; audio_url?: string; id?: string; collectionName?: string }): string {

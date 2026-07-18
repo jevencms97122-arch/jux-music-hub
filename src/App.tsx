@@ -42,14 +42,11 @@ import BannedScreen from '@/components/BannedScreen';
 import RequiresBackend from '@/components/RequiresBackend';
 import OfflinePlaylists from '@/pages/OfflinePlaylists';
 import OfflinePlaylistDetail from '@/pages/OfflinePlaylistDetail';
-import { detectPlatform } from '@/lib/platform';
 import { isVRModeEnabled } from '@/hooks/useVRMode';
 import { Toaster } from '@/components/ui/sonner';
 
 function shouldShowWebDeprecated(): boolean {
-  if (typeof window === 'undefined') return false;
-  if (detectPlatform() !== 'web') return false;
-  return window.location.protocol === 'https:';
+  return false;
 }
 
 const pageVariants = {
@@ -347,10 +344,11 @@ function AppContent() {
 function AppWithTheme() {
   const { currentTheme } = useTheme();
   const isAnimated = currentTheme.backgroundAnimation != null;
+  const isUltra = currentTheme.isUltra === true;
   return (
     <div
       style={{
-        background: isAnimated ? 'transparent' : currentTheme.background,
+        background: isAnimated || isUltra ? 'transparent' : currentTheme.background,
         backgroundSize: isAnimated ? '200% 200%' : undefined,
         animation: isAnimated ? currentTheme.backgroundAnimation : undefined,
         minHeight: '100vh',

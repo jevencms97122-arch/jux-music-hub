@@ -1,6 +1,5 @@
 import { useState } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
-import { uploadFileSmart } from '@/lib/storage';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -24,17 +23,16 @@ export default function ProfileSetup() {
     if (!authUser) return;
     setSubmitting(true);
     try {
-      let avatar_url: string | undefined;
-      if (avatar) avatar_url = await uploadFileSmart('avatars', authUser.id, avatar);
-
-      await updateProfile({
-        pseudo: pseudo.trim(),
-        first_name: firstName.trim() || null,
-        last_name: lastName.trim() || null,
-        bio: bio.trim() || null,
-        ...(avatar_url ? { avatar_url } : {}),
-        profile_completed: true,
-      });
+      await updateProfile(
+        {
+          pseudo: pseudo.trim(),
+          first_name: firstName.trim() || null,
+          last_name: lastName.trim() || null,
+          bio: bio.trim() || null,
+          profile_completed: true,
+        },
+        avatar ?? undefined,
+      );
       toast({ title: 'Profil créé 🎉' });
       navigate('/jux');
     } catch (err: any) {

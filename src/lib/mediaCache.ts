@@ -59,17 +59,6 @@ function openDB(): Promise<IDBDatabase> {
 }
 
 /**
- * Vérifie si on est sur mobile (détection automatique).
- */
-function isMobileDevice(): boolean {
-  if (typeof window === 'undefined') return false;
-  const ua = navigator.userAgent.toLowerCase();
-  return /android|ipad|iphone|ipod|mobile|samsung|huawei|xiaomi/.test(ua) ||
-    (typeof window !== 'undefined' && window.innerWidth < 768) ||
-    !!window.JuxAndroid;
-}
-
-/**
  * Vérifie si une URL est une vidéo YouTube (on ne cache pas ça).
  */
 function isYoutubeUrl(url: string): boolean {
@@ -208,9 +197,6 @@ export async function loadMedia(url: string): Promise<string | null> {
 
   // Ne pas cacher les vidéos YouTube
   if (isYoutubeUrl(url)) return url;
-
-  // Actif uniquement sur mobile
-  if (!isMobileDevice()) return url;
 
   // 1. Essayer le cache d'abord
   const cached = await getFromCache(url);

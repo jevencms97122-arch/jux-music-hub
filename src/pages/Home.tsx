@@ -8,7 +8,7 @@ import StoryCircles from '@/components/StoryCircles';
 import { useNavigate } from 'react-router-dom';
 import {
   Play, Heart, Clock, Sparkles,
-  ListMusic, Globe, ArrowRight, Music2, Upload, Bell, Tag, ChevronDown, ScrollText, Mic2, Car, History
+  ListMusic, Globe, ArrowRight, Music2, Upload, Bell, Tag, ChevronDown, ScrollText, Mic2, Car, History, TrendingUp
 } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useOfflineMode } from '@/contexts/OfflineModeContext';
@@ -113,6 +113,8 @@ export default function Home() {
   const [artistsLoading, setArtistsLoading] = useState(true);
   const [trendingLoading, setTrendingLoading] = useState(true);
   const [replaySongs, setReplaySongs] = useState<Song[]>([]);
+  const [heroSong, setHeroSong] = useState<Song | null>(null);
+  const [heroLoading, setHeroLoading] = useState(true);
 
   // Lazy loading : chaque section ne déclenche ses requêtes backend que quand
   // l'utilisateur s'en approche à l'écran (évite de charger ce qu'il ne verra pas)
@@ -146,11 +148,35 @@ export default function Home() {
     getLocalTracks().then((tracks) => {
       setSongs(tracks);
       setArtistSongs(tracks);
+      setHeroSong(tracks[0] ?? null);
     }).finally(() => {
       setLoading(false);
       setTrendingLoading(false);
       setArtistsLoading(false);
+      setHeroLoading(false);
     });
+  }, [offline]);
+
+  // Chanson vedette du Hero — le n°1 des tendances (trending_songs), toujours
+  // visible dès le chargement de la page, donc chargée immédiatement (pas de
+  // lazy loading) : une seule requête légère.
+  useEffect(() => {
+    if (offline) return;
+    (async () => {
+      try {
+        const topTrending = await pb.collection('trending_songs').getList(1, 1, { sort: '-score', requestKey: null });
+        const songId = (topTrending.items[0] as any)?.song_id;
+        if (songId) {
+          const song = await pb.collection('songs').getOne(songId, { requestKey: null });
+          setHeroSong(recordToSong(song));
+        } else {
+          setHeroSong(null);
+        }
+      } catch {
+        setHeroSong(null);
+      }
+      setHeroLoading(false);
+    })();
   }, [offline]);
 
   // Sons récents (sections Par genre + Nouveautés) — chargés à l'approche de la zone
@@ -403,44 +429,127 @@ export default function Home() {
         <StoryCircles />
       </div>
 
-      {/* Daily Mix */}
-      {user && dailyMixLoading ? (
+      {/* Hero — met en avant le son le plus populaire de la semaine */}
+      {heroLoading ? (
         <section className="relative mb-8 px-4">
-          <div className="mb-4 h-5 w-28 animate-pulse rounded bg-secondary" />
-          <div className="flex items-center gap-4 rounded-2xl border border-border/40 bg-card/30 p-4">
-            <div className="h-16 w-16 flex-shrink-0 animate-pulse rounded-xl bg-secondary" />
-            <div className="flex-1 space-y-2">
-              <div className="h-3 w-24 animate-pulse rounded bg-secondary" />
-              <div className="h-4 w-40 animate-pulse rounded bg-secondary" />
-              <div className="h-3 w-32 animate-pulse rounded bg-secondary" />
+          <div className="h-[280px] w-full animate-pulse rounded-2xl bg-secondary md:h-[380px]" />
+        </section>
+      ) : heroSong ? (
+        <section className="relative mb-8 px-4 animate-fade-slide-up">
+          <div className="group relative h-[280px] w-full overflow-hidden rounded-2xl md:h-[380px]">
+            <CachedImage
+              src={songCoverUrl(heroSong)}
+              alt=""
+              className="absolute inset-0 h-full w-full object-cover transition-transform duration-[2000ms] group-hover:scale-105"
+            />
+            <div className="absolute inset-0 bg-gradient-to-t from-background via-background/50 to-transparent" />
+            <div className="absolute inset-x-0 bottom-0 p-5 md:w-3/4 md:p-8">
+              <span className="mb-3 inline-block rounded-full border border-primary/30 bg-primary/20 px-3 py-1 text-[10px] font-bold uppercase tracking-widest text-primary backdrop-blur-sm">
+                Tendance de la semaine
+              </span>
+              <h2 className="mb-1 text-2xl font-black leading-tight text-foreground md:text-4xl">
+                {heroSong.title}
+              </h2>
+              <p className="mb-5 text-sm font-medium text-muted-foreground md:text-base">{heroSong.author}</p>
+              <div className="flex flex-wrap gap-3">
+                <button
+                  onClick={() => playSongFromList(heroSong, songs.length > 0 ? songs : [heroSong])}
+                  className="flex items-center gap-2 rounded-full bg-gradient-primary px-6 py-3 text-sm font-bold text-primary-foreground shadow-elegant transition-all hover:shadow-glow active:scale-[0.97]"
+                >
+                  <Play className="h-4 w-4 fill-current" />
+                  Écouter
+                </button>
+                <button
+                  onClick={() => trendingLazy.ref.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })}
+                  className="flex items-center gap-2 rounded-full border border-white/20 bg-white/10 px-6 py-3 text-sm font-bold text-foreground backdrop-blur-md transition-all hover:bg-white/20 active:scale-[0.97]"
+                >
+                  Découvrir
+                </button>
+              </div>
             </div>
           </div>
         </section>
-      ) : dailyMix.length > 0 && (
+      ) : null}
+
+      {/* Écoutés récemment — sélection aléatoire parmi les sons déjà écoutés (chargée à l'approche) */}
+      <div ref={replayLazy.ref} aria-hidden />
+      {!selectedGenre && replaySongs.length > 0 && (
+        <section className="relative mb-8 px-4 animate-fade-slide-up" style={{ animationDelay: '0.05s' }}>
+          <SectionHeader icon={History} title="Écoutés Récemment" />
+          <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6">
+            {replaySongs.map((s, i) => (
+              <SongCard key={s.id} song={s} index={i} onPlay={() => playSongFromList(s, replaySongs)} />
+            ))}
+          </div>
+        </section>
+      )}
+
+      {/* Votre Mix — Daily Mix + accès rapides */}
+      {user && (
         <section className="relative mb-8 px-4 animate-fade-slide-up" style={{ animationDelay: '0.1s' }}>
-          <SectionHeader icon={Sparkles} title="Daily Mix" />
-          <button
-            onClick={() => playSongFromList(dailyMix[0], dailyMix)}
-            className="group relative flex w-full items-center gap-4 overflow-hidden rounded-2xl bg-gradient-primary p-4 text-left shadow-elegant transition-all duration-200 hover:shadow-glow active:scale-[0.99]"
-          >
-            <div className="grid h-16 w-16 flex-shrink-0 grid-cols-2 grid-rows-2 gap-0.5 overflow-hidden rounded-xl shadow-soft">
-              {dailyMix.slice(0, 4).map((s) => (
-                <CachedImage key={s.id} src={songCoverUrl(s)} alt="" className="h-full w-full object-cover" />
-              ))}
+          <SectionHeader icon={Sparkles} title="Votre Mix" />
+          <div className="space-y-3">
+            {dailyMixLoading ? (
+              <div className="flex items-center gap-4 rounded-2xl border border-border/40 bg-card/30 p-4">
+                <div className="h-16 w-16 flex-shrink-0 animate-pulse rounded-xl bg-secondary" />
+                <div className="flex-1 space-y-2">
+                  <div className="h-3 w-24 animate-pulse rounded bg-secondary" />
+                  <div className="h-4 w-40 animate-pulse rounded bg-secondary" />
+                  <div className="h-3 w-32 animate-pulse rounded bg-secondary" />
+                </div>
+              </div>
+            ) : dailyMix.length > 0 && (
+              <button
+                onClick={() => playSongFromList(dailyMix[0], dailyMix)}
+                className="group relative flex w-full items-center gap-4 overflow-hidden rounded-2xl bg-gradient-primary p-4 text-left shadow-elegant transition-all duration-200 hover:shadow-glow active:scale-[0.99]"
+              >
+                <div className="grid h-16 w-16 flex-shrink-0 grid-cols-2 grid-rows-2 gap-0.5 overflow-hidden rounded-xl shadow-soft">
+                  {dailyMix.slice(0, 4).map((s) => (
+                    <CachedImage key={s.id} src={songCoverUrl(s)} alt="" className="h-full w-full object-cover" />
+                  ))}
+                </div>
+                <div className="min-w-0 flex-1">
+                  <p className="text-[10px] font-bold uppercase tracking-widest text-primary-foreground/70">Pour toi · 3 derniers jours</p>
+                  <p className="truncate text-base font-bold text-primary-foreground">
+                    Daily Mix{dailyMixGenre ? ` · ${dailyMixGenre}` : ''}
+                  </p>
+                  <p className="truncate text-xs text-primary-foreground/70">
+                    {dailyMix.length} titres{dailyMixGenre ? ` • Genre favori : ${dailyMixGenre}` : ''}
+                  </p>
+                </div>
+                <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl bg-black/20 text-white shadow-elegant transition-all duration-200 group-hover:scale-110">
+                  <Play className="h-5 w-5 fill-current" />
+                </div>
+              </button>
+            )}
+
+            {/* Accès rapides */}
+            <div className="grid grid-cols-3 gap-3">
+              <button
+                onClick={() => songsLazy.ref.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })}
+                className="flex flex-col items-start gap-3 rounded-2xl border border-white/[0.06] bg-card/60 p-4 text-left transition-all hover:border-primary/30 hover:bg-card active:scale-[0.98]"
+              >
+                <Clock className="h-5 w-5 text-primary" />
+                <span className="text-xs font-bold leading-tight text-foreground">Nouveautés</span>
+              </button>
+              <button
+                onClick={() => playlistsLazy.ref.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })}
+                className="flex flex-col items-start gap-3 rounded-2xl border border-white/[0.06] bg-card/60 p-4 text-left transition-all hover:border-primary/30 hover:bg-card active:scale-[0.98]"
+              >
+                <ListMusic className="h-5 w-5 text-primary" />
+                <span className="text-xs font-bold leading-tight text-foreground">Playlists</span>
+              </button>
+              <button
+                onClick={() => trendingLazy.ref.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })}
+                className="flex flex-col items-start gap-3 rounded-2xl border border-white/[0.06] bg-card/60 p-4 text-left transition-all hover:border-primary/30 hover:bg-card active:scale-[0.98]"
+              >
+                <TrendingUp className="h-5 w-5 text-primary" />
+                <span className="text-xs font-bold leading-tight text-foreground">
+                  Top Hebdo{trending.length > 0 ? ` · ${trending.length}` : ''}
+                </span>
+              </button>
             </div>
-            <div className="min-w-0 flex-1">
-              <p className="text-[10px] font-bold uppercase tracking-widest text-primary-foreground/70">Pour toi · 3 derniers jours</p>
-              <p className="truncate text-base font-bold text-primary-foreground">
-                Daily Mix{dailyMixGenre ? ` · ${dailyMixGenre}` : ''}
-              </p>
-              <p className="truncate text-xs text-primary-foreground/70">
-                {dailyMix.length} titres{dailyMixGenre ? ` • Genre favori : ${dailyMixGenre}` : ''}
-              </p>
-            </div>
-            <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl bg-black/20 text-white shadow-elegant transition-all duration-200 group-hover:scale-110">
-              <Play className="h-5 w-5 fill-current" />
-            </div>
-          </button>
+          </div>
         </section>
       )}
 
@@ -744,34 +853,6 @@ export default function Home() {
       )}
       </div>
 
-      {/* Réécouter — sélection aléatoire parmi les sons déjà écoutés (chargée à l'approche) */}
-      <div ref={replayLazy.ref} aria-hidden />
-      {!selectedGenre && replaySongs.length > 0 && (
-        <section className="relative mb-8 animate-fade-slide-up" style={{ animationDelay: '0.28s' }}>
-          <div className="px-4">
-            <SectionHeader icon={History} title="Réécouter" />
-          </div>
-          <div className="flex snap-x snap-mandatory gap-3 overflow-x-auto scroll-px-4 px-4 pb-1 scrollbar-hide">
-            {replaySongs.map((s) => (
-              <button
-                key={s.id}
-                onClick={() => playSongFromList(s, replaySongs)}
-                className="group w-28 flex-shrink-0 snap-start text-left"
-              >
-                <div className="relative mb-1.5 aspect-square w-28 overflow-hidden rounded-xl">
-                  <CachedImage src={songCoverUrl(s)} alt="" className="h-full w-full object-cover transition-transform duration-200 group-hover:scale-105" />
-                  <div className="absolute inset-0 flex items-center justify-center bg-black/0 group-hover:bg-black/30 transition-all duration-200">
-                    <Play className="h-7 w-7 fill-white text-white opacity-0 group-hover:opacity-100 transition-opacity duration-200" />
-                  </div>
-                </div>
-                <p className="truncate text-xs font-semibold text-foreground">{s.title}</p>
-                <p className="truncate text-[10px] text-muted-foreground">{s.author}</p>
-              </button>
-            ))}
-          </div>
-        </section>
-      )}
-
       {/* Découverte — masquée quand un genre est filtré (la grille filtrée est déjà au-dessus) */}
       {!selectedGenre && (
         <section className="relative px-4 animate-fade-slide-up" style={{ animationDelay: '0.3s' }}>
@@ -803,8 +884,55 @@ export default function Home() {
             </div>
           ) : (
             <>
+              {/* Nouvelle sortie mise en avant */}
+              <div className="mb-6 flex flex-col gap-4 lg:flex-row">
+                <button
+                  onClick={() => playSongFromList(songs[0], songs)}
+                  className="group relative h-[220px] flex-grow overflow-hidden rounded-2xl text-left lg:h-[300px] lg:w-2/3"
+                >
+                  <CachedImage
+                    src={songCoverUrl(songs[0])}
+                    alt=""
+                    className="absolute inset-0 h-full w-full object-cover transition-transform duration-700 group-hover:scale-105"
+                  />
+                  <div className="absolute inset-0 bg-gradient-to-t from-black via-black/40 to-transparent" />
+                  <div className="absolute bottom-0 left-0 p-5">
+                    <span className="mb-1 block text-[10px] font-bold uppercase tracking-widest text-primary">Dernière sortie</span>
+                    <h4 className="mb-1 text-xl font-black text-white md:text-2xl">{songs[0].title}</h4>
+                    <p className="text-sm font-medium text-white/70">{songs[0].author}</p>
+                  </div>
+                  <div className="absolute bottom-4 right-4 flex h-11 w-11 items-center justify-center rounded-full bg-white text-black transition-transform group-hover:scale-110">
+                    <Play className="h-5 w-5 fill-current" />
+                  </div>
+                </button>
+
+                {songs.length > 1 && (
+                  <div className="flex flex-col gap-3 lg:w-1/3">
+                    {songs.slice(1, 3).map((s, i) => (
+                      <button
+                        key={s.id}
+                        onClick={() => playSongFromList(s, songs)}
+                        className="group flex flex-1 items-center gap-3 rounded-2xl border border-white/[0.06] bg-card/60 p-3 text-left transition-all hover:border-primary/30 hover:bg-card"
+                      >
+                        <div className="h-16 w-16 shrink-0 overflow-hidden rounded-xl shadow-md">
+                          <CachedImage src={songCoverUrl(s)} alt="" className="h-full w-full object-cover" />
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <p className="truncate text-sm font-bold text-foreground">{s.title}</p>
+                          <p className="truncate text-xs text-muted-foreground">{s.author}</p>
+                          <span className="mt-1 inline-block rounded-md bg-primary/10 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-widest text-primary">
+                            {i === 0 ? 'Nouveau' : 'Récent'}
+                          </span>
+                        </div>
+                        <Play className="h-4 w-4 shrink-0 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100" />
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+
               <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5">
-                {songs.slice(0, visibleCount).map((s, i) => (
+                {songs.slice(3, visibleCount).map((s, i) => (
                   <SongCard key={s.id} song={s} index={i} onPlay={() => playSongFromList(s, songs)} />
                 ))}
               </div>

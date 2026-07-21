@@ -195,6 +195,11 @@ export default function Search() {
       {/* ── Résultats ── */}
       {(searched || loading) && (
         <section className="relative px-5 mt-5 animate-fade-slide-up delay-2">
+          {/* Statut dynamique */}
+          <p className="mb-3 text-[11px] font-bold uppercase tracking-widest text-muted-foreground">
+            {loading ? 'Recherche en cours…' : noResults ? 'Aucun résultat' : `Résultats pour « ${term.trim()} »`}
+          </p>
+
           {/* Onglets */}
           <div className="mb-4 flex rounded-2xl border border-border/50 bg-card/50 p-1">
             {tabs.map((t) => (
@@ -218,8 +223,8 @@ export default function Search() {
           </div>
 
           {loading && !searched ? (
-            <div className="grid grid-cols-2 gap-3">
-              {Array.from({ length: 4 }).map((_, i) => (
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5">
+              {Array.from({ length: 8 }).map((_, i) => (
                 <div key={i} className="space-y-2">
                   <div className="aspect-square w-full animate-pulse rounded-xl bg-secondary" />
                   <div className="h-3 w-3/4 animate-pulse rounded bg-secondary" />
@@ -236,7 +241,7 @@ export default function Search() {
                       <Music2 className="h-4 w-4 text-primary" />Musiques
                     </h2>
                   )}
-                  <div className="grid grid-cols-2 gap-3">
+                  <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5">
                     {songs.map((s, i) => (<SongCard key={s.id} song={s} index={i} onPlay={() => playSongFromList(s, songs)} />))}
                   </div>
                 </div>
@@ -272,7 +277,7 @@ export default function Search() {
                               'flex items-center gap-1 rounded-full bg-secondary px-2 py-0.5 text-xs font-bold',
                               isActive ? 'text-orange-400' : 'text-muted-foreground'
                             )}>
-                              <Flame className="h-3.5 w-3.5" />
+                              <Flame className={cn('h-3.5 w-3.5', isActive && 'animate-flame')} />
                               {displayStreak}
                             </span>
                           )}

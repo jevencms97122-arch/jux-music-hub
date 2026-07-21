@@ -205,7 +205,7 @@ export default function UserProfile() {
               'absolute -bottom-1 -right-1 flex items-center gap-0.5 rounded-full bg-background px-2 py-0.5 shadow-soft border border-border/60',
               streakActive ? 'text-orange-400' : 'text-muted-foreground'
             )}>
-              <Flame className="h-3.5 w-3.5" />
+              <Flame className={cn('h-3.5 w-3.5', streakActive && 'animate-flame')} />
               <span className="text-xs font-bold">{displayStreak}</span>
             </div>
           )}

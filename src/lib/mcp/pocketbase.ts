@@ -19,8 +19,8 @@ function pocketBaseUrl(): string {
   }
 
   const parsed = new URL(url);
-  if (parsed.protocol !== "https:" && parsed.hostname !== "localhost" && parsed.hostname !== "127.0.0.1") {
-    throw new Error("POCKETBASE_URL must use HTTPS outside local development.");
+  if (parsed.protocol !== "https:" && parsed.protocol !== "http:") {
+    throw new Error("POCKETBASE_URL must be an http(s) URL.");
   }
 
   return parsed.toString().replace(/\/$/, "");

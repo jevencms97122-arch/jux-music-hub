@@ -9,7 +9,10 @@ type PocketBaseList<T> = {
 };
 
 function pocketBaseUrl(): string {
-  const url = process.env.POCKETBASE_URL?.trim() || process.env.VITE_PB_URL?.trim();
+  const runtimeEnv = typeof Deno !== "undefined"
+    ? { POCKETBASE_URL: Deno.env.get("POCKETBASE_URL"), VITE_PB_URL: Deno.env.get("VITE_PB_URL") }
+    : { POCKETBASE_URL: process.env.POCKETBASE_URL, VITE_PB_URL: process.env.VITE_PB_URL };
+  const url = runtimeEnv.POCKETBASE_URL?.trim() || runtimeEnv.VITE_PB_URL?.trim();
   if (!url) {
     throw new Error("POCKETBASE_URL is not configured for the MCP server.");
   }

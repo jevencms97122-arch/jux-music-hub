@@ -11,7 +11,8 @@ import { z } from "npm:zod@^3.25.76";
 
 // src/lib/mcp/pocketbase.ts
 function pocketBaseUrl() {
-  const runtimeEnv = typeof Deno !== "undefined" ? { POCKETBASE_URL: Deno.env.get("POCKETBASE_URL"), VITE_PB_URL: Deno.env.get("VITE_PB_URL") } : { POCKETBASE_URL: process.env.POCKETBASE_URL, VITE_PB_URL: process.env.VITE_PB_URL };
+  const deno = globalThis.Deno;
+  const runtimeEnv = deno ? { POCKETBASE_URL: deno.env.get("POCKETBASE_URL"), VITE_PB_URL: deno.env.get("VITE_PB_URL") } : { POCKETBASE_URL: process.env.POCKETBASE_URL, VITE_PB_URL: process.env.VITE_PB_URL };
   const url = runtimeEnv.POCKETBASE_URL?.trim() || runtimeEnv.VITE_PB_URL?.trim();
   if (!url) {
     throw new Error("POCKETBASE_URL is not configured for the MCP server.");

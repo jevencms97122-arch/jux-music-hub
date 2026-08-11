@@ -3,6 +3,14 @@ import { usePlayer } from '@/contexts/PlayerContext';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 import { overlaySignal } from '@/lib/gamepadOverlaySignal';
+import {
+  isGamepadEnabled,
+  getGamepadMapping,
+  isRemappingInProgress,
+  GAMEPAD_MAPPING_CHANGED_EVENT,
+  type GamepadMapping,
+  type GamepadActionId,
+} from '@/lib/gamepadMapping';
 
 // ── Config ────────────────────────────────────────────────────────────────────
 const STICK_THRESHOLD = 0.45;   // left-stick must exceed this to trigger nav
@@ -98,6 +106,18 @@ function focusNearest(dx: number, dy: number) {
   if (t) { t.focus(); t.scrollIntoView({ block: 'nearest', inline: 'nearest' }); }
 }
 
+// ── Détection de combo (chord) ────────────────────────────────────────────────
+// Une combinaison vide == action désactivée (pas de touche assignée).
+// Déclenchement au "front montant" du combo entier (tous les boutons enfoncés,
+// alors qu'à la frame précédente au moins un ne l'était pas).
+function isComboTriggered(buttons: readonly GamepadButton[], prev: boolean[], combo: number[]): boolean {
+  if (combo.length === 0) return false;
+  const allPressed = combo.every((i) => !!buttons[i]?.pressed);
+  if (!allPressed) return false;
+  const wasAllPressed = combo.every((i) => !!prev[i]);
+  return !wasAllPressed;
+}
+
 // ── Cursor (vanilla DOM, no React re-renders) ─────────────────────────────────
 
 function createCursor(): HTMLDivElement {
@@ -147,6 +167,8 @@ export function useGamepad() {
   const leftNav    = useRef({ active: false, lastTime: 0 });
   const rafRef     = useRef<number | null>(null);
   const activeRef  = useRef(false);
+  const mappingRef = useRef<GamepadMapping>(getGamepadMapping());
+  const enabledRef = useRef<boolean>(isGamepadEnabled());
 
   useEffect(() => {
     // ── Cursor setup ─────────────────────────────────────────────────────
@@ -213,10 +235,19 @@ export function useGamepad() {
       const gp = Array.from(navigator.getGamepads()).find((g) => g !== null);
 
       if (gp) {
+        // L'écran de remappage capture lui-même les appuis en cours : on
+        // n'interprète pas ces mêmes appuis comme des actions normales.
+        if (isRemappingInProgress()) {
+          prevRef.current = Array.from(gp.buttons).map((b) => b.pressed);
+          rafRef.current = requestAnimationFrame(poll);
+          return;
+        }
+
         const { player: p, navigate: nav } = stateRef.current;
         const { buttons, axes } = gp;
         const prev = prevRef.current;
-        const pressed = (i: number) => !!buttons[i]?.pressed && !prev[i];
+        const mapping = mappingRef.current;
+        const triggered = (action: GamepadActionId) => isComboTriggered(buttons, prev, mapping[action] ?? []);
 
         // ── LEFT STICK → cursor (mouse-like) ──────────────────────────
         const lx = axes[0] ?? 0;
@@ -245,14 +276,14 @@ export function useGamepad() {
           }
         }
 
-        // ── D-PAD → same spatial nav, discrete ────────────────────────
-        if (pressed(12)) focusNearest( 0, -1); // up
-        if (pressed(13)) focusNearest( 0,  1); // down
-        if (pressed(14)) focusNearest(-1,  0); // left
-        if (pressed(15)) focusNearest( 1,  0); // right
+        // ── Navigation directionnelle (D-pad par défaut, remappable) ──
+        if (triggered('navUp')) focusNearest( 0, -1);
+        if (triggered('navDown')) focusNearest( 0,  1);
+        if (triggered('navLeft')) focusNearest(-1,  0);
+        if (triggered('navRight')) focusNearest( 1,  0);
 
-        // ── A / Cross → click ─────────────────────────────────────────
-        if (pressed(0)) {
+        // ── Sélectionner / cliquer ─────────────────────────────────────
+        if (triggered('click')) {
           if (cursorVisible) {
             clickAtCursor();
           } else {
@@ -262,8 +293,8 @@ export function useGamepad() {
           }
         }
 
-        // ── B / Circle → ferme l'overlay ouvert, sinon retour ─────────
-        if (pressed(1)) {
+        // ── Retour : ferme l'overlay ouvert, sinon retour ─────────────
+        if (triggered('back')) {
           if (overlaySignal.any()) {
             // Ferme les panneaux flottants (VolumeControl, PlaybackRateControl)
             document.body.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true }));
@@ -276,32 +307,26 @@ export function useGamepad() {
           }
         }
 
-        // ── X / Square → Play / Pause ─────────────────────────────────
-        if (pressed(2)) p.togglePlay();
+        // ── Lecture / Pause ─────────────────────────────────────────────
+        if (triggered('playPause')) p.togglePlay();
 
-        // ── Y / Triangle → open / close full player ───────────────────
-        if (pressed(3)) {
+        // ── Ouvrir / fermer le lecteur plein écran ──────────────────────
+        if (triggered('openPlayer')) {
           if (p.isPlayerOpen) p.closePlayer();
           else if (p.currentSong) p.openPlayer();
         }
 
-        // ── LB / L1 → previous ────────────────────────────────────────
-        if (pressed(4)) p.previous();
+        // ── Morceau précédent ────────────────────────────────────────────
+        if (triggered('previous')) p.previous();
 
-        // ── RB / R1 → next ────────────────────────────────────────────
-        if (pressed(5)) p.next();
+        // ── Morceau suivant ──────────────────────────────────────────────
+        if (triggered('next')) p.next();
 
-        // ── LT / L2 → reculer 10s ─────────────────────────────────────
-        if (pressed(6)) p.seek(Math.max(0, p.currentTime - 10));
+        // ── Reculer 10s ───────────────────────────────────────────────────
+        if (triggered('seekBack')) p.seek(Math.max(0, p.currentTime - 10));
 
-        // ── RT / R2 → avancer 10s ─────────────────────────────────────
-        if (pressed(7)) p.seek(Math.min(p.duration, p.currentTime + 10));
-
-        // ── Start → open / close player ───────────────────────────────
-        if (pressed(9)) {
-          if (p.isPlayerOpen) p.closePlayer();
-          else if (p.currentSong) p.openPlayer();
-        }
+        // ── Avancer 10s ───────────────────────────────────────────────────
+        if (triggered('seekForward')) p.seek(Math.min(p.duration, p.currentTime + 10));
 
         prevRef.current = Array.from(buttons).map((b) => b.pressed);
       }
@@ -310,17 +335,14 @@ export function useGamepad() {
     }
 
     // ── Connect / disconnect ──────────────────────────────────────────────
-    function onConnect(e: GamepadEvent) {
-      const name = e.gamepad.id.replace(/\s*\(.*\)\s*$/, '').trim() || 'Manette';
-      toast.success('Manette connectée', { description: name, duration: 3000 });
+    function activate() {
       document.body.classList.add('gamepad-mode');
       activeRef.current = true;
       prevRef.current   = [];
       rafRef.current    = requestAnimationFrame(poll);
     }
 
-    function onDisconnect() {
-      toast.info('Manette déconnectée', { duration: 2000 });
+    function deactivate() {
       document.body.classList.remove('gamepad-mode');
       hideCursor();
       activeRef.current = false;
@@ -328,19 +350,45 @@ export function useGamepad() {
       rafRef.current = null;
     }
 
+    function onConnect(e: GamepadEvent) {
+      if (!enabledRef.current) return;
+      const name = e.gamepad.id.replace(/\s*\(.*\)\s*$/, '').trim() || 'Manette';
+      toast.success('Manette connectée', { description: name, duration: 3000 });
+      activate();
+    }
+
+    function onDisconnect() {
+      toast.info('Manette déconnectée', { duration: 2000 });
+      deactivate();
+    }
+
+    // Réagit à l'activation/désactivation ou au remappage depuis les paramètres,
+    // sans nécessiter de redémarrer l'app.
+    function onMappingChanged() {
+      mappingRef.current = getGamepadMapping();
+      const wasEnabled = enabledRef.current;
+      enabledRef.current = isGamepadEnabled();
+      const hasGamepad = Array.from(navigator.getGamepads()).some((g) => g !== null);
+      if (wasEnabled && !enabledRef.current) {
+        deactivate();
+      } else if (!wasEnabled && enabledRef.current && hasGamepad) {
+        activate();
+      }
+    }
+
     window.addEventListener('gamepadconnected',    onConnect);
     window.addEventListener('gamepaddisconnected', onDisconnect);
+    window.addEventListener(GAMEPAD_MAPPING_CHANGED_EVENT, onMappingChanged);
 
     // Already connected before mount (HMR, page reload)
-    if (Array.from(navigator.getGamepads()).some((g) => g !== null)) {
-      document.body.classList.add('gamepad-mode');
-      activeRef.current = true;
-      rafRef.current    = requestAnimationFrame(poll);
+    if (enabledRef.current && Array.from(navigator.getGamepads()).some((g) => g !== null)) {
+      activate();
     }
 
     return () => {
       window.removeEventListener('gamepadconnected',    onConnect);
       window.removeEventListener('gamepaddisconnected', onDisconnect);
+      window.removeEventListener(GAMEPAD_MAPPING_CHANGED_EVENT, onMappingChanged);
       activeRef.current = false;
       document.body.classList.remove('gamepad-mode');
       if (rafRef.current) cancelAnimationFrame(rafRef.current);

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { pb } from '@/lib/pocketbase';
 import { useAuth } from '@/contexts/AuthContext';
 import { useSeo } from '@/lib/useSeo';
@@ -11,6 +11,8 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { cn } from '@/lib/utils';
 import TabFade from '@/components/TabFade';
 import type { Playlist } from '@/types/music';
+import { fetchPlaylistCovers } from '@/lib/playlistCovers';
+import PlaylistCoverMosaic from '@/components/PlaylistCoverMosaic';
 
 function recordToPlaylist(r: any): Playlist {
   return {
@@ -37,6 +39,19 @@ export default function Playlists() {
   const [tab, setTab] = useState<Tab>('mine');
   const [likedLoaded, setLikedLoaded] = useState(false);
   const [discoverLoaded, setDiscoverLoaded] = useState(false);
+  const [coversMap, setCoversMap] = useState<Record<string, string[]>>({});
+  const coversMapRef = useRef<Record<string, string[]>>({});
+  useEffect(() => { coversMapRef.current = coversMap; }, [coversMap]);
+
+  // Charge les covers (0, 1 ou 4 selon le nombre de titres) pour une liste de playlists
+  const loadCovers = async (list: Playlist[]) => {
+    const idsNeeded = list.map((p) => p.id).filter((id) => !(id in coversMapRef.current));
+    if (idsNeeded.length === 0) return;
+    try {
+      const next = await fetchPlaylistCovers(idsNeeded);
+      setCoversMap((prev) => ({ ...prev, ...next }));
+    } catch {}
+  };
 
   // Onglet par défaut ("À moi") : seulement mes playlists + compteur de titres likés
   const load = async () => {
@@ -48,7 +63,9 @@ export default function Playlists() {
         pb.collection('song_likes').getList(1, 1, { filter: `user_id = "${user.id}"`, requestKey: null }),
       ]);
       setLikedSongsCount(songLikes.totalItems);
-      setMyPlaylists(mine.items.map(recordToPlaylist));
+      const mineList = mine.items.map(recordToPlaylist);
+      setMyPlaylists(mineList);
+      loadCovers(mineList);
     } catch {} finally {
       setLoading(false);
     }
@@ -67,7 +84,9 @@ export default function Playlists() {
         if (likedIds.length > 0) {
           const filters = likedIds.map((id: string) => `id = "${id}"`).join(' || ');
           const res = await pb.collection('playlists').getList(1, 50, { filter: filters, requestKey: null });
-          setLikedPlaylists(res.items.map(recordToPlaylist));
+          const list = res.items.map(recordToPlaylist);
+          setLikedPlaylists(list);
+          loadCovers(list);
         } else {
           setLikedPlaylists([]);
         }
@@ -82,7 +101,9 @@ export default function Playlists() {
     (async () => {
       try {
         const pubs = await pb.collection('playlists').getList(1, 30, { filter: 'is_public = true', sort: '-likes_count', requestKey: null });
-        setPublicPlaylists(pubs.items.map(recordToPlaylist));
+        const list = pubs.items.map(recordToPlaylist);
+        setPublicPlaylists(list);
+        loadCovers(list);
       } catch {}
     })();
   }, [user, tab, discoverLoaded]);
@@ -196,7 +217,7 @@ export default function Playlists() {
           <TabFade tabKey={tab}>
             {tab === 'mine' ? (
               myPlaylists.length > 0 ? (
-                <PlaylistGrid playlists={myPlaylists} onOpen={(id) => navigate(`/playlist/${id}`)} showVisibility />
+                <PlaylistGrid playlists={myPlaylists} coversMap={coversMap} onOpen={(id) => navigate(`/playlist/${id}`)} showVisibility />
               ) : (
                 <EmptyState
                   icon={<ListMusic className="h-6 w-6 text-primary" />}
@@ -211,7 +232,7 @@ export default function Playlists() {
               )
             ) : tab === 'liked' ? (
               likedPlaylists.length > 0 ? (
-                <PlaylistGrid playlists={likedPlaylists} onOpen={(id) => navigate(`/playlist/${id}`)} />
+                <PlaylistGrid playlists={likedPlaylists} coversMap={coversMap} onOpen={(id) => navigate(`/playlist/${id}`)} />
               ) : (
                 <EmptyState
                   icon={<Heart className="h-6 w-6 text-primary" />}
@@ -220,7 +241,7 @@ export default function Playlists() {
                 />
               )
             ) : publicPlaylists.length > 0 ? (
-              <PlaylistGrid playlists={publicPlaylists} onOpen={(id) => navigate(`/playlist/${id}`)} />
+              <PlaylistGrid playlists={publicPlaylists} coversMap={coversMap} onOpen={(id) => navigate(`/playlist/${id}`)} />
             ) : (
               <EmptyState
                 icon={<Globe className="h-6 w-6 text-primary" />}
@@ -235,10 +256,12 @@ export default function Playlists() {
   );
 }
 
-function PlaylistGrid({ playlists, onOpen, showVisibility }: { playlists: Playlist[]; onOpen: (id: string) => void; showVisibility?: boolean }) {
+function PlaylistGrid({ playlists, onOpen, showVisibility, coversMap }: { playlists: Playlist[]; onOpen: (id: string) => void; showVisibility?: boolean; coversMap: Record<string, string[]> }) {
   return (
     <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4">
-      {playlists.map((p, i) => (
+      {playlists.map((p, i) => {
+        const covers = coversMap[p.id] ?? [];
+        return (
         <button
           key={p.id}
           onClick={() => onOpen(p.id)}
@@ -246,9 +269,13 @@ function PlaylistGrid({ playlists, onOpen, showVisibility }: { playlists: Playli
           style={{ animationDelay: `${Math.min(i, 12) * 30}ms` }}
         >
           <div className="relative aspect-square w-full overflow-hidden rounded-xl bg-gradient-primary shadow-card transition-all duration-300 group-hover:shadow-glow group-hover:scale-[1.03]">
-            <div className="flex h-full w-full items-center justify-center">
-              <ListMusic className="h-10 w-10 text-primary-foreground/80" />
-            </div>
+            {covers.length > 0 ? (
+              <PlaylistCoverMosaic covers={covers} />
+            ) : (
+              <div className="flex h-full w-full items-center justify-center">
+                <ListMusic className="h-10 w-10 text-primary-foreground/80" />
+              </div>
+            )}
             <div className="absolute inset-0 flex items-center justify-center bg-black/0 opacity-0 transition-all duration-250 group-hover:bg-black/30 group-hover:opacity-100">
               <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-white text-black shadow-elegant">
                 <Play className="ml-0.5 h-5 w-5 fill-current" />
@@ -269,7 +296,8 @@ function PlaylistGrid({ playlists, onOpen, showVisibility }: { playlists: Playli
             </p>
           </div>
         </button>
-      ))}
+        );
+      })}
     </div>
   );
 }

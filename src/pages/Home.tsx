@@ -21,7 +21,6 @@ import PatchNotesSheet from '@/components/PatchNotesSheet';
 import { generateDailyMix } from '@/lib/dailyMix';
 import type { Song, Playlist } from '@/types/music';
 import TutorialModal from '@/components/TutorialModal';
-import juxLogo from '@/assets/jux-logo.png';
 import { useSeo } from '@/lib/useSeo';
 import { cn } from '@/lib/utils';
 import { recordToSong } from '@/lib/pbUtils';

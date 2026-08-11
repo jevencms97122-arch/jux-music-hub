@@ -6,7 +6,7 @@ import {
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
-import juxLogo from '@/assets/jux-logo.png';
+const juxLogo = '/jux-icon-512.png';
 
 interface TutorialModalProps {
   open: boolean;

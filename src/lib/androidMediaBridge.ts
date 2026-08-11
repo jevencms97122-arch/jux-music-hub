@@ -49,6 +49,61 @@ export interface NativeCommandEvent {
   seekTime?: number;
 }
 
+// ── Bridge Windows (SMTC natif — voir src-tauri/src/lib.rs) ──────────────────
+// Contrairement à Android (WebView contrôlée nous-mêmes), l'intégration
+// automatique du navigateur avec les contrôles média système Windows affiche
+// "Application inconnue" pour une app non empaquetée. On désactive cette
+// intégration auto (additionalBrowserArgs) et on pilote nous-mêmes un vrai
+// SystemMediaTransportControls WinRT depuis Rust.
+let smtcBridgeInitialized = false;
+
+// sendNowPlayingToNative est appelé à chaque tick de lecture (chaque seconde) pour
+// mettre à jour currentTime — sans ce filtre, on redéfinissait la pochette en boucle
+// et Windows la re-affichait à chaque fois, causant un flicker visible dans le popup.
+let lastSmtcSignature = '';
+
+async function updateWindowsNowPlaying(info: NowPlayingInfo): Promise<void> {
+  const signature = `${info.title}|${info.author}|${info.coverUrl}|${info.isPlaying}`;
+  if (signature === lastSmtcSignature) return;
+  lastSmtcSignature = signature;
+
+  try {
+    const { isTauri, invoke } = await import('@tauri-apps/api/core');
+    if (!isTauri()) return;
+    await invoke('smtc_update', { title: info.title, artist: info.author, isPlaying: info.isPlaying, coverUrl: info.coverUrl || null });
+  } catch {
+    // noop
+  }
+}
+
+async function clearWindowsNowPlaying(): Promise<void> {
+  lastSmtcSignature = '';
+  try {
+    const { isTauri, invoke } = await import('@tauri-apps/api/core');
+    if (!isTauri()) return;
+    await invoke('smtc_clear');
+  } catch {
+    // noop
+  }
+}
+
+/** Écoute les boutons du popup média Windows (play/pause/next/previous) et les
+ * relaie vers le même canal que les commandes Android (window.onJuxNativeCommand). */
+async function initSmtcBridgeOnce(): Promise<void> {
+  if (smtcBridgeInitialized) return;
+  smtcBridgeInitialized = true;
+  try {
+    const { isTauri } = await import('@tauri-apps/api/core');
+    if (!isTauri()) return;
+    const { listen } = await import('@tauri-apps/api/event');
+    await listen<string>('smtc-command', (event) => {
+      window.onJuxNativeCommand?.(JSON.stringify({ command: event.payload }));
+    });
+  } catch {
+    // noop
+  }
+}
+
 // ── Types pour le bridge natif ──────────────────────────────────
 
 declare global {
@@ -64,6 +119,8 @@ declare global {
  */
 export function sendNowPlayingToNative(info: NowPlayingInfo): void {
   if (typeof window === 'undefined') return;
+
+  void updateWindowsNowPlaying(info);
 
   try {
     // Méthode 1 : Pont JuxAndroid avec une méthode dédiée (recommandé)
@@ -93,6 +150,8 @@ export function sendNowPlayingToNative(info: NowPlayingInfo): void {
 export function clearNowPlayingOnNative(): void {
   if (typeof window === 'undefined') return;
 
+  void clearWindowsNowPlaying();
+
   try {
     if (window.JuxAndroid && typeof (window.JuxAndroid as any).clearNowPlaying === 'function') {
       (window.JuxAndroid as any).clearNowPlaying();
@@ -117,6 +176,8 @@ export function clearNowPlayingOnNative(): void {
  * Retourne une fonction pour se désabonner.
  */
 export function onNativeCommand(callback: (event: NativeCommandEvent) => void): () => void {
+  void initSmtcBridgeOnce();
+
   const handler = (json: string) => {
     try {
       const cmd: NativeCommandEvent = JSON.parse(json);

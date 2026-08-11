@@ -14,6 +14,8 @@ export interface DiscordPresenceData {
   coverUrl?: string;
   isPlaying: boolean;
   startTimestamp?: number;
+  /** Durée du morceau en secondes — active la barre de progression Discord. */
+  durationSecs?: number;
 }
 
 export function isElectron(): boolean {

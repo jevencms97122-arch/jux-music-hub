@@ -13,7 +13,7 @@ import type { JuxPlatform } from './platform';
 export const LATEST_ANDROID_VERSION = "1.0.4";
 
 /** Version actuelle de l'app PC */
-export const LATEST_PC_VERSION = "1.0.5";
+export const LATEST_PC_VERSION = "1.0.0";
 
 /** URLs de téléchargement selon la plateforme */
 export const DOWNLOAD_URLS: Record<Exclude<JuxPlatform, 'web'>, string> = {

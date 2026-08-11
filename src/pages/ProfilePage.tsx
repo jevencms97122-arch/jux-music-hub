@@ -9,7 +9,7 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import {
   Pencil, Sparkles, Trophy, Music2, Settings, PlusCircle, History,
   Flame, Repeat2, QrCode, ChevronRight, Headphones, ListMusic,
-  Mic2, Play, Bell, LogOut, Plus,
+  Mic2, Play, Bell, LogOut, Info, Heart,
 } from 'lucide-react';
 import { useLazySection } from '@/hooks/useLazySection';
 import { avatarUrl, songCoverUrl } from '@/lib/storage';
@@ -28,6 +28,8 @@ import { recordToSong } from '@/lib/pbUtils';
 import PinnedTrack from '@/components/PinnedTrack';
 import ProfileQrCode from '@/components/ProfileQrCode';
 import SettingsSheet from '@/components/SettingsSheet';
+import AppInfoSheet from '@/components/AppInfoSheet';
+import DonationSheet from '@/components/DonationSheet';
 import TabFade from '@/components/TabFade';
 import { cn } from '@/lib/utils';
 
@@ -55,19 +57,13 @@ export default function ProfilePage() {
   const [historyLoaded, setHistoryLoaded] = useState(false);
   const [favoriteArtists, setFavoriteArtists] = useState<{ name: string; totalPlays: number; songs: Song[] }[]>([]);
   const [favoriteArtistsLoading, setFavoriteArtistsLoading] = useState(true);
-  const [userPlaylists, setUserPlaylists] = useState<{ id: string; title: string; play_count: number; likes_count: number; updated_at: string }[]>([]);
-  const [playlistsTotal, setPlaylistsTotal] = useState(0);
-  const [userPlaylistsLoading, setUserPlaylistsLoading] = useState(true);
-
   const artistsLazy = useLazySection();
-  const playlistsLazy = useLazySection();
 
   useEffect(() => {
     if (offline) {
       setLoading(true);
       getLocalTracks().then(setSongs).finally(() => setLoading(false));
       setFavoriteArtistsLoading(false);
-      setUserPlaylistsLoading(false);
       return;
     }
     if (!user) return;
@@ -173,29 +169,6 @@ export default function ProfilePage() {
       setFavoriteArtistsLoading(false);
     })();
   }, [offline, user, artistsLazy.visible]);
-
-  // Playlists de l'utilisateur (lazy)
-  useEffect(() => {
-    if (offline || !user || !playlistsLazy.visible) return;
-    (async () => {
-      try {
-        const res = await pb.collection('playlists').getList(1, 10, {
-          filter: `owner_id = "${user.id}"`,
-          sort: '-updated',
-          requestKey: null,
-        });
-        setUserPlaylists(res.items.map((r: any) => ({
-          id: r.id,
-          title: r.title,
-          play_count: r.play_count ?? 0,
-          likes_count: r.likes_count ?? 0,
-          updated_at: r.updated,
-        })));
-        setPlaylistsTotal(res.totalItems);
-      } catch {}
-      setUserPlaylistsLoading(false);
-    })();
-  }, [offline, user, playlistsLazy.visible]);
 
   const handleDeleteLocalTrack = async (songId: string) => {
     if (!window.confirm('Supprimer ce son de ta bibliothèque hors ligne ?')) return;
@@ -440,84 +413,6 @@ export default function ProfilePage() {
         </div>
       )}
 
-      {/* ── Vos Playlists ── */}
-      {!offline && (
-        <div ref={playlistsLazy.ref}>
-          {userPlaylistsLoading && playlistsLazy.visible ? (
-            <section className="relative px-5 mt-6">
-              <div className="mb-4 h-5 w-28 animate-pulse rounded bg-secondary" />
-              <div className="h-24 w-full animate-pulse rounded-2xl bg-secondary" />
-            </section>
-          ) : (
-            <section className="relative px-5 mt-6 animate-fade-slide-up">
-              <div className="mb-4 flex items-center justify-between">
-                <div className="flex items-center gap-2.5">
-                  <ListMusic className="h-4 w-4 text-primary" strokeWidth={2} />
-                  <h2 className="text-base font-bold tracking-tight text-foreground">
-                    Vos Playlists{playlistsTotal > 0 ? ` (${playlistsTotal})` : ''}
-                  </h2>
-                </div>
-                <button
-                  onClick={() => navigate('/playlists')}
-                  aria-label="Créer une playlist"
-                  className="flex h-8 w-8 items-center justify-center rounded-full border border-border/50 bg-card/60 text-muted-foreground transition-colors hover:bg-card hover:text-foreground"
-                >
-                  <Plus className="h-4 w-4" />
-                </button>
-              </div>
-
-              {userPlaylists.length === 0 ? (
-                <button
-                  onClick={() => navigate('/playlists')}
-                  className="flex w-full flex-col items-center justify-center gap-2 rounded-2xl border border-dashed border-border/60 bg-card/30 py-8 text-center transition-colors hover:bg-card/50"
-                >
-                  <ListMusic className="h-6 w-6 text-muted-foreground/50" />
-                  <p className="text-xs font-medium text-muted-foreground">Crée ta première playlist</p>
-                </button>
-              ) : (
-                <div className="flex flex-col gap-3 md:flex-row">
-                  {/* Playlist mise en avant */}
-                  <button
-                    onClick={() => navigate(`/playlist/${userPlaylists[0].id}`)}
-                    className="group relative flex h-28 flex-1 items-end overflow-hidden rounded-2xl bg-gradient-primary p-4 text-left shadow-elegant-sm transition-transform active:scale-[0.98] md:w-1/2"
-                  >
-                    <ListMusic className="absolute -right-3 -top-3 h-20 w-20 text-white/10" />
-                    <div className="relative min-w-0">
-                      <p className="truncate text-base font-bold text-primary-foreground">{userPlaylists[0].title}</p>
-                      <p className="truncate text-xs text-primary-foreground/70">
-                        {userPlaylists[0].likes_count} j'aime · {userPlaylists[0].play_count} lectures
-                      </p>
-                    </div>
-                  </button>
-
-                  {/* Playlists suivantes */}
-                  {userPlaylists.length > 1 && (
-                    <div className="flex flex-col gap-2 md:w-1/2">
-                      {userPlaylists.slice(1, 3).map((p) => (
-                        <button
-                          key={p.id}
-                          onClick={() => navigate(`/playlist/${p.id}`)}
-                          className="group flex flex-1 items-center gap-3 rounded-xl border border-border/50 bg-card/60 px-3.5 py-2.5 text-left transition-colors hover:bg-card"
-                        >
-                          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-gradient-primary">
-                            <ListMusic className="h-4 w-4 text-primary-foreground" />
-                          </div>
-                          <div className="min-w-0 flex-1">
-                            <p className="truncate text-sm font-semibold text-foreground">{p.title}</p>
-                            <p className="text-[11px] text-muted-foreground">{p.likes_count} j'aime</p>
-                          </div>
-                          <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100" />
-                        </button>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              )}
-            </section>
-          )}
-        </div>
-      )}
-
       {/* ── Contenu : onglets ── */}
       <section className="relative px-5 mt-6 animate-fade-slide-up delay-4">
         <div className="mb-4 flex rounded-2xl border border-border/50 bg-card/50 p-1">
@@ -656,6 +551,28 @@ export default function ProfilePage() {
             <LogOut className="h-4.5 w-4.5" />
             <span className="text-sm font-medium">Déconnexion</span>
           </button>
+          <AppInfoSheet
+            trigger={
+              <button className="group flex w-full items-center justify-between rounded-xl px-3 py-3 text-left transition-colors hover:bg-card/60">
+                <div className="flex items-center gap-3">
+                  <Info className="h-4.5 w-4.5 text-muted-foreground transition-colors group-hover:text-primary" />
+                  <span className="text-sm font-medium text-foreground">Informations de l'application</span>
+                </div>
+                <ChevronRight className="h-4 w-4 text-muted-foreground transition-transform group-hover:translate-x-0.5 group-hover:text-primary" />
+              </button>
+            }
+          />
+          <DonationSheet
+            trigger={
+              <button className="group flex w-full items-center justify-between rounded-xl px-3 py-3 text-left transition-colors hover:bg-card/60">
+                <div className="flex items-center gap-3">
+                  <Heart className="h-4.5 w-4.5 text-rose-400 transition-colors" />
+                  <span className="text-sm font-medium text-foreground">Faire un don</span>
+                </div>
+                <ChevronRight className="h-4 w-4 text-muted-foreground transition-transform group-hover:translate-x-0.5 group-hover:text-primary" />
+              </button>
+            }
+          />
         </div>
       </section>
 

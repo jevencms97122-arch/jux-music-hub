@@ -503,14 +503,21 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
 
   // Discord Rich Presence — uniquement dans l'app Electron
   const discordStartRef = useRef<number | null>(null);
+  const discordSongIdRef = useRef<string | null>(null);
   useEffect(() => {
     if (!currentSong) {
       discordStartRef.current = null;
+      discordSongIdRef.current = null;
       clearDiscordPresence();
       return;
     }
+    // Un nouveau morceau démarre toujours à la position 0 — on ne se fie pas
+    // à `currentTime`, qui peut encore contenir la position de l'ancien
+    // morceau au moment où cet effet se déclenche (mise à jour asynchrone).
+    const isNewSong = discordSongIdRef.current !== currentSong.id;
+    discordSongIdRef.current = currentSong.id;
     if (isPlaying) {
-      if (!discordStartRef.current) discordStartRef.current = Date.now();
+      discordStartRef.current = isNewSong ? Date.now() : Date.now() - currentTime * 1000;
     } else {
       discordStartRef.current = null;
     }
@@ -520,9 +527,14 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
       coverUrl: songCoverUrl(currentSong) || undefined,
       isPlaying,
       startTimestamp: discordStartRef.current ?? undefined,
+      durationSecs: duration > 0 ? duration : undefined,
     });
+  // `duration` DOIT être une dépendance : elle arrive de façon asynchrone
+  // (loadedmetadata, après le changement de currentSong) — sans ça, Discord
+  // recevait la durée de l'ANCIEN morceau (ou aucune) et ne la corrigeait
+  // jamais, donc la barre de progression restait fausse toute la lecture.
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentSong?.id, isPlaying]);
+  }, [currentSong?.id, isPlaying, duration]);
 
   useEffect(() => {
     if (!currentSong) { applyAccentHsl(null); return; }

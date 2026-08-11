@@ -6,12 +6,18 @@ import { useReactiveBg } from '@/hooks/useReactiveBg';
 import { useThemeEnabled } from '@/hooks/useThemeEnabled';
 import { useTheme } from '@/contexts/ThemeContext';
 import { usePlayer, TRANSITION_MODES } from '@/contexts/PlayerContext';
-import { LogOut, Sparkles, Palette, ChevronRight, RefreshCw, Zap, AudioLines, Glasses, Sliders, Mic, Settings2 } from 'lucide-react';
+import { LogOut, Sparkles, Palette, ChevronRight, RefreshCw, Zap, AudioLines, Glasses, Sliders, Mic, Settings2, Volume2, Gamepad2, BellOff, PictureInPicture2 } from 'lucide-react';
 import { useVoiceAssistantSettings, isSpeechRecognitionSupported } from '@/hooks/useVoiceAssistant';
 import { usePerformanceMode } from '@/hooks/usePerformanceMode';
 import { useVRMode } from '@/hooks/useVRMode';
 import ThemeSelectorSheet from '@/components/ThemeSelectorSheet';
 import CrossfadeSelectorSheet from '@/components/CrossfadeSelectorSheet';
+import NotificationSfxSheet from '@/components/NotificationSfxSheet';
+import { isSoundOnlyMode, setSoundOnlyMode } from '@/lib/notificationSfx';
+import { isCloseToTrayEnabled, setCloseToTrayEnabled } from '@/lib/closeToTray';
+import { isTauri } from '@tauri-apps/api/core';
+import GamepadMappingSheet from '@/components/GamepadMappingSheet';
+import { isGamepadEnabled, setGamepadEnabled } from '@/lib/gamepadMapping';
 import EqualizerSheet from '@/components/EqualizerSheet';
 import MicTestSheet from '@/components/MicTestSheet';
 import { EQ_PRESETS } from '@/lib/eqPresets';
@@ -31,6 +37,24 @@ export default function SettingsSheet({ trigger }: { trigger: React.ReactNode })
   const { enabled: assistantEnabled, setEnabled: setAssistantEnabled } = useVoiceAssistantSettings();
   const [reactiveBgChanged, setReactiveBgChanged] = useState(false);
   const [themesChanged, setThemesChanged] = useState(false);
+  const [gamepadEnabled, setGamepadEnabledState] = useState(() => isGamepadEnabled());
+  const [soundOnly, setSoundOnlyState] = useState(() => isSoundOnlyMode());
+  const [closeToTray, setCloseToTrayState] = useState(() => isCloseToTrayEnabled());
+
+  const handleGamepadToggle = (v: boolean) => {
+    setGamepadEnabledState(v);
+    setGamepadEnabled(v);
+  };
+
+  const handleSoundOnlyToggle = (v: boolean) => {
+    setSoundOnlyState(v);
+    setSoundOnlyMode(v);
+  };
+
+  const handleCloseToTrayToggle = (v: boolean) => {
+    setCloseToTrayState(v);
+    setCloseToTrayEnabled(v);
+  };
 
   const handleReactiveBgToggle = (v: boolean) => {
     setEnabled(v);
@@ -231,6 +255,90 @@ export default function SettingsSheet({ trigger }: { trigger: React.ReactNode })
               <ChevronRight className="h-4 w-4 text-muted-foreground" />
             </button>
           </div>
+
+          {/* Manette */}
+          <div className="rounded-2xl bg-card/60 overflow-hidden">
+            <div className="flex items-center justify-between px-4 py-3.5">
+              <div className="flex items-center gap-3">
+                <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-teal-500/15">
+                  <Gamepad2 className="h-4.5 w-4.5 text-teal-400" />
+                </div>
+                <div>
+                  <p className="text-sm font-semibold">Manette</p>
+                  <p className="text-xs text-muted-foreground">Contrôler l'interface avec une manette</p>
+                </div>
+              </div>
+              <Switch checked={gamepadEnabled} onCheckedChange={handleGamepadToggle} />
+            </div>
+            {gamepadEnabled && (
+              <div className="border-t border-border/40 px-4 pb-3.5 pt-2">
+                <GamepadMappingSheet
+                  trigger={
+                    <button className="flex w-full items-center gap-3 rounded-xl bg-secondary/50 px-3 py-2.5 hover:bg-secondary/80 transition-colors">
+                      <span className="text-sm font-medium flex-1 text-left">Voir / modifier le mappage des boutons</span>
+                      <ChevronRight className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+                    </button>
+                  }
+                />
+              </div>
+            )}
+          </div>
+
+          {/* Son de notification */}
+          <div className="rounded-2xl bg-card/60 overflow-hidden">
+            <NotificationSfxSheet
+              trigger={
+                <button className="flex w-full items-center justify-between px-4 py-3.5">
+                  <div className="flex items-center gap-3">
+                    <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-orange-500/15">
+                      <Volume2 className="h-4.5 w-4.5 text-orange-400" />
+                    </div>
+                    <div className="text-left">
+                      <p className="text-sm font-semibold">Son de notification</p>
+                      <p className="text-xs text-muted-foreground">Nouveau message reçu</p>
+                    </div>
+                  </div>
+                  <ChevronRight className="h-4 w-4 text-muted-foreground" />
+                </button>
+              }
+            />
+          </div>
+
+          {/* Son seul sans notification (Windows uniquement) */}
+          {isTauri() && (
+            <div className="rounded-2xl bg-card/60 overflow-hidden">
+              <div className="flex items-center justify-between px-4 py-3.5">
+                <div className="flex items-center gap-3">
+                  <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-amber-500/15">
+                    <BellOff className="h-4.5 w-4.5 text-amber-400" />
+                  </div>
+                  <div>
+                    <p className="text-sm font-semibold">Son seul, sans notification</p>
+                    <p className="text-xs text-muted-foreground">Joue le son de notif sans afficher le popup Windows</p>
+                  </div>
+                </div>
+                <Switch checked={soundOnly} onCheckedChange={handleSoundOnlyToggle} />
+              </div>
+            </div>
+          )}
+
+          {/* Rester actif en arrière-plan (Windows uniquement) */}
+          {isTauri() && (
+            <div className="rounded-2xl bg-card/60 overflow-hidden">
+              <div className="flex items-center justify-between px-4 py-3.5">
+                <div className="flex items-center gap-3">
+                  <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-sky-500/15">
+                    <PictureInPicture2 className="h-4.5 w-4.5 text-sky-400" />
+                  </div>
+                  <div>
+                    <p className="text-sm font-semibold">Rester actif en arrière-plan</p>
+                    <p className="text-xs text-muted-foreground">La croix minimise dans la barre des tâches système au lieu de fermer</p>
+                  </div>
+                </div>
+                <Switch checked={closeToTray} onCheckedChange={handleCloseToTrayToggle} />
+              </div>
+            </div>
+          )}
 
           {/* Crossfade */}
           <div className="rounded-2xl bg-card/60 overflow-hidden">

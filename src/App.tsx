@@ -7,6 +7,7 @@ import { ThemeProvider, useTheme } from '@/contexts/ThemeContext';
 import { BrowserRouter, Routes, Route, Navigate, useNavigate, useLocation } from 'react-router-dom';
 import { AnimatePresence, motion } from 'framer-motion';
 import { pb } from '@/lib/pocketbase';
+import { isTauri } from '@tauri-apps/api/core';
 import { toast } from 'sonner';
 import { updatePresence, clearPresence } from '@/lib/userPresence';
 import { usePlayer } from '@/contexts/PlayerContext';
@@ -35,6 +36,8 @@ import PlayerPage from '@/components/PlayerPage';
 import BottomNav from '@/components/BottomNav';
 import UpdateChecker from '@/components/UpdateChecker';
 import WebAppUpdateNotifier from '@/components/WebAppUpdateNotifier';
+import TauriUpdateManager from '@/components/TauriUpdateManager';
+import UpdateAppliedNotice from '@/components/UpdateAppliedNotice';
 import WebDeprecatedScreen from '@/components/WebDeprecatedScreen';
 import GamepadController from '@/components/GamepadController';
 import JuxAssistant from '@/components/JuxAssistant';
@@ -44,6 +47,7 @@ import OfflinePlaylists from '@/pages/OfflinePlaylists';
 import OfflinePlaylistDetail from '@/pages/OfflinePlaylistDetail';
 import { isVRModeEnabled } from '@/hooks/useVRMode';
 import { Toaster } from '@/components/ui/sonner';
+import ChatNotifier from '@/components/ChatNotifier';
 
 function shouldShowWebDeprecated(): boolean {
   return false;
@@ -268,11 +272,15 @@ function AppContent() {
       <PlayerProvider>
         <ScrollToTop />
         <PresenceHeartbeat />
+        <ChatNotifier />
         <GamepadController />
         <JuxAssistant />
         <div className="min-h-screen">
-          {profileCompleted && <UpdateChecker />}
+          {/* UpdateChecker = ancien système (versions codées en dur, Electron/Android) : désactivé sous Tauri desktop, remplacé par TauriUpdateManager */}
+          {profileCompleted && !isTauri() && <UpdateChecker />}
           {profileCompleted && <WebAppUpdateNotifier />}
+          <TauriUpdateManager />
+          <UpdateAppliedNotice />
           <main>
             <AnimatePresence mode="wait" initial={false}>
               <Routes location={location} key={location.pathname}>

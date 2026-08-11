@@ -2,7 +2,6 @@ import { useState } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { Input } from '@/components/ui/input';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import juxLogo from '@/assets/jux-logo.png';
 import { cn } from '@/lib/utils';
 
 function emailIssue(email: string): string | null {
@@ -59,13 +58,8 @@ export default function Login() {
       <div
         className="relative z-10 w-full max-w-sm animate-fade-slide-up"
       >
-        {/* Logo */}
+        {/* Titre */}
         <div className="mb-8 flex flex-col items-center gap-4 text-center">
-          <img
-            src={juxLogo}
-            alt="Nexora-Music"
-            className="h-14 w-auto drop-shadow-[0_0_20px_hsl(var(--primary)/0.4)]"
-          />
           <div>
             <h1 className="text-2xl font-bold tracking-tight text-foreground">
               Bienvenue sur Nexora-Music

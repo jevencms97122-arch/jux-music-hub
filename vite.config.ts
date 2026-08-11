@@ -16,6 +16,11 @@ export default defineConfig(({ mode }) => ({
       overlay: false,
       clientPort: 8080,
     },
+    // Empêche Vite de surveiller les artefacts de compilation Rust (verrouillés
+    // pendant `cargo build`, ce qui fait planter le watcher avec EBUSY sous Windows).
+    watch: {
+      ignored: ["**/src-tauri/**"],
+    },
     /**
      * Proxy Piped pour éviter les problèmes CORS en navigateur.
      * On expose une API "same-origin" via /api/piped/*.

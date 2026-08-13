@@ -89,7 +89,6 @@ export default function PlayerPage() {
       if (input) { input.select(); input.setSelectionRange(0, 99999); }
     }
   };
-  const [opening, setOpening] = useState(false);
   const [isLiked, setIsLiked] = useState(false);
   const [likeId, setLikeId] = useState<string | null>(null);
   const [isReposted, setIsReposted] = useState(false);
@@ -130,14 +129,6 @@ export default function PlayerPage() {
     } catch {}
     setSimilarLoading(false);
   }, [currentSong]);
-
-  // Opening animation fires ONLY when the player transitions from closed → open
-  useEffect(() => {
-    if (!isPlayerOpen) return;
-    setOpening(true);
-    const t = setTimeout(() => setOpening(false), 400);
-    return () => clearTimeout(t);
-  }, [isPlayerOpen]);
 
   // Load like status when song changes
   useEffect(() => {
@@ -333,7 +324,7 @@ export default function PlayerPage() {
     <div
       className={cn(
         'fixed inset-0 z-50 flex flex-col bg-background overflow-hidden',
-        closing ? 'animate-slide-out-down' : opening ? 'animate-slide-in-up' : ''
+        closing ? 'animate-slide-out-down' : 'animate-slide-in-up'
       )}
     >
       {/* Backdrop — cover floutée ou fond du thème (animé/Ultra) sans cover.

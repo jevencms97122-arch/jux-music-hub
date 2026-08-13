@@ -88,7 +88,7 @@ function genreColor(genre: string): string {
   return GENRE_COLORS[genre] ?? 'from-primary/10 to-primary/5';
 }
 
-const DISCOVER_PAGE = 20;
+const DISCOVER_PAGE = 15;
 const TUTORIAL_SEEN_KEY = 'jux_tutorial_seen';
 
 export default function Home() {
@@ -107,7 +107,11 @@ export default function Home() {
   const [playlistsLoading, setPlaylistsLoading] = useState(true);
   const [unreadCount, setUnreadCount] = useState(0);
   const [selectedGenre, setSelectedGenre] = useState<string | null>(null);
-  const [visibleCount, setVisibleCount] = useState(DISCOVER_PAGE);
+  const [discoverSongs, setDiscoverSongs] = useState<Song[]>([]);
+  const [discoverLoading, setDiscoverLoading] = useState(true);
+  const [discoverLoadingMore, setDiscoverLoadingMore] = useState(false);
+  const [discoverPage, setDiscoverPage] = useState(1);
+  const [discoverHasMore, setDiscoverHasMore] = useState(true);
   const [artistSongs, setArtistSongs] = useState<Song[]>([]);
   const [artistsLoading, setArtistsLoading] = useState(true);
   const [trendingLoading, setTrendingLoading] = useState(true);
@@ -178,7 +182,7 @@ export default function Home() {
     })();
   }, [offline]);
 
-  // Sons récents (sections Par genre + Nouveautés) — chargés à l'approche de la zone
+  // Sons récents (section Par genre) — chargés à l'approche de la zone
   useEffect(() => {
     if (offline || !songsLazy.visible) return;
     (async () => {
@@ -189,6 +193,34 @@ export default function Home() {
       setLoading(false);
     })();
   }, [offline, songsLazy.visible]);
+
+  // Nouveautés — pagination serveur : seule la 1ère page (15 max) charge à l'approche
+  // de la zone, les pages suivantes ne chargent qu'au clic sur "Voir plus".
+  useEffect(() => {
+    if (offline || !songsLazy.visible) return;
+    (async () => {
+      try {
+        const res = await pb.collection('songs').getList(1, DISCOVER_PAGE, { sort: '-created', requestKey: null });
+        setDiscoverSongs(res.items.map(recordToSong));
+        setDiscoverPage(1);
+        setDiscoverHasMore(res.totalPages > 1);
+      } catch {}
+      setDiscoverLoading(false);
+    })();
+  }, [offline, songsLazy.visible]);
+
+  const loadMoreDiscoverSongs = async () => {
+    if (discoverLoadingMore || !discoverHasMore) return;
+    setDiscoverLoadingMore(true);
+    try {
+      const nextPage = discoverPage + 1;
+      const res = await pb.collection('songs').getList(nextPage, DISCOVER_PAGE, { sort: '-created', requestKey: null });
+      setDiscoverSongs((prev) => [...prev, ...res.items.map(recordToSong)]);
+      setDiscoverPage(nextPage);
+      setDiscoverHasMore(nextPage < res.totalPages);
+    } catch {}
+    setDiscoverLoadingMore(false);
+  };
 
   // Tendances — chargées à l'approche de la section
   useEffect(() => {
@@ -570,8 +602,112 @@ export default function Home() {
         ) : trending.length > 0 && <TrendingSection trending={trending} />}
       </div>
 
-      {/* Sentinelle lazy pour les sons récents (Par genre + Nouveautés) */}
+      {/* Sentinelle lazy pour les sons récents (Nouveautés + Par genre) */}
       <div ref={songsLazy.ref} aria-hidden />
+
+      {/* Découverte — masquée quand un genre est filtré (la grille filtrée est déjà au-dessus) */}
+      {!selectedGenre && (
+        <section className="relative mb-8 px-4 animate-fade-slide-up" style={{ animationDelay: '0.15s' }}>
+          <SectionHeader icon={Clock} title="Nouveautés" />
+          {discoverLoading ? (
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5">
+              {Array.from({ length: 8 }).map((_, i) => (
+                <div key={i} className="space-y-1.5">
+                  <div className="aspect-square animate-pulse rounded-2xl bg-secondary" />
+                  <div className="h-3 w-3/4 animate-pulse rounded bg-secondary" />
+                  <div className="h-2.5 w-1/2 animate-pulse rounded bg-secondary" />
+                </div>
+              ))}
+            </div>
+          ) : discoverSongs.length === 0 ? (
+            <div className="flex flex-col items-center justify-center rounded-2xl border border-border bg-card/40 py-12 text-center backdrop-blur-xl">
+              <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-2xl bg-muted">
+                <Music2 className="h-5 w-5 text-muted-foreground" />
+              </div>
+              <p className="mb-1 text-sm font-medium text-foreground">Aucune musique pour l'instant</p>
+              <p className="mb-4 text-xs text-muted-foreground">Sois le premier à uploader !</p>
+              <button
+                onClick={() => navigate('/upload')}
+                className="inline-flex items-center gap-2 rounded-xl bg-gradient-primary px-4 py-2 text-sm font-semibold text-primary-foreground shadow-elegant-sm hover:shadow-glow active:scale-[0.98]"
+              >
+                <Upload className="h-3.5 w-3.5" />
+                Uploader
+              </button>
+            </div>
+          ) : (
+            <>
+              {/* Nouvelle sortie mise en avant */}
+              <div className="mb-6 flex flex-col gap-4 lg:flex-row">
+                <button
+                  onClick={() => playSongFromList(discoverSongs[0], discoverSongs)}
+                  className="group relative h-[220px] flex-grow overflow-hidden rounded-2xl text-left transition-transform duration-150 ease-out active:scale-[0.98] lg:h-[300px] lg:w-2/3"
+                >
+                  <CachedImage
+                    src={songCoverUrl(discoverSongs[0])}
+                    alt=""
+                    className="absolute inset-0 h-full w-full object-cover transition-transform duration-700 group-hover:scale-105"
+                  />
+                  <div className="absolute inset-0 bg-gradient-to-t from-black via-black/40 to-transparent" />
+                  <div className="absolute bottom-0 left-0 p-5">
+                    <span className="mb-1 block text-[10px] font-bold uppercase tracking-widest text-primary">Dernière sortie</span>
+                    <h4 className="mb-1 text-xl font-black text-white md:text-2xl">{discoverSongs[0].title}</h4>
+                    <p className="text-sm font-medium text-white/70">{discoverSongs[0].author}</p>
+                  </div>
+                  <div className="absolute bottom-4 right-4 flex h-11 w-11 items-center justify-center rounded-full bg-white text-black transition-transform group-hover:scale-110">
+                    <Play className="h-5 w-5 fill-current" />
+                  </div>
+                </button>
+
+                {discoverSongs.length > 1 && (
+                  <div className="flex flex-col gap-3 lg:w-1/3">
+                    {discoverSongs.slice(1, 3).map((s, i) => (
+                      <button
+                        key={s.id}
+                        onClick={() => playSongFromList(s, discoverSongs)}
+                        className="group flex flex-1 items-center gap-3 rounded-2xl border border-white/[0.06] bg-card/60 p-3 text-left transition-colors hover:border-primary/30 hover:bg-card"
+                      >
+                        <div className="h-16 w-16 shrink-0 overflow-hidden rounded-xl shadow-md">
+                          <CachedImage src={songCoverUrl(s)} alt="" className="h-full w-full object-cover" />
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <p className="truncate text-sm font-bold text-foreground">{s.title}</p>
+                          <p className="truncate text-xs text-muted-foreground">{s.author}</p>
+                          <span className="mt-1 inline-block rounded-md bg-primary/10 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-widest text-primary">
+                            {i === 0 ? 'Nouveau' : 'Récent'}
+                          </span>
+                        </div>
+                        <Play className="h-4 w-4 shrink-0 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100" />
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5">
+                {discoverSongs.slice(3).map((s, i) => (
+                  <SongCard key={s.id} song={s} index={i} onPlay={() => playSongFromList(s, discoverSongs)} />
+                ))}
+              </div>
+              {discoverHasMore && (
+                <button
+                  onClick={loadMoreDiscoverSongs}
+                  disabled={discoverLoadingMore}
+                  className="mt-4 flex w-full items-center justify-center gap-1.5 rounded-xl border border-border/50 bg-card/60 py-2.5 text-xs font-semibold text-muted-foreground transition-colors hover:bg-card hover:text-foreground disabled:opacity-60"
+                >
+                  {discoverLoadingMore ? (
+                    'Chargement…'
+                  ) : (
+                    <>
+                      Voir plus
+                      <ChevronDown className="h-3.5 w-3.5" />
+                    </>
+                  )}
+                </button>
+              )}
+            </>
+          )}
+        </section>
+      )}
 
       {/* Genre playlists */}
       {loading && !offline && (
@@ -851,103 +987,6 @@ export default function Home() {
         </section>
       )}
       </div>
-
-      {/* Découverte — masquée quand un genre est filtré (la grille filtrée est déjà au-dessus) */}
-      {!selectedGenre && (
-        <section className="relative px-4 animate-fade-slide-up" style={{ animationDelay: '0.3s' }}>
-          <SectionHeader icon={Clock} title="Nouveautés" />
-          {loading ? (
-            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5">
-              {Array.from({ length: 8 }).map((_, i) => (
-                <div key={i} className="space-y-1.5">
-                  <div className="aspect-square animate-pulse rounded-2xl bg-secondary" />
-                  <div className="h-3 w-3/4 animate-pulse rounded bg-secondary" />
-                  <div className="h-2.5 w-1/2 animate-pulse rounded bg-secondary" />
-                </div>
-              ))}
-            </div>
-          ) : songs.length === 0 ? (
-            <div className="flex flex-col items-center justify-center rounded-2xl border border-border bg-card/40 py-12 text-center backdrop-blur-xl">
-              <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-2xl bg-muted">
-                <Music2 className="h-5 w-5 text-muted-foreground" />
-              </div>
-              <p className="mb-1 text-sm font-medium text-foreground">Aucune musique pour l'instant</p>
-              <p className="mb-4 text-xs text-muted-foreground">Sois le premier à uploader !</p>
-              <button
-                onClick={() => navigate('/upload')}
-                className="inline-flex items-center gap-2 rounded-xl bg-gradient-primary px-4 py-2 text-sm font-semibold text-primary-foreground shadow-elegant-sm hover:shadow-glow active:scale-[0.98]"
-              >
-                <Upload className="h-3.5 w-3.5" />
-                Uploader
-              </button>
-            </div>
-          ) : (
-            <>
-              {/* Nouvelle sortie mise en avant */}
-              <div className="mb-6 flex flex-col gap-4 lg:flex-row">
-                <button
-                  onClick={() => playSongFromList(songs[0], songs)}
-                  className="group relative h-[220px] flex-grow overflow-hidden rounded-2xl text-left transition-transform duration-150 ease-out active:scale-[0.98] lg:h-[300px] lg:w-2/3"
-                >
-                  <CachedImage
-                    src={songCoverUrl(songs[0])}
-                    alt=""
-                    className="absolute inset-0 h-full w-full object-cover transition-transform duration-700 group-hover:scale-105"
-                  />
-                  <div className="absolute inset-0 bg-gradient-to-t from-black via-black/40 to-transparent" />
-                  <div className="absolute bottom-0 left-0 p-5">
-                    <span className="mb-1 block text-[10px] font-bold uppercase tracking-widest text-primary">Dernière sortie</span>
-                    <h4 className="mb-1 text-xl font-black text-white md:text-2xl">{songs[0].title}</h4>
-                    <p className="text-sm font-medium text-white/70">{songs[0].author}</p>
-                  </div>
-                  <div className="absolute bottom-4 right-4 flex h-11 w-11 items-center justify-center rounded-full bg-white text-black transition-transform group-hover:scale-110">
-                    <Play className="h-5 w-5 fill-current" />
-                  </div>
-                </button>
-
-                {songs.length > 1 && (
-                  <div className="flex flex-col gap-3 lg:w-1/3">
-                    {songs.slice(1, 3).map((s, i) => (
-                      <button
-                        key={s.id}
-                        onClick={() => playSongFromList(s, songs)}
-                        className="group flex flex-1 items-center gap-3 rounded-2xl border border-white/[0.06] bg-card/60 p-3 text-left transition-colors hover:border-primary/30 hover:bg-card"
-                      >
-                        <div className="h-16 w-16 shrink-0 overflow-hidden rounded-xl shadow-md">
-                          <CachedImage src={songCoverUrl(s)} alt="" className="h-full w-full object-cover" />
-                        </div>
-                        <div className="min-w-0 flex-1">
-                          <p className="truncate text-sm font-bold text-foreground">{s.title}</p>
-                          <p className="truncate text-xs text-muted-foreground">{s.author}</p>
-                          <span className="mt-1 inline-block rounded-md bg-primary/10 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-widest text-primary">
-                            {i === 0 ? 'Nouveau' : 'Récent'}
-                          </span>
-                        </div>
-                        <Play className="h-4 w-4 shrink-0 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100" />
-                      </button>
-                    ))}
-                  </div>
-                )}
-              </div>
-
-              <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5">
-                {songs.slice(3, visibleCount).map((s, i) => (
-                  <SongCard key={s.id} song={s} index={i} onPlay={() => playSongFromList(s, songs)} />
-                ))}
-              </div>
-              {songs.length > visibleCount && (
-                <button
-                  onClick={() => setVisibleCount((c) => c + DISCOVER_PAGE)}
-                  className="mt-4 flex w-full items-center justify-center gap-1.5 rounded-xl border border-border/50 bg-card/60 py-2.5 text-xs font-semibold text-muted-foreground transition-colors hover:bg-card hover:text-foreground"
-                >
-                  Voir plus ({songs.length - visibleCount} restants)
-                  <ChevronDown className="h-3.5 w-3.5" />
-                </button>
-              )}
-            </>
-          )}
-        </section>
-      )}
 
       <TutorialModal open={tutorialOpen} onClose={closeTutorial} />
     </div>

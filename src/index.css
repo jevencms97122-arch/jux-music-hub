@@ -456,6 +456,20 @@
   --anim-scale-in: _scaleIn 0.5s cubic-bezier(0.16,1,0.3,1) both;
 }
 
+@media (prefers-reduced-motion: reduce) {
+  .animate-fade-slide-up,
+  .animate-fade-in,
+  .animate-scale-in,
+  .animate-card-in,
+  .animate-slide-in-up,
+  .animate-slide-out-down,
+  .animate-bg-cover-in {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transform: none !important;
+  }
+}
+
 /* Delay helpers */
 .delay-1  { animation-delay: 0.05s; }
 .delay-2  { animation-delay: 0.10s; }

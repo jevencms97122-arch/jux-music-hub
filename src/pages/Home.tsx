@@ -59,7 +59,7 @@ function SectionHeader({
       {action && (
         <button
           onClick={action}
-          className="flex items-center gap-1 text-xs font-medium text-muted-foreground hover:text-foreground"
+          className="flex items-center gap-1 text-xs font-medium text-muted-foreground transition-[color,transform] duration-150 ease-out hover:text-foreground active:scale-90"
         >
           {actionLabel}
           <ArrowRight className="h-3 w-3" />
@@ -375,14 +375,14 @@ export default function Home() {
         <div className="flex items-center gap-2">
           <button
             onClick={() => navigate('/car-mode')}
-            className="flex h-9 w-9 items-center justify-center rounded-xl border border-border/50 bg-card/60 text-muted-foreground transition-colors hover:bg-card hover:text-foreground"
+            className="flex h-9 w-9 items-center justify-center rounded-xl border border-white/[0.06] bg-card/60 text-muted-foreground backdrop-blur-md transition-[background-color,color,transform] duration-150 ease-out hover:bg-card hover:text-foreground active:scale-90"
             aria-label="Mode voiture"
           >
             <Car className="h-4 w-4" />
           </button>
           <button
             onClick={() => navigate('/notifications')}
-            className="relative flex h-9 w-9 items-center justify-center rounded-xl border border-border/50 bg-card/60 text-muted-foreground transition-colors hover:bg-card hover:text-foreground"
+            className="relative flex h-9 w-9 items-center justify-center rounded-xl border border-white/[0.06] bg-card/60 text-muted-foreground backdrop-blur-md transition-[background-color,color,transform] duration-150 ease-out hover:bg-card hover:text-foreground active:scale-90"
             aria-label="Notifications"
           >
             <Bell className="h-4 w-4" />
@@ -395,7 +395,7 @@ export default function Home() {
           <PatchNotesSheet
             trigger={
               <button
-                className="flex h-9 w-9 items-center justify-center rounded-xl border border-border/50 bg-card/60 text-muted-foreground transition-colors hover:bg-card hover:text-foreground"
+                className="flex h-9 w-9 items-center justify-center rounded-xl border border-white/[0.06] bg-card/60 text-muted-foreground backdrop-blur-md transition-[background-color,color,transform] duration-150 ease-out hover:bg-card hover:text-foreground active:scale-90"
                 aria-label="Notes de mise à jour"
               >
                 <ScrollText className="h-4 w-4" />
@@ -404,7 +404,7 @@ export default function Home() {
           />
           <button
             onClick={() => navigate('/upload')}
-            className="flex h-9 items-center gap-1.5 rounded-xl border border-border/50 bg-card/60 px-3 text-xs font-semibold text-muted-foreground transition-colors hover:bg-card hover:text-foreground"
+            className="flex h-9 items-center gap-1.5 rounded-xl border border-white/[0.06] bg-card/60 px-3 text-xs font-semibold text-muted-foreground backdrop-blur-md transition-[background-color,color,transform] duration-150 ease-out hover:bg-card hover:text-foreground active:scale-90"
           >
             <Upload className="h-3.5 w-3.5" />
             Upload
@@ -417,10 +417,10 @@ export default function Home() {
 
       {/* Greeting */}
       <div className="relative px-4 pb-5">
-        <h1 className="text-2xl font-extrabold tracking-tight text-foreground">
+        <h1 className="text-2xl font-extrabold leading-tight tracking-[-0.02em] text-foreground">
           {hello}{profile?.pseudo ? `, ${profile.pseudo}` : ''} 👋
         </h1>
-        <p className="mt-0.5 text-sm text-muted-foreground">Découvre de nouvelles musiques</p>
+        <p className="mt-0.5 text-sm leading-snug text-muted-foreground">Découvre de nouvelles musiques</p>
       </div>
 
       {/* Stories */}
@@ -446,21 +446,21 @@ export default function Home() {
               <span className="mb-3 inline-block rounded-full border border-primary/30 bg-primary/20 px-3 py-1 text-[10px] font-bold uppercase tracking-widest text-primary backdrop-blur-sm">
                 Tendance de la semaine
               </span>
-              <h2 className="mb-1 text-2xl font-black leading-tight text-foreground md:text-4xl">
+              <h2 className="mb-1 text-2xl font-black leading-[1.05] tracking-[-0.02em] text-foreground md:text-4xl">
                 {heroSong.title}
               </h2>
               <p className="mb-5 text-sm font-medium text-muted-foreground md:text-base">{heroSong.author}</p>
               <div className="flex flex-wrap gap-3">
                 <button
                   onClick={() => playSongFromList(heroSong, songs.length > 0 ? songs : [heroSong])}
-                  className="flex items-center gap-2 rounded-full bg-gradient-primary px-6 py-3 text-sm font-bold text-primary-foreground shadow-elegant transition-all hover:shadow-glow active:scale-[0.97]"
+                  className="flex items-center gap-2 rounded-full bg-gradient-primary px-6 py-3 text-sm font-bold text-primary-foreground shadow-elegant transition-[transform,box-shadow] duration-150 ease-out hover:shadow-glow active:scale-90"
                 >
                   <Play className="h-4 w-4 fill-current" />
                   Écouter
                 </button>
                 <button
                   onClick={() => trendingLazy.ref.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })}
-                  className="flex items-center gap-2 rounded-full border border-white/20 bg-white/10 px-6 py-3 text-sm font-bold text-foreground backdrop-blur-md transition-all hover:bg-white/20 active:scale-[0.97]"
+                  className="flex items-center gap-2 rounded-full border border-white/20 bg-white/10 px-6 py-3 text-sm font-bold text-foreground backdrop-blur-md transition-[transform,background-color] duration-150 ease-out hover:bg-white/20 active:scale-90"
                 >
                   Découvrir
                 </button>
@@ -500,7 +500,7 @@ export default function Home() {
             ) : dailyMix.length > 0 && (
               <button
                 onClick={() => playSongFromList(dailyMix[0], dailyMix)}
-                className="group relative flex w-full items-center gap-4 overflow-hidden rounded-2xl bg-gradient-primary p-4 text-left shadow-elegant transition-all duration-200 hover:shadow-glow active:scale-[0.99]"
+                className="group relative flex w-full items-center gap-4 overflow-hidden rounded-2xl bg-gradient-primary p-4 text-left shadow-elegant transition-[transform,box-shadow] duration-150 ease-out hover:shadow-glow active:scale-[0.98]"
               >
                 <div className="grid h-16 w-16 flex-shrink-0 grid-cols-2 grid-rows-2 gap-0.5 overflow-hidden rounded-xl shadow-soft">
                   {dailyMix.slice(0, 4).map((s) => (
@@ -516,7 +516,7 @@ export default function Home() {
                     {dailyMix.length} titres{dailyMixGenre ? ` • Genre favori : ${dailyMixGenre}` : ''}
                   </p>
                 </div>
-                <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl bg-black/20 text-white shadow-elegant transition-all duration-200 group-hover:scale-110">
+                <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl bg-black/20 text-white shadow-elegant transition-transform duration-200 group-hover:scale-110">
                   <Play className="h-5 w-5 fill-current" />
                 </div>
               </button>
@@ -526,21 +526,21 @@ export default function Home() {
             <div className="grid grid-cols-3 gap-3">
               <button
                 onClick={() => songsLazy.ref.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })}
-                className="flex flex-col items-start gap-3 rounded-2xl border border-white/[0.06] bg-card/60 p-4 text-left transition-all hover:border-primary/30 hover:bg-card active:scale-[0.98]"
+                className="flex flex-col items-start gap-3 rounded-2xl border border-white/[0.06] bg-card/60 p-4 text-left backdrop-blur-md transition-[background-color,border-color,transform] duration-150 ease-out hover:border-primary/30 hover:bg-card active:scale-90"
               >
                 <Clock className="h-5 w-5 text-primary" />
                 <span className="text-xs font-bold leading-tight text-foreground">Nouveautés</span>
               </button>
               <button
                 onClick={() => playlistsLazy.ref.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })}
-                className="flex flex-col items-start gap-3 rounded-2xl border border-white/[0.06] bg-card/60 p-4 text-left transition-all hover:border-primary/30 hover:bg-card active:scale-[0.98]"
+                className="flex flex-col items-start gap-3 rounded-2xl border border-white/[0.06] bg-card/60 p-4 text-left backdrop-blur-md transition-[background-color,border-color,transform] duration-150 ease-out hover:border-primary/30 hover:bg-card active:scale-90"
               >
                 <ListMusic className="h-5 w-5 text-primary" />
                 <span className="text-xs font-bold leading-tight text-foreground">Playlists</span>
               </button>
               <button
                 onClick={() => trendingLazy.ref.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })}
-                className="flex flex-col items-start gap-3 rounded-2xl border border-white/[0.06] bg-card/60 p-4 text-left transition-all hover:border-primary/30 hover:bg-card active:scale-[0.98]"
+                className="flex flex-col items-start gap-3 rounded-2xl border border-white/[0.06] bg-card/60 p-4 text-left backdrop-blur-md transition-[background-color,border-color,transform] duration-150 ease-out hover:border-primary/30 hover:bg-card active:scale-90"
               >
                 <TrendingUp className="h-5 w-5 text-primary" />
                 <span className="text-xs font-bold leading-tight text-foreground">
@@ -607,7 +607,7 @@ export default function Home() {
             <button
               onClick={() => setSelectedGenre(null)}
               className={cn(
-                'flex-shrink-0 rounded-full px-3 py-1.5 text-xs font-semibold transition-all',
+                'flex-shrink-0 rounded-full px-3 py-1.5 text-xs font-semibold transition-[background-color,color,transform] duration-150 ease-out active:scale-90',
                 selectedGenre === null
                   ? 'bg-primary text-primary-foreground'
                   : 'bg-white/[0.06] text-muted-foreground border border-white/[0.08] hover:text-foreground'
@@ -620,7 +620,7 @@ export default function Home() {
                 key={g}
                 onClick={() => setSelectedGenre(selectedGenre === g ? null : g)}
                 className={cn(
-                  'flex-shrink-0 rounded-full px-3 py-1.5 text-xs font-semibold transition-all',
+                  'flex-shrink-0 rounded-full px-3 py-1.5 text-xs font-semibold transition-[background-color,color,transform] duration-150 ease-out active:scale-90',
                   selectedGenre === g
                     ? 'bg-primary text-primary-foreground'
                     : 'bg-white/[0.06] text-muted-foreground border border-white/[0.08] hover:text-foreground'
@@ -676,7 +676,7 @@ export default function Home() {
                       >
                         <div className="relative mb-1.5 aspect-square w-28 overflow-hidden rounded-xl">
                           <CachedImage src={songCoverUrl(s)} alt="" className="h-full w-full object-cover transition-transform duration-200 group-hover:scale-105" />
-                          <div className="absolute inset-0 flex items-center justify-center bg-black/0 group-hover:bg-black/30 transition-all duration-200">
+                          <div className="absolute inset-0 flex items-center justify-center bg-black/0 transition-colors duration-200 group-hover:bg-black/30">
                             <Play className="h-7 w-7 fill-white text-white opacity-0 group-hover:opacity-100 transition-opacity duration-200" />
                           </div>
                         </div>
@@ -716,7 +716,7 @@ export default function Home() {
               <button
                 key={p.id}
                 onClick={() => navigate(`/playlist/${p.id}`)}
-                className="group flex w-44 flex-shrink-0 snap-start items-center gap-3 rounded-xl border border-white/[0.06] bg-white/[0.04] p-2.5 text-left hover:border-white/10 hover:bg-white/[0.07]"
+                className="group flex w-44 flex-shrink-0 snap-start items-center gap-3 rounded-xl border border-white/[0.06] bg-white/[0.04] p-2.5 text-left backdrop-blur-md transition-[background-color,border-color,transform] duration-150 ease-out hover:border-white/10 hover:bg-white/[0.07] active:scale-[0.98]"
               >
                 <div className="flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-lg bg-gradient-primary shadow-elegant-sm">
                   <ListMusic className="h-5 w-5 text-primary-foreground" />
@@ -783,12 +783,12 @@ export default function Home() {
                   key={artist.name}
                   onClick={() => playSongFromList(artist.songs[0], artist.songs)}
                   className={cn(
-                    'group flex flex-1 flex-col items-center gap-2 rounded-2xl border bg-gradient-to-b p-3 text-center transition-all duration-200 hover:scale-[1.02] active:scale-[0.98]',
+                    'group flex flex-1 flex-col items-center gap-2 rounded-2xl border bg-gradient-to-b p-3 text-center transition-transform duration-150 ease-out hover:scale-[1.02] active:scale-[0.96]',
                     podiumBg
                   )}
                 >
                   <div className="relative">
-                    <div className="h-16 w-16 overflow-hidden rounded-full bg-muted ring-2 ring-white/10 group-hover:ring-white/20 transition-all duration-200">
+                    <div className="h-16 w-16 overflow-hidden rounded-full bg-muted ring-2 ring-white/10 transition-[box-shadow] duration-200 group-hover:ring-white/20">
                       {cover ? (
                         <CachedImage src={cover} alt={artist.name} className="h-full w-full object-cover transition-transform duration-200 group-hover:scale-110" />
                       ) : (
@@ -797,7 +797,7 @@ export default function Home() {
                         </div>
                       )}
                     </div>
-                    <div className="absolute inset-0 flex items-center justify-center rounded-full bg-black/0 group-hover:bg-black/25 transition-all duration-200">
+                    <div className="absolute inset-0 flex items-center justify-center rounded-full bg-black/0 transition-colors duration-200 group-hover:bg-black/25">
                       <Play className="h-5 w-5 fill-white text-white opacity-0 group-hover:opacity-100 transition-opacity duration-200" />
                     </div>
                   </div>
@@ -823,7 +823,7 @@ export default function Home() {
                 <button
                   key={artist.name}
                   onClick={() => playSongFromList(artist.songs[0], artist.songs)}
-                  className="group flex w-full items-center gap-3 rounded-xl bg-card/40 px-3 py-2.5 transition-colors hover:bg-card/70 active:scale-[0.99]"
+                  className="group flex w-full items-center gap-3 rounded-xl bg-card/40 px-3 py-2.5 backdrop-blur-md transition-[background-color,transform] duration-150 ease-out hover:bg-card/70 active:scale-[0.98]"
                 >
                   <span className="w-5 shrink-0 text-center text-xs font-bold text-muted-foreground">
                     {i + 4}
@@ -887,7 +887,7 @@ export default function Home() {
               <div className="mb-6 flex flex-col gap-4 lg:flex-row">
                 <button
                   onClick={() => playSongFromList(songs[0], songs)}
-                  className="group relative h-[220px] flex-grow overflow-hidden rounded-2xl text-left lg:h-[300px] lg:w-2/3"
+                  className="group relative h-[220px] flex-grow overflow-hidden rounded-2xl text-left transition-transform duration-150 ease-out active:scale-[0.98] lg:h-[300px] lg:w-2/3"
                 >
                   <CachedImage
                     src={songCoverUrl(songs[0])}
@@ -911,7 +911,7 @@ export default function Home() {
                       <button
                         key={s.id}
                         onClick={() => playSongFromList(s, songs)}
-                        className="group flex flex-1 items-center gap-3 rounded-2xl border border-white/[0.06] bg-card/60 p-3 text-left transition-all hover:border-primary/30 hover:bg-card"
+                        className="group flex flex-1 items-center gap-3 rounded-2xl border border-white/[0.06] bg-card/60 p-3 text-left transition-colors hover:border-primary/30 hover:bg-card"
                       >
                         <div className="h-16 w-16 shrink-0 overflow-hidden rounded-xl shadow-md">
                           <CachedImage src={songCoverUrl(s)} alt="" className="h-full w-full object-cover" />

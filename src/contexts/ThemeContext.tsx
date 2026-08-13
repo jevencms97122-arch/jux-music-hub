@@ -3,6 +3,12 @@ import { toast } from 'sonner';
 import { APP_THEMES, type AppTheme } from '@/themes/appThemes';
 import { storeThemeAccents } from '@/lib/dominantColor';
 import UltraBackground from '@/components/ultraThemes/UltraBackground';
+import CustomVideoBackground from '@/components/CustomVideoBackground';
+import {
+  saveCustomVideo,
+  loadCustomVideoBlob,
+  clearCustomVideo as clearCustomVideoStorage,
+} from '@/lib/customVideoTheme';
 import {
   nebulaPaletteFromHex,
   randomNebulaHex,
@@ -10,6 +16,19 @@ import {
   type NebulaColors,
 } from '@/lib/ultraNebulaPalette';
 import { SYMBOL_PRESET_DEFAULT_ID } from '@/lib/ultraSymbolPresets';
+
+export const CUSTOM_VIDEO_THEME_ID = 'custom-video';
+
+function buildCustomVideoTheme(base: AppTheme): AppTheme {
+  return {
+    ...base,
+    id: CUSTOM_VIDEO_THEME_ID,
+    name: 'Vidéo personnalisée',
+    background: 'transparent',
+    backgroundAnimation: undefined,
+    isUltra: false,
+  };
+}
 
 type ThemeContextValue = {
   themes: AppTheme[];
@@ -30,6 +49,12 @@ type ThemeContextValue = {
   nebulaColors: NebulaColors | null;
   /** Vrai quand l'app est en arrière-plan/hors focus : les animations doivent se figer */
   animPaused: boolean;
+  /** Thème "Vidéo personnalisée" — l'utilisateur choisit une vidéo, elle joue en
+   * fond et les couleurs d'accent suivent en direct sa couleur dominante. */
+  customVideoUrl: string | null;
+  hasCustomVideo: boolean;
+  setCustomVideoTheme: (file: File) => Promise<void>;
+  clearCustomVideoTheme: () => Promise<void>;
 };
 
 const ThemeContext = createContext<ThemeContextValue | null>(null);
@@ -43,6 +68,7 @@ const SYMBOL_PRESET_STORAGE_KEY = 'ultra_symbol_preset_id';
 function readSavedThemeId(): string {
   try {
     const saved = localStorage.getItem(STORAGE_KEY);
+    if (saved === CUSTOM_VIDEO_THEME_ID) return saved;
     if (saved && APP_THEMES.some((t) => t.id === saved)) return saved;
   } catch {
     // ignore
@@ -151,10 +177,40 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
   const [nebulaBaseHex, setNebulaBaseHex] = useState<string | null>(readSavedNebulaHex);
   const [nebulaSpeed, setNebulaSpeedState] = useState<number>(readSavedNebulaSpeed);
   const [symbolPresetId, setSymbolPresetState] = useState<string>(readSavedSymbolPreset);
+  const [customVideoUrl, setCustomVideoUrl] = useState<string | null>(null);
+  const [hasCustomVideo, setHasCustomVideo] = useState(false);
+  const customVideoUrlRef = useRef<string | null>(null);
+
+  const isCustomVideoActive = currentThemeId === CUSTOM_VIDEO_THEME_ID;
 
   const currentTheme = useMemo(() => {
+    if (isCustomVideoActive) return buildCustomVideoTheme(themes[0]);
     return themes.find((t) => t.id === currentThemeId) ?? themes[0];
-  }, [themes, currentThemeId]);
+  }, [themes, currentThemeId, isCustomVideoActive]);
+
+  // Charge la vidéo sauvegardée (IndexedDB) une seule fois au montage. Si le
+  // thème vidéo était actif mais qu'il n'y a plus de vidéo (stockage vidé
+  // ailleurs), on retombe sur le premier thème classique plutôt qu'un fond vide.
+  useEffect(() => {
+    let cancelled = false;
+    loadCustomVideoBlob().then((blob) => {
+      if (cancelled) return;
+      if (blob) {
+        const url = URL.createObjectURL(blob);
+        customVideoUrlRef.current = url;
+        setCustomVideoUrl(url);
+        setHasCustomVideo(true);
+      } else {
+        setHasCustomVideo(false);
+        setCurrentThemeId((id) => (id === CUSTOM_VIDEO_THEME_ID ? (themes[0]?.id ?? id) : id));
+      }
+    });
+    return () => {
+      cancelled = true;
+      if (customVideoUrlRef.current) URL.revokeObjectURL(customVideoUrlRef.current);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Applique les CSS vars + nettoie l'ancien style body
   useEffect(() => {
@@ -219,10 +275,38 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const setTheme = useCallback((id: string) => {
+    if (id === CUSTOM_VIDEO_THEME_ID) {
+      // Réactive une vidéo déjà enregistrée — s'applique instantanément, pas
+      // besoin de redémarrage contrairement aux thèmes classiques/Ultra.
+      if (!hasCustomVideo) return;
+      setCurrentThemeId(id);
+      return;
+    }
     if (!themes.some((t) => t.id === id)) return;
     setCurrentThemeId(id);
     notifyRestart();
-  }, [themes, notifyRestart]);
+  }, [themes, notifyRestart, hasCustomVideo]);
+
+  const setCustomVideoTheme = useCallback(async (file: File) => {
+    await saveCustomVideo(file);
+    if (customVideoUrlRef.current) URL.revokeObjectURL(customVideoUrlRef.current);
+    const url = URL.createObjectURL(file);
+    customVideoUrlRef.current = url;
+    setCustomVideoUrl(url);
+    setHasCustomVideo(true);
+    setCurrentThemeId(CUSTOM_VIDEO_THEME_ID);
+  }, []);
+
+  const clearCustomVideoTheme = useCallback(async () => {
+    await clearCustomVideoStorage();
+    if (customVideoUrlRef.current) {
+      URL.revokeObjectURL(customVideoUrlRef.current);
+      customVideoUrlRef.current = null;
+    }
+    setCustomVideoUrl(null);
+    setHasCustomVideo(false);
+    setCurrentThemeId((id) => (id === CUSTOM_VIDEO_THEME_ID ? (themes[0]?.id ?? id) : id));
+  }, [themes]);
 
   const setNebulaColor = useCallback((hex: string) => {
     setNebulaBaseHex(hex);
@@ -285,6 +369,10 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
       setSymbolPreset,
       nebulaColors,
       animPaused,
+      customVideoUrl,
+      hasCustomVideo,
+      setCustomVideoTheme,
+      clearCustomVideoTheme,
     }),
     [
       themes,
@@ -298,6 +386,10 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
       setNebulaSpeed,
       symbolPresetId,
       setSymbolPreset,
+      customVideoUrl,
+      hasCustomVideo,
+      setCustomVideoTheme,
+      clearCustomVideoTheme,
       nebulaColors,
       animPaused,
     ],
@@ -328,6 +420,13 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
           nebulaColors={nebulaColors}
           nebulaSpeed={nebulaSpeed}
           symbolPresetId={symbolPresetId}
+        />
+      )}
+      {isCustomVideoActive && customVideoUrl && (
+        <CustomVideoBackground
+          videoUrl={customVideoUrl}
+          paused={animPaused}
+          className="fixed inset-0 -z-10"
         />
       )}
       {children}

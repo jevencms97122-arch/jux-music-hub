@@ -22,6 +22,7 @@ import { getUserStats } from '@/lib/streaks';
 import { pb } from '@/lib/pocketbase';
 import { usePlayer } from '@/contexts/PlayerContext';
 import SongCard from '@/components/SongCard';
+import SlidingTabIndicator from '@/components/SlidingTabIndicator';
 import NativeAppSettings from '@/components/NativeAppSettings';
 import type { Song } from '@/types/music';
 import { recordToSong } from '@/lib/pbUtils';
@@ -345,8 +346,8 @@ export default function ProfilePage() {
               </div>
               <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-secondary">
                 <div
-                  className="h-full rounded-full transition-all"
-                  style={{ width: `${(rank.questsDone / rank.totalQuests) * 100}%`, backgroundColor: rank.tier.color }}
+                  className="h-full w-full origin-left rounded-full transition-transform duration-300 ease-out"
+                  style={{ transform: `scaleX(${rank.questsDone / rank.totalQuests})`, backgroundColor: rank.tier.color }}
                 />
               </div>
               <div className="mt-1.5 text-[11px] text-muted-foreground">
@@ -391,7 +392,7 @@ export default function ProfilePage() {
                       onClick={() => playSongFromList(artist.songs[0], artist.songs)}
                       className="group flex w-20 shrink-0 flex-col items-center gap-2"
                     >
-                      <div className="relative h-16 w-16 overflow-hidden rounded-full bg-muted ring-2 ring-transparent transition-all group-hover:ring-primary">
+                      <div className="relative h-16 w-16 overflow-hidden rounded-full bg-muted ring-2 ring-transparent transition-[box-shadow] group-hover:ring-primary">
                         {cover ? (
                           <CachedImage src={cover} alt={artist.name} className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-110" />
                         ) : (
@@ -399,7 +400,7 @@ export default function ProfilePage() {
                             <Mic2 className="h-6 w-6 text-muted-foreground/30" />
                           </div>
                         )}
-                        <div className="absolute inset-0 flex items-center justify-center bg-black/0 transition-all group-hover:bg-black/30">
+                        <div className="absolute inset-0 flex items-center justify-center bg-black/0 transition-colors group-hover:bg-black/30">
                           <Play className="h-5 w-5 fill-white text-white opacity-0 transition-opacity group-hover:opacity-100" />
                         </div>
                       </div>
@@ -415,16 +416,17 @@ export default function ProfilePage() {
 
       {/* ── Contenu : onglets ── */}
       <section className="relative px-5 mt-6 animate-fade-slide-up delay-4">
-        <div className="mb-4 flex rounded-2xl border border-border/50 bg-card/50 p-1">
+        <div className="relative mb-4 flex rounded-2xl border border-white/[0.06] bg-card/50 p-1 backdrop-blur-md">
           {tabs.map((t) => (
             <button
               key={t.id}
               onClick={() => setTab(t.id)}
               className={cn(
-                'flex flex-1 items-center justify-center gap-1.5 rounded-xl py-2 text-xs font-semibold transition-colors',
-                tab === t.id ? 'bg-gradient-primary text-primary-foreground shadow-elegant-sm' : 'text-muted-foreground hover:text-foreground'
+                'relative z-10 flex flex-1 items-center justify-center gap-1.5 rounded-xl py-2 text-xs font-semibold transition-colors duration-150 active:scale-95',
+                tab === t.id ? 'text-primary-foreground' : 'text-muted-foreground hover:text-foreground'
               )}
             >
+              {tab === t.id && <SlidingTabIndicator layoutId="profile-tab-indicator" />}
               <t.icon className="h-3.5 w-3.5" />
               {t.label}
               {t.count > 0 && (

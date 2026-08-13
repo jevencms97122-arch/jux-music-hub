@@ -458,12 +458,12 @@ export default function PlayerPage() {
             <button
               onClick={toggleLike}
               className={cn(
-                'rounded-xl p-2.5 transition-all duration-150 active:scale-90',
+                'rounded-xl p-2.5 transition-[background-color,color,transform] duration-150 active:scale-90',
                 isLiked ? 'text-red-400 hover:text-red-300' : 'text-muted-foreground hover:text-foreground hover:bg-white/[0.07]'
               )}
               aria-label={isLiked ? 'Retirer des favoris' : 'Ajouter aux favoris'}
             >
-              <Heart className={cn('h-5 w-5 transition-all duration-150', isLiked && 'fill-current')} />
+              <Heart className={cn('h-5 w-5 transition-colors duration-150', isLiked && 'fill-current')} />
             </button>
             <button
               onClick={() => setShowVolume(true)}
@@ -486,15 +486,19 @@ export default function PlayerPage() {
         <div className="px-6 pt-5">
           <div
             ref={progressRef}
-            className="group relative h-1.5 w-full cursor-pointer rounded-full bg-white/[0.12] hover:h-2.5 transition-all duration-150"
+            className="group relative w-full cursor-pointer py-2.5"
             onClick={handleProgressClick}
           >
+            {/* Piste visuelle : s'épaissit au survol via transform (pas de reflow) */}
+            <div className="h-1.5 w-full origin-center rounded-full bg-white/[0.12] transition-transform duration-150 ease-out group-hover:scale-y-[1.7]">
+              <div
+                className="h-full rounded-full bg-gradient-primary"
+                style={{ width: `${progress}%` }}
+              />
+            </div>
+            {/* Curseur : sibling non affecté par le scaleY de la piste */}
             <div
-              className="h-full rounded-full bg-gradient-primary"
-              style={{ width: `${progress}%` }}
-            />
-            <div
-              className="absolute top-1/2 -translate-y-1/2 h-3 w-3 rounded-full bg-foreground shadow-md opacity-0 group-hover:opacity-100 transition-opacity duration-150 -translate-x-1/2"
+              className="absolute top-1/2 -translate-y-1/2 h-3 w-3 rounded-full bg-foreground shadow-md opacity-0 transition-opacity duration-150 -translate-x-1/2 group-hover:opacity-100"
               style={{ left: `${progress}%` }}
             />
           </div>
@@ -509,7 +513,7 @@ export default function PlayerPage() {
           <button
             onClick={toggleShuffle}
             className={cn(
-              'rounded-xl p-2.5 transition-all duration-150',
+              'rounded-xl p-2.5 transition-colors duration-150',
               isShuffled ? 'bg-primary/15 text-primary' : 'text-muted-foreground hover:text-foreground hover:bg-white/[0.07]'
             )}
           >
@@ -525,7 +529,7 @@ export default function PlayerPage() {
 
           <button
             onClick={togglePlay}
-            className="flex h-16 w-16 items-center justify-center rounded-2xl bg-gradient-primary text-primary-foreground shadow-elegant hover:shadow-glow active:scale-95 transition-all duration-150"
+            className="flex h-16 w-16 items-center justify-center rounded-2xl bg-gradient-primary text-primary-foreground shadow-elegant transition-[box-shadow,transform] duration-150 hover:shadow-glow active:scale-95"
             aria-label={isBuffering ? 'Chargement' : isPlaying ? 'Pause' : 'Play'}
           >
             {isBuffering
@@ -545,7 +549,7 @@ export default function PlayerPage() {
           <button
             onClick={cycleRepeat}
             className={cn(
-              'relative rounded-xl p-2.5 transition-all duration-150',
+              'relative rounded-xl p-2.5 transition-colors duration-150',
               repeatMode !== 'off' ? 'bg-primary/15 text-primary' : 'text-muted-foreground hover:text-foreground hover:bg-white/[0.07]'
             )}
           >

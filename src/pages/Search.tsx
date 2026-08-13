@@ -12,6 +12,7 @@ import { cn } from '@/lib/utils';
 import type { Song } from '@/types/music';
 import { recordToSong } from '@/lib/pbUtils';
 import { useSeo } from '@/lib/useSeo';
+import SlidingTabIndicator from '@/components/SlidingTabIndicator';
 
 interface UserResult {
   id: string;
@@ -201,16 +202,17 @@ export default function Search() {
           </p>
 
           {/* Onglets */}
-          <div className="mb-4 flex rounded-2xl border border-border/50 bg-card/50 p-1">
+          <div className="relative mb-4 flex rounded-2xl border border-white/[0.06] bg-card/50 p-1 backdrop-blur-md">
             {tabs.map((t) => (
               <button
                 key={t.id}
                 onClick={() => setTab(t.id)}
                 className={cn(
-                  'flex flex-1 items-center justify-center gap-1.5 rounded-xl py-2 text-xs font-semibold transition-colors',
-                  tab === t.id ? 'bg-gradient-primary text-primary-foreground shadow-elegant-sm' : 'text-muted-foreground hover:text-foreground'
+                  'relative z-10 flex flex-1 items-center justify-center gap-1.5 rounded-xl py-2 text-xs font-semibold transition-colors duration-150 active:scale-95',
+                  tab === t.id ? 'text-primary-foreground' : 'text-muted-foreground hover:text-foreground'
                 )}
               >
+                {tab === t.id && <SlidingTabIndicator layoutId="search-tab-indicator" />}
                 <t.icon className="h-3.5 w-3.5" />
                 {t.label}
                 {searched && t.count > 0 && (

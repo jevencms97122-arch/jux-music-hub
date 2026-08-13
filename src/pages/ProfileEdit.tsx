@@ -173,7 +173,7 @@ export default function ProfileEdit({ onBack }: Props) {
           className={cn(
             'flex items-center gap-1.5 rounded-xl px-3.5 py-2 text-sm font-semibold',
             'bg-gradient-primary text-primary-foreground shadow-elegant-sm',
-            'hover:shadow-glow active:scale-[0.97] transition-all duration-150',
+            'hover:shadow-glow active:scale-[0.97] transition-[box-shadow,transform] duration-150',
             'disabled:opacity-40 disabled:cursor-not-allowed'
           )}
         >
@@ -336,7 +336,7 @@ export default function ProfileEdit({ onBack }: Props) {
                 {/* Preview progress bar */}
                 {previewPlaying && (
                   <div className="h-1 rounded-full bg-white/10 overflow-hidden">
-                    <div className="h-full bg-primary rounded-full transition-all" style={{ width: `${previewProgress * 100}%` }} />
+                    <div className="h-full w-full origin-left rounded-full bg-primary transition-transform duration-150 ease-linear" style={{ transform: `scaleX(${previewProgress})` }} />
                   </div>
                 )}
 

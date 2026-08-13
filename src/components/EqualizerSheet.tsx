@@ -26,7 +26,7 @@ export default function EqualizerSheet({ open, onClose }: Props) {
                 key={preset.id}
                 onClick={() => { setEqPreset(preset.id); onClose(); }}
                 className={cn(
-                  'flex items-center gap-3 rounded-2xl px-4 py-3.5 transition-all duration-150 text-left',
+                  'flex items-center gap-3 rounded-2xl px-4 py-3.5 transition-[background-color,box-shadow] duration-150 text-left',
                   active
                     ? 'bg-primary/15 ring-1 ring-primary/40'
                     : 'bg-card/60 hover:bg-card/80'

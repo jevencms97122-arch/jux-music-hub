@@ -3,6 +3,8 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { pb } from '@/lib/pocketbase';
 import { useAuth } from '@/contexts/AuthContext';
 import { Headphones } from 'lucide-react';
+import { armVulkanOnceAndRelaunch } from '@/lib/gpuAcceleration';
+import { getPlatform } from '@/lib/platform';
 
 interface LiveFriend {
   pseudo: string;
@@ -58,6 +60,31 @@ export default function SplashScreen({ onComplete, onDismiss }: Props) {
     const t = setTimeout(() => setWidgetVisible(false), hideIn);
     return () => clearTimeout(t);
   }, [liveFriend]);
+
+  // Combo secret (Ctrl+Alt+V) pendant l'animation de démarrage : relance l'app
+  // en Vulkan pour ce seul lancement (voir gpuAcceleration.ts — one-shot, à
+  // refaire à chaque fois, pour ne jamais rester bloqué si le pilote ne suit pas).
+  const vulkanTriggeredRef = useRef(false);
+  useEffect(() => {
+    if (!splashVisible) return;
+    let cancelled = false;
+    let cleanup: (() => void) | undefined;
+    getPlatform().then((platform) => {
+      // Mode développeur GPU réservé à Windows (ANGLE/Direct3D) — le combo n'a
+      // aucun effet ailleurs, inutile d'écouter les touches sur les autres OS.
+      if (cancelled || platform !== 'windows') return;
+      const onKeyDown = (e: KeyboardEvent) => {
+        if (vulkanTriggeredRef.current) return;
+        if (e.ctrlKey && e.altKey && e.key.toLowerCase() === 'v') {
+          vulkanTriggeredRef.current = true;
+          void armVulkanOnceAndRelaunch();
+        }
+      };
+      window.addEventListener('keydown', onKeyDown);
+      cleanup = () => window.removeEventListener('keydown', onKeyDown);
+    });
+    return () => { cancelled = true; cleanup?.(); };
+  }, [splashVisible]);
 
   // Fetch présences — même logique que Social.tsx
   useEffect(() => {

@@ -4,7 +4,7 @@ import { isTauri } from '@tauri-apps/api/core';
 import { getVersion } from '@tauri-apps/api/app';
 import { check, type Update } from '@tauri-apps/plugin-updater';
 import { relaunch } from '@tauri-apps/plugin-process';
-import { updatePb } from '@/lib/updatePocketbase';
+import { updatePb, getUpdatePbUrl } from '@/lib/updatePocketbase';
 import { getDetectedPlatform } from '@/lib/versionCheck';
 import { UPDATE_TRANSITION_KEY } from '@/lib/updateTransition';
 import { Info, Monitor, Smartphone, Globe, RefreshCw, Download, CheckCircle2 } from 'lucide-react';
@@ -24,6 +24,12 @@ const PLATFORM_TO_UPDATE_FIELD: Record<string, string> = {
 
 type CheckPhase = 'idle' | 'checking' | 'up-to-date' | 'available' | 'downloading' | 'installing' | 'error';
 
+interface AndroidUpdateInfo {
+  version: string;
+  notes: string | null;
+  url: string;
+}
+
 export default function AppInfoSheet({ trigger }: { trigger: React.ReactNode }) {
   const [open, setOpen] = useState(false);
   const [version, setVersion] = useState<string | null>(null);
@@ -32,11 +38,13 @@ export default function AppInfoSheet({ trigger }: { trigger: React.ReactNode }) 
 
   const [checkPhase, setCheckPhase] = useState<CheckPhase>('idle');
   const [availableUpdate, setAvailableUpdate] = useState<Update | null>(null);
+  const [androidUpdate, setAndroidUpdate] = useState<AndroidUpdateInfo | null>(null);
   const [progress, setProgress] = useState(0);
   const [checkError, setCheckError] = useState<string | null>(null);
 
   const platformKey = getDetectedPlatform() === 'android-app' ? 'android-app' : isTauri() ? 'windows-app' : 'web';
   const platformInfo = PLATFORM_LABELS[platformKey] ?? PLATFORM_LABELS.web;
+  const isAndroid = platformKey === 'android-app';
 
   useEffect(() => {
     if (!open) return;
@@ -69,6 +77,33 @@ export default function AppInfoSheet({ trigger }: { trigger: React.ReactNode }) 
   }, [open]);
 
   const handleCheckForUpdate = useCallback(async () => {
+    if (isAndroid) {
+      // tauri-plugin-updater ne supporte pas Android — on interroge directement le
+      // même backend PocketBase que Windows via le pont natif JuxAndroid pour le
+      // téléchargement + l'ouverture de l'écran d'installation système.
+      setCheckPhase('checking');
+      setCheckError(null);
+      try {
+        const v = await getVersion();
+        const res = await fetch(`${getUpdatePbUrl()}/api/jux-updater/android/universal/${v}`);
+        if (res.status === 204) {
+          setAndroidUpdate(null);
+          setCheckPhase('up-to-date');
+          return;
+        }
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const data = await res.json();
+        setAndroidUpdate({ version: data.version, notes: data.notes ?? null, url: data.url });
+        setCheckPhase('available');
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e);
+        console.error('[AppInfoSheet] Android check failed:', msg, e);
+        setCheckError(msg);
+        setCheckPhase('error');
+      }
+      return;
+    }
+
     if (!isTauri()) return;
     setCheckPhase('checking');
     setCheckError(null);
@@ -87,9 +122,19 @@ export default function AppInfoSheet({ trigger }: { trigger: React.ReactNode }) 
       setCheckError(msg);
       setCheckPhase('error');
     }
-  }, []);
+  }, [isAndroid]);
 
   const handleInstallUpdate = useCallback(async () => {
+    if (isAndroid) {
+      if (!androidUpdate || !window.JuxAndroid?.downloadAndInstallApk) return;
+      // Le téléchargement (notification système native) et l'ouverture de l'écran
+      // d'installation sont entièrement gérés côté Kotlin (JuxMediaBridge.kt) — pas
+      // de progression exploitable ici, la notification système en tient lieu.
+      window.JuxAndroid.downloadAndInstallApk(androidUpdate.url);
+      setCheckPhase('installing');
+      return;
+    }
+
     if (!availableUpdate) return;
     setCheckPhase('downloading');
     setProgress(0);
@@ -123,7 +168,7 @@ export default function AppInfoSheet({ trigger }: { trigger: React.ReactNode }) 
       setCheckError(msg);
       setCheckPhase('error');
     }
-  }, [availableUpdate]);
+  }, [availableUpdate, androidUpdate, isAndroid]);
 
   return (
     <Sheet open={open} onOpenChange={setOpen}>
@@ -196,14 +241,16 @@ export default function AppInfoSheet({ trigger }: { trigger: React.ReactNode }) 
                 </>
               )}
 
-              {checkPhase === 'available' && availableUpdate && (
+              {checkPhase === 'available' && (isAndroid ? androidUpdate : availableUpdate) && (
                 <>
                   <p className="text-center text-sm font-semibold text-amber-400">
-                    Mise à jour {availableUpdate.version} disponible
+                    Mise à jour {isAndroid ? androidUpdate!.version : availableUpdate!.version} disponible
                   </p>
-                  {availableUpdate.body && (
+                  {(isAndroid ? androidUpdate!.notes : availableUpdate!.body) && (
                     <div className="rounded-xl bg-secondary/50 p-3 max-h-32 overflow-y-auto">
-                      <p className="text-xs leading-relaxed text-foreground whitespace-pre-line">{availableUpdate.body}</p>
+                      <p className="text-xs leading-relaxed text-foreground whitespace-pre-line">
+                        {isAndroid ? androidUpdate!.notes : availableUpdate!.body}
+                      </p>
                     </div>
                   )}
                   <Button size="sm" className="w-full gap-2" onClick={handleInstallUpdate}>
@@ -216,14 +263,18 @@ export default function AppInfoSheet({ trigger }: { trigger: React.ReactNode }) 
               {checkPhase === 'downloading' && (
                 <div className="space-y-2">
                   <div className="h-2 w-full overflow-hidden rounded-full bg-secondary">
-                    <div className="h-full bg-primary transition-all" style={{ width: `${progress}%` }} />
+                    <div className="h-full w-full origin-left bg-primary transition-transform duration-150 ease-linear" style={{ transform: `scaleX(${progress / 100})` }} />
                   </div>
                   <p className="text-center text-xs text-muted-foreground">Téléchargement... {progress}%</p>
                 </div>
               )}
 
               {checkPhase === 'installing' && (
-                <p className="text-center text-xs text-muted-foreground">Installation en cours, redémarrage...</p>
+                <p className="text-center text-xs text-muted-foreground">
+                  {isAndroid
+                    ? "Téléchargement en cours (voir la notification) — l'écran d'installation s'ouvrira automatiquement."
+                    : 'Installation en cours, redémarrage...'}
+                </p>
               )}
 
               {checkPhase === 'error' && (

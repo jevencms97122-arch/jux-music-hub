@@ -10,6 +10,7 @@ import { Input } from '@/components/ui/input';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { cn } from '@/lib/utils';
 import TabFade from '@/components/TabFade';
+import SlidingTabIndicator from '@/components/SlidingTabIndicator';
 import type { Playlist } from '@/types/music';
 import { fetchPlaylistCovers } from '@/lib/playlistCovers';
 import PlaylistCoverMosaic from '@/components/PlaylistCoverMosaic';
@@ -132,17 +133,17 @@ export default function Playlists() {
 
       {/* ── Header ── */}
       <header className="relative flex items-center gap-2 px-5 pt-6 animate-fade-slide-up">
-        <Button variant="ghost" size="icon" aria-label="Retour" onClick={() => navigate(-1)}>
+        <Button variant="ghost" size="icon" aria-label="Retour" className="transition-transform duration-150 active:scale-90" onClick={() => navigate(-1)}>
           <ArrowLeft className="h-5 w-5" />
         </Button>
-        <h1 className="text-2xl font-extrabold tracking-tight">Playlists</h1>
+        <h1 className="text-2xl font-extrabold leading-tight tracking-[-0.02em]">Playlists</h1>
       </header>
 
       {/* ── Titres likés — playlist virtuelle mise en avant ── */}
       <section className="relative px-5 mt-5 animate-fade-slide-up delay-1">
         <button
           onClick={() => navigate('/favorites')}
-          className="group flex w-full items-center gap-4 rounded-2xl border border-border/50 bg-card/60 p-3.5 text-left transition-colors hover:bg-card active:scale-[0.99]"
+          className="group flex w-full items-center gap-4 rounded-2xl border border-white/[0.06] bg-card/60 p-3.5 text-left backdrop-blur-md transition-[background-color,transform] duration-150 ease-out hover:bg-card active:scale-[0.98]"
         >
           <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-red-500 to-rose-400 shadow-soft">
             <Heart className="h-6 w-6 fill-white text-white" />
@@ -161,16 +162,17 @@ export default function Playlists() {
       {/* ── Onglets ── */}
       <section className="relative px-5 mt-5 animate-fade-slide-up delay-2">
         <div className="mb-4 flex items-center gap-2.5">
-          <div className="flex flex-1 rounded-2xl border border-border/50 bg-card/50 p-1">
+          <div className="relative flex flex-1 rounded-2xl border border-white/[0.06] bg-card/50 p-1 backdrop-blur-md">
             {tabs.map((t) => (
               <button
                 key={t.id}
                 onClick={() => setTab(t.id)}
                 className={cn(
-                  'flex flex-1 items-center justify-center gap-1.5 rounded-xl py-2 text-xs font-semibold transition-colors',
-                  tab === t.id ? 'bg-gradient-primary text-primary-foreground shadow-elegant-sm' : 'text-muted-foreground hover:text-foreground'
+                  'relative z-10 flex flex-1 items-center justify-center gap-1.5 rounded-xl py-2 text-xs font-semibold transition-colors duration-150 active:scale-95',
+                  tab === t.id ? 'text-primary-foreground' : 'text-muted-foreground hover:text-foreground'
                 )}
               >
+                {tab === t.id && <SlidingTabIndicator layoutId="playlists-tab-indicator" />}
                 <t.icon className="h-3.5 w-3.5" />
                 {t.label}
                 {t.count > 0 && (
@@ -183,7 +185,7 @@ export default function Playlists() {
           </div>
           <Dialog open={createOpen} onOpenChange={setCreateOpen}>
             <DialogTrigger asChild>
-              <Button size="icon" className="h-[38px] w-[38px] shrink-0 rounded-xl bg-gradient-primary shadow-elegant-sm" aria-label="Créer une playlist">
+              <Button size="icon" className="h-[38px] w-[38px] shrink-0 rounded-xl bg-gradient-primary shadow-elegant-sm transition-transform duration-150 active:scale-90" aria-label="Créer une playlist">
                 <Plus className="h-4 w-4" />
               </Button>
             </DialogTrigger>
@@ -265,10 +267,10 @@ function PlaylistGrid({ playlists, onOpen, showVisibility, coversMap }: { playli
         <button
           key={p.id}
           onClick={() => onOpen(p.id)}
-          className="group flex flex-col items-start gap-2.5 text-left animate-card-in"
+          className="group flex flex-col items-start gap-2.5 text-left animate-card-in transition-transform duration-150 ease-out active:scale-[0.97]"
           style={{ animationDelay: `${Math.min(i, 12) * 30}ms` }}
         >
-          <div className="relative aspect-square w-full overflow-hidden rounded-xl bg-gradient-primary shadow-card transition-all duration-300 group-hover:shadow-glow group-hover:scale-[1.03]">
+          <div className="relative aspect-square w-full overflow-hidden rounded-xl bg-gradient-primary shadow-card transition-[box-shadow,transform] duration-300 group-hover:shadow-glow group-hover:scale-[1.03]">
             {covers.length > 0 ? (
               <PlaylistCoverMosaic covers={covers} />
             ) : (
@@ -276,7 +278,7 @@ function PlaylistGrid({ playlists, onOpen, showVisibility, coversMap }: { playli
                 <ListMusic className="h-10 w-10 text-primary-foreground/80" />
               </div>
             )}
-            <div className="absolute inset-0 flex items-center justify-center bg-black/0 opacity-0 transition-all duration-250 group-hover:bg-black/30 group-hover:opacity-100">
+            <div className="absolute inset-0 flex items-center justify-center bg-black/0 opacity-0 transition-[background-color,opacity] duration-250 group-hover:bg-black/30 group-hover:opacity-100">
               <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-white text-black shadow-elegant">
                 <Play className="ml-0.5 h-5 w-5 fill-current" />
               </div>
@@ -304,7 +306,7 @@ function PlaylistGrid({ playlists, onOpen, showVisibility, coversMap }: { playli
 
 function EmptyState({ icon, title, subtitle, action }: { icon: React.ReactNode; title: string; subtitle: string; action?: React.ReactNode }) {
   return (
-    <div className="flex flex-col items-center gap-2 rounded-2xl border border-dashed border-border/60 bg-card/30 px-6 py-10 text-center">
+    <div className="flex flex-col items-center gap-2 rounded-2xl border border-dashed border-border/60 bg-card/30 px-6 py-10 text-center backdrop-blur-md">
       <div className="mb-1 flex h-12 w-12 items-center justify-center rounded-2xl bg-primary/10">{icon}</div>
       <p className="text-sm font-bold">{title}</p>
       <p className="text-xs text-muted-foreground">{subtitle}</p>

@@ -146,7 +146,7 @@ export default function Login() {
                   disabled={loading || !emailValid || !password}
                   className={cn(
                     'mt-2 flex h-11 w-full items-center justify-center rounded-xl bg-gradient-primary text-sm font-semibold text-primary-foreground shadow-elegant-sm',
-                    'transition-all duration-150 hover:shadow-glow active:scale-[0.98]',
+                    'transition-[box-shadow,transform] duration-150 hover:shadow-glow active:scale-[0.98]',
                     'disabled:cursor-not-allowed disabled:opacity-40'
                   )}
                 >

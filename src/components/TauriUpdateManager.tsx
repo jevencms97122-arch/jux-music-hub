@@ -141,7 +141,7 @@ export default function TauriUpdateManager() {
         {phase === 'downloading' && (
           <div className="space-y-2">
             <div className="h-2 w-full overflow-hidden rounded-full bg-secondary">
-              <div className="h-full bg-primary transition-all" style={{ width: `${progress}%` }} />
+              <div className="h-full w-full origin-left bg-primary transition-transform duration-150 ease-linear" style={{ transform: `scaleX(${progress / 100})` }} />
             </div>
             <p className="text-center text-xs text-muted-foreground">Téléchargement... {progress}%</p>
           </div>
@@ -186,7 +186,7 @@ function UpdateProgressOverlay({
         {phase === 'downloading' && (
           <div className="space-y-2">
             <div className="h-2 w-full overflow-hidden rounded-full bg-secondary">
-              <div className="h-full bg-primary transition-all" style={{ width: `${progress}%` }} />
+              <div className="h-full w-full origin-left bg-primary transition-transform duration-150 ease-linear" style={{ transform: `scaleX(${progress / 100})` }} />
             </div>
             <p className="text-center text-xs text-muted-foreground">Téléchargement... {progress}%</p>
           </div>

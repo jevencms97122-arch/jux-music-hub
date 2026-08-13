@@ -3,6 +3,14 @@ mod discord;
 use discord::{DiscordHandle, PresenceData};
 use tauri::{Emitter, Manager, State};
 
+/// Plateforme native ("windows", "linux", "macos", "android", "ios") — utilisé
+/// côté JS pour n'afficher les réglages spécifiques (mode développeur GPU,
+/// rester actif en arrière-plan…) que sur les plateformes où ils ont un sens.
+#[tauri::command]
+fn get_platform() -> &'static str {
+    std::env::consts::OS
+}
+
 /// Notification "nouveau message" cliquable — le plugin tauri-plugin-notification
 /// standard ne remonte pas les clics sur Windows (seulement Android/iOS), donc on
 /// construit le toast nous-mêmes via tauri-winrt-notification pour pouvoir écouter
@@ -211,6 +219,140 @@ fn set_close_to_tray(state: State<AppState>, enabled: bool) {
     *state.close_to_tray.lock().unwrap() = enabled;
 }
 
+/// Dossier des préférences GPU — doit être lisible AVANT la création de la
+/// fenêtre (donc avant que le JS ne tourne), impossible de passer par localStorage.
+#[cfg(windows)]
+fn gpu_pref_dir(app: &tauri::AppHandle) -> Option<std::path::PathBuf> {
+    app.path().app_config_dir().ok()
+}
+
+#[cfg(windows)]
+fn gpu_pref_file(app: &tauri::AppHandle, name: &str) -> Option<std::path::PathBuf> {
+    gpu_pref_dir(app).map(|dir| dir.join(name))
+}
+
+#[cfg(windows)]
+fn write_gpu_pref(app: &tauri::AppHandle, name: &str, content: &str) {
+    if let Some(path) = gpu_pref_file(app, name) {
+        if let Some(parent) = path.parent() {
+            let _ = std::fs::create_dir_all(parent);
+        }
+        let _ = std::fs::write(path, content);
+    }
+}
+
+#[cfg(windows)]
+fn read_gpu_pref(app: &tauri::AppHandle, name: &str) -> Option<String> {
+    gpu_pref_file(app, name)
+        .and_then(|p| std::fs::read_to_string(p).ok())
+        .map(|s| s.trim().to_string())
+}
+
+/// Sauvegarde la préférence d'accélération GPU. Ne prend effet qu'au prochain
+/// démarrage (les arguments du navigateur WebView2 sont figés à sa création).
+#[cfg(windows)]
+#[tauri::command]
+fn set_gpu_acceleration(app: tauri::AppHandle, enabled: bool) {
+    write_gpu_pref(&app, "gpu_accel.txt", if enabled { "1" } else { "0" });
+}
+
+#[cfg(not(windows))]
+#[tauri::command]
+fn set_gpu_acceleration(_app: tauri::AppHandle, _enabled: bool) {}
+
+#[cfg(windows)]
+fn read_gpu_acceleration_pref(app: &tauri::AppHandle) -> bool {
+    read_gpu_pref(app, "gpu_accel.txt")
+        .map(|s| s == "1")
+        // Par défaut activé : WebView2 utilise déjà le rendu GPU sauf si le
+        // pilote est sur la liste noire de Chromium — on force ce cas-là aussi.
+        .unwrap_or(true)
+}
+
+/// Backend ANGLE (traducteur Chromium → API graphique native) : "d3d11" (par
+/// défaut), "d3d11on12" ou "d3d9" pour la compatibilité avec du matériel plus ancien.
+#[cfg(windows)]
+#[tauri::command]
+fn set_gpu_backend(app: tauri::AppHandle, backend: String) {
+    write_gpu_pref(&app, "gpu_backend.txt", &backend);
+}
+
+#[cfg(not(windows))]
+#[tauri::command]
+fn set_gpu_backend(_app: tauri::AppHandle, _backend: String) {}
+
+/// Préférence d'adaptateur GPU sur machine à double carte (portable) : "auto",
+/// "high" (dédiée) ou "low" (intégrée, économie d'énergie).
+#[cfg(windows)]
+#[tauri::command]
+fn set_gpu_adapter(app: tauri::AppHandle, pref: String) {
+    write_gpu_pref(&app, "gpu_adapter.txt", &pref);
+}
+
+#[cfg(not(windows))]
+#[tauri::command]
+fn set_gpu_adapter(_app: tauri::AppHandle, _pref: String) {}
+
+/// Arme un passage en Vulkan pour le TOUT PROCHAIN démarrage uniquement — le
+/// marqueur est consommé (supprimé) dès sa lecture au démarrage suivant, qu'il
+/// ait servi ou non. Le support Vulkan d'ANGLE sur Windows est expérimental :
+/// si ça plante en boucle, un simple relancement retombe automatiquement sur le
+/// backend Direct3D habituel au lieu de rester bloqué en Vulkan pour toujours.
+#[cfg(windows)]
+#[tauri::command]
+fn arm_vulkan_once(app: tauri::AppHandle) {
+    write_gpu_pref(&app, "gpu_vulkan_once.txt", "1");
+}
+
+#[cfg(not(windows))]
+#[tauri::command]
+fn arm_vulkan_once(_app: tauri::AppHandle) {}
+
+/// Lit puis consomme immédiatement le marqueur Vulkan one-shot.
+#[cfg(windows)]
+fn take_vulkan_once(app: &tauri::AppHandle) -> bool {
+    let Some(path) = gpu_pref_file(app, "gpu_vulkan_once.txt") else { return false };
+    let armed = path.exists();
+    let _ = std::fs::remove_file(&path);
+    armed
+}
+
+/// Construit la chaîne d'arguments navigateur WebView2 à partir de toutes les
+/// préférences GPU sauvegardées. Le Vulkan one-shot est prioritaire sur le choix
+/// de backend Direct3D habituel puisqu'il ne concerne que ce seul lancement.
+#[cfg(windows)]
+fn build_browser_args(app: &tauri::AppHandle) -> String {
+    let mut args = String::from("--disable-features=HardwareMediaKeyHandling,MediaSessionService");
+
+    if !read_gpu_acceleration_pref(app) {
+        args.push_str(" --disable-gpu");
+        // Le one-shot Vulkan n'a de sens que si l'accélération est activée —
+        // on le consomme quand même pour ne pas le laisser traîner indéfiniment.
+        take_vulkan_once(app);
+        return args;
+    }
+
+    args.push_str(" --ignore-gpu-blocklist --enable-gpu-rasterization --enable-zero-copy");
+
+    match read_gpu_pref(app, "gpu_adapter.txt").as_deref() {
+        Some("high") => args.push_str(" --force_high_performance_gpu"),
+        Some("low") => args.push_str(" --force_low_power_gpu"),
+        _ => {}
+    }
+
+    if take_vulkan_once(app) {
+        args.push_str(" --use-angle=vulkan");
+    } else {
+        match read_gpu_pref(app, "gpu_backend.txt").as_deref() {
+            Some("d3d11on12") => args.push_str(" --use-angle=d3d11on12"),
+            Some("d3d9") => args.push_str(" --use-angle=d3d9"),
+            _ => args.push_str(" --use-angle=d3d11"),
+        }
+    }
+
+    args
+}
+
 #[tauri::command]
 fn discord_update_presence(
     state: State<AppState>,
@@ -300,14 +442,36 @@ pub fn run() {
             smtc_player: std::sync::Mutex::new(None),
         })
         .invoke_handler(tauri::generate_handler![
+            get_platform,
             discord_update_presence,
             discord_clear_presence,
             show_chat_notification,
             set_close_to_tray,
+            set_gpu_acceleration,
+            set_gpu_backend,
+            set_gpu_adapter,
+            arm_vulkan_once,
             smtc_update,
             smtc_clear
         ])
         .setup(|app| {
+            // La fenêtre "main" n'est plus déclarée dans tauri.conf.json sur Windows
+            // (voir tauri.windows.conf.json : "windows": []) — on la construit ici
+            // pour pouvoir choisir les additional_browser_args selon la préférence
+            // GPU de l'utilisateur, décidée avant que WebView2 ne soit initialisé.
+            #[cfg(windows)]
+            {
+                let browser_args = build_browser_args(app.handle());
+
+                tauri::WebviewWindowBuilder::new(app, "main", tauri::WebviewUrl::App("index.html".into()))
+                    .title("Nexora Music")
+                    .inner_size(1280.0, 820.0)
+                    .min_inner_size(400.0, 600.0)
+                    .background_color(tauri::webview::Color(0x12, 0x12, 0x12, 255))
+                    .additional_browser_args(&browser_args)
+                    .build()?;
+            }
+
             #[cfg(desktop)]
             {
                 use tauri::menu::{Menu, MenuItem};

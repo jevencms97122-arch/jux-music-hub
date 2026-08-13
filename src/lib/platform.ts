@@ -36,6 +36,9 @@ declare global {
       updateNowPlaying?: (json: string) => void;
       /** Efface la notification système */
       clearNowPlaying?: () => void;
+      /** Télécharge l'APK (notification système native) puis ouvre l'écran d'installation
+       * dès que c'est terminé — voir JuxMediaBridge.kt. */
+      downloadAndInstallApk?: (url: string) => void;
     };
     JuxDesktop?: {
       downloadSong: (payload: unknown) => void | Promise<void>;
@@ -153,4 +156,37 @@ if (typeof window !== 'undefined') {
   try {
     window.JuxDesktop?.onDownloadProgress?.((e) => emit(e));
   } catch { /* noop */ }
+}
+
+/* ── Détection OS native précise (côté Rust) ─────────────────────
+ * Complète detectPlatform() ci-dessus (qui distingue juste app/web) avec
+ * l'OS exact ("windows", "linux", "macos", "android", "ios"), nécessaire
+ * pour n'afficher certains réglages (mode développeur GPU…) que là où ils
+ * ont un sens. */
+import { invoke, isTauri } from '@tauri-apps/api/core';
+
+export type NativePlatform = 'windows' | 'linux' | 'macos' | 'android' | 'ios';
+
+let cachedNativePlatform: NativePlatform | null = null;
+let pendingNativePlatform: Promise<NativePlatform | null> | null = null;
+
+/** Plateforme native détectée côté Rust (std::env::consts::OS) — `null` hors
+ * Tauri (web) ou tant que la valeur n'a pas encore été récupérée. */
+export function getPlatform(): Promise<NativePlatform | null> {
+  if (!isTauri()) return Promise.resolve(null);
+  if (cachedNativePlatform) return Promise.resolve(cachedNativePlatform);
+  if (!pendingNativePlatform) {
+    pendingNativePlatform = invoke<string>('get_platform')
+      .then((p) => { cachedNativePlatform = p as NativePlatform; return cachedNativePlatform; })
+      .catch(() => null);
+  }
+  return pendingNativePlatform;
+}
+
+export function isDesktopPlatform(p: NativePlatform | null): boolean {
+  return p === 'windows' || p === 'linux' || p === 'macos';
+}
+
+export function isWindowsPlatform(p: NativePlatform | null): boolean {
+  return p === 'windows';
 }

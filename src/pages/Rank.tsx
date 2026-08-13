@@ -81,8 +81,8 @@ export default function Rank() {
               </div>
               <div className="h-2.5 w-full overflow-hidden rounded-full bg-secondary">
                 <div
-                  className="h-full rounded-full transition-all"
-                  style={{ width: `${(questsDone / totalQuests) * 100}%`, backgroundColor: tier.color }}
+                  className="h-full w-full origin-left rounded-full transition-transform duration-300 ease-out"
+                  style={{ transform: `scaleX(${questsDone / totalQuests})`, backgroundColor: tier.color }}
                 />
               </div>
               <p className="mt-2 text-[11px] text-muted-foreground">

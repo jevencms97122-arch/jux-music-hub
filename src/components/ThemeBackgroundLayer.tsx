@@ -1,5 +1,6 @@
-import { useTheme } from '@/contexts/ThemeContext';
+import { useTheme, CUSTOM_VIDEO_THEME_ID } from '@/contexts/ThemeContext';
 import UltraBackground from '@/components/ultraThemes/UltraBackground';
+import CustomVideoBackground from '@/components/CustomVideoBackground';
 
 /**
  * Repeint le fond du thème actif (animé ou Ultra) localement, à l'intérieur d'un
@@ -9,7 +10,12 @@ import UltraBackground from '@/components/ultraThemes/UltraBackground';
  * transparaîtraient sinon. On repeint donc le thème par-dessus une base opaque.
  */
 export default function ThemeBackgroundLayer() {
-  const { currentTheme, nebulaColors, nebulaSpeed, symbolPresetId, animPaused } = useTheme();
+  const { currentTheme, nebulaColors, nebulaSpeed, symbolPresetId, animPaused, customVideoUrl } = useTheme();
+
+  if (currentTheme.id === CUSTOM_VIDEO_THEME_ID) {
+    if (!customVideoUrl) return null;
+    return <CustomVideoBackground videoUrl={customVideoUrl} paused={animPaused} className="absolute inset-0" />;
+  }
 
   if (currentTheme.isUltra) {
     return (

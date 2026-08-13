@@ -3,6 +3,40 @@
 
 const cache = new Map<string, string>();
 
+export type HslTriplet = [h: number, s: number, l: number];
+
+/** "H S% L%" → [h, s, l]. Utilisé pour interpoler en douceur entre deux couleurs
+ * (les variables CSS --primary etc. sont des triplets bruts, pas des <color>
+ * valides : @property/transition CSS ne peut donc pas les animer nativement). */
+export function parseHslTriplet(hsl: string): HslTriplet | null {
+  const m = hsl.match(/^(\d+(?:\.\d+)?) (\d+(?:\.\d+)?)% (\d+(?:\.\d+)?)%$/);
+  if (!m) return null;
+  return [parseFloat(m[1]), parseFloat(m[2]), parseFloat(m[3])];
+}
+
+export function formatHslTriplet([h, s, l]: HslTriplet): string {
+  return `${Math.round(h)} ${Math.round(s)}% ${Math.round(l)}%`;
+}
+
+/** Interpolation teinte par le chemin le plus court (évite de traverser toute
+ * la roue chromatique quand on passe par ex. de 350° à 10°). */
+function lerpHue(a: number, b: number, t: number): number {
+  const diff = ((b - a + 540) % 360) - 180;
+  return (a + diff * t + 360) % 360;
+}
+
+export function lerpHslTriplet(a: HslTriplet, b: HslTriplet, t: number): HslTriplet {
+  return [lerpHue(a[0], b[0], t), a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t];
+}
+
+/** Écart perceptuel — sous ce seuil, la différence de couleur ne vaut pas la
+ * peine de déclencher une nouvelle transition (évite du travail pour rien sur
+ * une scène quasi statique). */
+export function hslTripletsDiffer(a: HslTriplet, b: HslTriplet): boolean {
+  const hueDelta = Math.min(Math.abs(a[0] - b[0]), 360 - Math.abs(a[0] - b[0]));
+  return hueDelta > 6 || Math.abs(a[1] - b[1]) > 8 || Math.abs(a[2] - b[2]) > 8;
+}
+
 function rgbToHsl(r: number, g: number, b: number): [number, number, number] {
   r /= 255; g /= 255; b /= 255;
   const max = Math.max(r, g, b), min = Math.min(r, g, b);
@@ -65,6 +99,30 @@ function extractFromPixels(data: Uint8ClampedArray): string | null {
   s = Math.max(s, 50);          // garantir une couleur suffisamment vive
   l = Math.max(45, Math.min(65, l)); // visible sur fond sombre
   return `${h} ${s}% ${l}%`;
+}
+
+// ─── Extraction depuis une frame vidéo (thème personnalisé) ───────────────────
+// Canvas partagé et réutilisé à chaque appel : évite de recréer un élément à
+// chaque tick de l'intervalle de mise à jour de couleur (voir ThemeContext).
+let videoCanvas: HTMLCanvasElement | null = null;
+
+export function extractDominantHslFromVideoFrame(video: HTMLVideoElement): string | null {
+  if (video.readyState < 2 || video.videoWidth === 0) return null;
+  try {
+    const size = 64;
+    if (!videoCanvas) {
+      videoCanvas = document.createElement('canvas');
+      videoCanvas.width = size;
+      videoCanvas.height = size;
+    }
+    const ctx = videoCanvas.getContext('2d', { willReadFrequently: true });
+    if (!ctx) return null;
+    ctx.drawImage(video, 0, 0, size, size);
+    return extractFromPixels(ctx.getImageData(0, 0, size, size).data);
+  } catch {
+    // Frame pas encore décodée ou canvas taint (vidéo cross-origin sans CORS) : ignore ce tick.
+    return null;
+  }
 }
 
 function drawAndExtract(src: string, crossOrigin?: boolean): Promise<string | null> {
@@ -163,6 +221,30 @@ export function restoreThemeAccents() {
   root.style.setProperty('--shadow-elegant', t.shadowElegant);
   root.style.setProperty('--shadow-elegant-sm', t.shadowElegantSm);
   root.style.setProperty('--shadow-glow', t.shadowGlow);
+}
+
+/** Applique une couleur d'accent dérivée de la vidéo du thème personnalisé —
+ * variante de applyAccentHsl sans le garde "thèmes activés", puisqu'ici c'est
+ * justement le thème actif qui pilote la couleur (pas une pochette de son). */
+export function applyVideoThemeAccentHsl(hsl: string) {
+  const m = hsl.match(/^(\d+) (\d+)% (\d+)%$/);
+  let glow = hsl;
+  if (m) {
+    const l = Math.min(80, parseInt(m[3], 10) + 8);
+    glow = `${m[1]} ${m[2]}% ${l}%`;
+  }
+  const root = document.documentElement;
+  root.style.setProperty('--primary', hsl);
+  root.style.setProperty('--primary-glow', glow);
+  root.style.setProperty('--accent', hsl);
+  root.style.setProperty('--ring', hsl);
+  root.style.setProperty('--sidebar-primary', hsl);
+  root.style.setProperty('--sidebar-ring', hsl);
+  root.style.setProperty('--gradient-primary', `linear-gradient(135deg, hsl(${hsl}), hsl(${glow}))`);
+  root.style.setProperty('--gradient-hero', `radial-gradient(ellipse at top, hsl(${hsl} / 0.18), transparent 60%)`);
+  root.style.setProperty('--shadow-elegant', `0 10px 40px -10px hsl(${hsl} / 0.35)`);
+  root.style.setProperty('--shadow-elegant-sm', `0 6px 18px -6px hsl(${hsl} / 0.35)`);
+  root.style.setProperty('--shadow-glow', `0 0 0 1px hsl(${hsl} / 0.25), 0 8px 30px -6px hsl(${hsl} / 0.45)`);
 }
 
 export function applyAccentHsl(hsl: string | null) {

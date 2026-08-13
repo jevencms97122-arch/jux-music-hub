@@ -44,7 +44,7 @@ export default function TransitionSettings() {
             <button
               key={mode.value}
               onClick={() => setTransitionMode(mode.value)}
-              className={`px-3 py-2 text-xs rounded transition-all font-medium whitespace-nowrap overflow-hidden text-ellipsis ${
+              className={`px-3 py-2 text-xs rounded transition-[background-color,box-shadow,color] font-medium whitespace-nowrap overflow-hidden text-ellipsis ${
                 transitionMode === mode.value
                   ? 'bg-primary text-primary-foreground shadow-md'
                   : 'bg-muted hover:bg-muted/80 text-muted-foreground'

@@ -196,7 +196,7 @@ export default function TutorialModal({ open, onClose }: TutorialModalProps) {
                 onClick={() => setIndex(i)}
                 aria-label={`Slide ${i + 1}`}
                 className={cn(
-                  'h-1.5 rounded-full transition-all duration-300',
+                  'h-1.5 rounded-full transition-[width,background-color] duration-300',
                   i === index ? 'w-6 bg-gradient-primary' : 'w-1.5 bg-secondary hover:bg-muted'
                 )}
               />

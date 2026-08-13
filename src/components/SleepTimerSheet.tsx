@@ -60,7 +60,7 @@ export default function SleepTimerSheet({ open, onClose }: Props) {
                 key={String(opt.minutes)}
                 onClick={() => { setSleepTimer(opt.minutes); if (opt.minutes !== null) onClose(); }}
                 className={cn(
-                  'rounded-2xl px-4 py-4 text-left transition-all duration-150 font-semibold text-sm',
+                  'rounded-2xl px-4 py-4 text-left transition-[background-color,box-shadow,color] duration-150 font-semibold text-sm',
                   active
                     ? 'bg-primary/15 ring-1 ring-primary/40 text-primary'
                     : 'bg-card/60 hover:bg-card/80 text-foreground'

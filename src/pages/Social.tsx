@@ -1,4 +1,6 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
+import TabFade from '@/components/TabFade';
+import SlidingTabIndicator from '@/components/SlidingTabIndicator';
 import { pb } from '@/lib/pocketbase';
 import { useAuth } from '@/contexts/AuthContext';
 import { useNavigate } from 'react-router-dom';
@@ -391,21 +393,22 @@ export default function Social() {
 
       {/* ── Header ── */}
       <header className="relative px-5 pt-6 animate-fade-slide-up">
-        <h1 className="text-2xl font-extrabold tracking-tight">Social</h1>
+        <h1 className="text-2xl font-extrabold leading-tight tracking-[-0.02em]">Social</h1>
       </header>
 
       {/* ── Onglets ── */}
       <div className="relative px-5 mt-4 animate-fade-slide-up delay-1">
-        <div className="flex rounded-2xl border border-border/50 bg-card/50 p-1">
+        <div className="relative flex rounded-2xl border border-white/[0.06] bg-card/50 p-1 backdrop-blur-md">
           {tabs.map((t) => (
             <button
               key={t.id}
               onClick={() => setTab(t.id)}
               className={cn(
-                'flex flex-1 items-center justify-center gap-1.5 rounded-xl py-2 text-xs font-semibold transition-colors',
-                tab === t.id ? 'bg-gradient-primary text-primary-foreground shadow-elegant-sm' : 'text-muted-foreground hover:text-foreground'
+                'relative z-10 flex flex-1 items-center justify-center gap-1.5 rounded-xl py-2 text-xs font-semibold transition-colors duration-150 active:scale-95',
+                tab === t.id ? 'text-primary-foreground' : 'text-muted-foreground hover:text-foreground'
               )}
             >
+              {tab === t.id && <SlidingTabIndicator layoutId="social-tab-indicator" />}
               <t.icon className="h-3.5 w-3.5" />
               {t.label}
               {t.badge > 0 && (
@@ -418,12 +421,13 @@ export default function Social() {
         </div>
       </div>
 
+      <TabFade tabKey={tab} className="relative px-5 mt-5">
       {tab === 'friends' ? (
-        <div key={tab} className="relative px-5 mt-5 space-y-6 animate-fade-slide-up delay-2">
+        <div className="space-y-6">
 
           {/* ── Nouveaux messages ── */}
           {unreadTotal > 0 && (
-            <div className="flex items-center gap-3 rounded-2xl border border-primary/30 bg-primary/10 p-3">
+            <div className="flex items-center gap-3 rounded-2xl border border-primary/30 bg-primary/10 p-3 backdrop-blur-md">
               <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-primary/20">
                 <MessageCircle className="h-4.5 w-4.5 text-primary" />
               </div>
@@ -438,7 +442,7 @@ export default function Social() {
             onClick={openSession}
             disabled={sessionCreating}
             className={cn(
-              'flex w-full items-center gap-3 rounded-2xl border p-4 text-left transition-colors',
+              'flex w-full items-center gap-3 rounded-2xl border p-4 text-left backdrop-blur-md transition-[background-color,transform] duration-150 ease-out active:scale-[0.98]',
               activeSession
                 ? 'border-green-500/40 bg-green-500/10 hover:bg-green-500/15'
                 : 'border-primary/30 bg-primary/5 hover:bg-primary/10'
@@ -475,8 +479,8 @@ export default function Social() {
               </h2>
               <div className="space-y-2">
                 {requests.map((r) => (
-                  <div key={r.id} className="flex items-center gap-3 rounded-2xl border border-border/40 bg-card/50 p-3">
-                    <Avatar className="h-11 w-11 cursor-pointer" onClick={() => navigate(`/u/${r.follower_id}`)}>
+                  <div key={r.id} className="flex items-center gap-3 rounded-2xl border border-white/[0.06] bg-card/50 p-3 backdrop-blur-md">
+                    <Avatar className="h-11 w-11 cursor-pointer transition-transform duration-150 active:scale-90" onClick={() => navigate(`/u/${r.follower_id}`)}>
                       <AvatarImage src={avatarUrl(r.profile as any) || ''} />
                       <AvatarFallback>{r.profile?.pseudo?.[0] || '?'}</AvatarFallback>
                     </Avatar>
@@ -484,10 +488,10 @@ export default function Social() {
                       <p className="truncate text-sm font-semibold">{r.profile?.pseudo || 'Anonyme'}</p>
                       <p className="text-xs text-muted-foreground">souhaite te suivre</p>
                     </button>
-                    <Button size="icon" aria-label="Accepter" className="h-9 w-9 rounded-xl bg-gradient-primary shadow-elegant-sm" onClick={() => accept(r.id)}>
+                    <Button size="icon" aria-label="Accepter" className="h-9 w-9 rounded-xl bg-gradient-primary shadow-elegant-sm transition-transform duration-150 active:scale-90" onClick={() => accept(r.id)}>
                       <Check className="h-4 w-4" />
                     </Button>
-                    <Button size="icon" aria-label="Refuser" variant="outline" className="h-9 w-9 rounded-xl text-muted-foreground" onClick={() => reject(r.id)}>
+                    <Button size="icon" aria-label="Refuser" variant="outline" className="h-9 w-9 rounded-xl text-muted-foreground transition-transform duration-150 active:scale-90" onClick={() => reject(r.id)}>
                       <X className="h-4 w-4" />
                     </Button>
                   </div>
@@ -508,7 +512,7 @@ export default function Social() {
                   <button
                     key={p.user.user_id}
                     onClick={() => navigate(`/u/${p.user.user_id}`)}
-                    className="relative aspect-square w-36 flex-shrink-0 overflow-hidden rounded-2xl shadow-card ring-1 ring-white/[0.06] transition-transform active:scale-[0.97]"
+                    className="relative aspect-square w-36 flex-shrink-0 overflow-hidden rounded-2xl shadow-card ring-1 ring-white/[0.06] transition-transform duration-150 ease-out active:scale-95"
                   >
                     {p.current_song_cover_url
                       ? <img src={p.current_song_cover_url} alt="" className="absolute inset-0 h-full w-full object-cover" />
@@ -576,7 +580,7 @@ export default function Social() {
                     <button
                       key={f.user_id}
                       onClick={() => setSelectedFriend(f)}
-                      className="group flex w-full items-center gap-3 rounded-2xl border border-border/40 bg-card/50 p-3 text-left transition-colors hover:bg-card active:scale-[0.99]"
+                      className="group flex w-full items-center gap-3 rounded-2xl border border-white/[0.06] bg-card/50 p-3 text-left backdrop-blur-md transition-[background-color,transform] duration-150 ease-out hover:bg-card active:scale-[0.98]"
                     >
                       <div className="relative shrink-0">
                         <Avatar className="h-12 w-12">
@@ -620,7 +624,7 @@ export default function Social() {
           </section>
         </div>
       ) : tab === 'activity' ? (
-        <div key={tab} className="relative px-5 mt-5 space-y-3 animate-fade-slide-up delay-2">
+        <div className="space-y-3">
           {activityLoading ? (
             <div className="space-y-3">
               {Array.from({ length: 5 }).map((_, i) => (
@@ -655,8 +659,8 @@ export default function Social() {
                   return `il y a ${d}j`;
                 })();
                 return (
-                  <div key={item.id} className="flex items-center gap-3 rounded-2xl border border-border/40 bg-card/50 p-3">
-                    <Avatar className="h-10 w-10 shrink-0 cursor-pointer" onClick={() => navigate(`/u/${item.userId}`)}>
+                  <div key={item.id} className="flex items-center gap-3 rounded-2xl border border-white/[0.06] bg-card/50 p-3 backdrop-blur-md">
+                    <Avatar className="h-10 w-10 shrink-0 cursor-pointer transition-transform duration-150 active:scale-90" onClick={() => navigate(`/u/${item.userId}`)}>
                       <AvatarImage src={item.profileAvatarUrl} />
                       <AvatarFallback className="text-xs">{item.pseudo[0]}</AvatarFallback>
                     </Avatar>
@@ -685,7 +689,7 @@ export default function Social() {
           )}
         </div>
       ) : (
-        <div key={tab} className="relative px-5 mt-5 space-y-4 animate-fade-slide-up delay-2">
+        <div className="space-y-4">
           {/* ── Recherche ── */}
           <div className="relative">
             <Search className="absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
@@ -693,13 +697,13 @@ export default function Social() {
               placeholder="Chercher un utilisateur..."
               value={discoverTerm}
               onChange={(e) => setDiscoverTerm(e.target.value)}
-              className="h-12 rounded-2xl border-border/50 bg-card/60 pl-11 pr-10 text-sm"
+              className="h-12 rounded-2xl border-white/[0.06] bg-card/60 pl-11 pr-10 text-sm backdrop-blur-md"
             />
             {discoverTerm && (
               <button
                 onClick={() => setDiscoverTerm('')}
                 aria-label="Effacer"
-                className="absolute right-3 top-1/2 flex h-6 w-6 -translate-y-1/2 items-center justify-center rounded-full bg-secondary text-muted-foreground transition-colors hover:text-foreground"
+                className="absolute right-3 top-1/2 flex h-6 w-6 -translate-y-1/2 items-center justify-center rounded-full bg-secondary text-muted-foreground transition-[color,transform] duration-150 ease-out hover:text-foreground active:scale-90"
               >
                 <X className="h-3.5 w-3.5" />
               </button>
@@ -727,8 +731,8 @@ export default function Social() {
               {discoverResults.map((p) => {
                 const status = followStatuses[p.user_id] ?? 'none';
                 return (
-                  <div key={p.user_id} className="flex items-center gap-3 rounded-2xl border border-border/40 bg-card/50 p-3">
-                    <Avatar className="h-11 w-11 shrink-0 cursor-pointer" onClick={() => navigate(`/u/${p.user_id}`)}>
+                  <div key={p.user_id} className="flex items-center gap-3 rounded-2xl border border-white/[0.06] bg-card/50 p-3 backdrop-blur-md">
+                    <Avatar className="h-11 w-11 shrink-0 cursor-pointer transition-transform duration-150 active:scale-90" onClick={() => navigate(`/u/${p.user_id}`)}>
                       <AvatarImage src={p.avatar_url || ''} />
                       <AvatarFallback>{p.pseudo?.[0] || '?'}</AvatarFallback>
                     </Avatar>
@@ -758,6 +762,7 @@ export default function Social() {
           )}
         </div>
       )}
+      </TabFade>
 
       {/* ── Modal ami : profil ou chat ── */}
       <Dialog open={!!selectedFriend} onOpenChange={(open) => { if (!open) setSelectedFriend(null); }}>

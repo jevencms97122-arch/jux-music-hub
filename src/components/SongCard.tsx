@@ -24,7 +24,7 @@ export default function SongCard({ song, onPlay, onDelete, index }: Props) {
       className="group flex flex-col items-start gap-2 text-left w-full animate-card-in"
       style={index != null ? { animationDelay: `${Math.min(index, 12) * 30}ms` } : undefined}
     >
-      <div className="relative aspect-square w-full overflow-hidden rounded-xl bg-secondary shadow-card transition-all duration-300 group-hover:shadow-glow group-hover:scale-[1.03]">
+      <div className="relative aspect-square w-full overflow-hidden rounded-xl bg-secondary shadow-card transition-[box-shadow,transform] duration-300 group-hover:shadow-glow group-hover:scale-[1.03]">
         <CachedImage
           src={songCoverUrl(song)}
           alt={song.title}

@@ -133,11 +133,13 @@ export default function StoryViewer({ stories, initialIndex = 0, onClose }: Prop
         {stories.map((_, i) => (
           <div key={i} className="h-1 flex-1 rounded-full bg-white/30 overflow-hidden">
             <div
-              className="h-full rounded-full bg-white transition-all"
+              className="h-full w-full origin-left rounded-full bg-white transition-transform duration-100 ease-linear"
               style={{
-                width: i === currentIndex
-                  ? `${(progress / storyDurationMs) * 100}%`
-                  : i < currentIndex ? '100%' : '0%',
+                transform: `scaleX(${
+                  i === currentIndex
+                    ? progress / storyDurationMs
+                    : i < currentIndex ? 1 : 0
+                })`,
               }}
             />
           </div>

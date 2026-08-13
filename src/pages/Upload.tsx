@@ -11,11 +11,20 @@ import { useNavigate } from 'react-router-dom';
 import { ArrowLeft, Upload as UploadIcon, Music2, Youtube, X, Camera, User, ShieldAlert, Play, Pause, FolderOpen, Zap, PenLine } from 'lucide-react';
 import { toast } from 'sonner';
 import { MUSIC_GENRES } from '@/types/music';
+import { computeAudioFingerprint } from '@/lib/audioFingerprint';
 
 // Déduit un titre lisible à partir du nom de fichier (retire l'extension, remplace _ et - par des espaces).
 function titleFromFilename(filename: string): string {
   const withoutExt = filename.replace(/\.[^/.]+$/, '');
   return withoutExt.replace(/[_-]+/g, ' ').trim() || filename;
+}
+
+/** SHA-256 du fichier brut — détecte un même fichier réuploadé tel quel (voir
+ * aussi computeAudioFingerprint pour détecter une même musique ré-encodée). */
+async function computeFileHash(file: File): Promise<string> {
+  const buffer = await file.arrayBuffer();
+  const digest = await crypto.subtle.digest('SHA-256', buffer);
+  return Array.from(new Uint8Array(digest)).map((b) => b.toString(16).padStart(2, '0')).join('');
 }
 
 interface ArtistEntry {
@@ -40,6 +49,7 @@ export default function Upload() {
   const [coverFile, setCoverFile] = useState<File | null>(null);
   const [youtubeUrl, setYoutubeUrl] = useState('');
   const [uploading, setUploading] = useState(false);
+  const [analyzing, setAnalyzing] = useState(false);
   const [offlineMode, setOfflineMode] = useState<'manual' | 'quick'>('manual');
   const [quickProgress, setQuickProgress] = useState<{ done: number; total: number } | null>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -239,7 +249,20 @@ export default function Upload() {
           formData.append('video_url', youtubeUrl.trim());
         }
       }
-      if (audioFile) formData.append('audio', audioFile);
+      if (audioFile) {
+        formData.append('audio', audioFile);
+        setAnalyzing(true);
+        try {
+          const [hash, fingerprint] = await Promise.all([
+            computeFileHash(audioFile),
+            computeAudioFingerprint(audioFile),
+          ]);
+          formData.append('file_hash', hash);
+          if (fingerprint) formData.append('audio_fingerprint', fingerprint);
+        } finally {
+          setAnalyzing(false);
+        }
+      }
       if (coverFile) formData.append('cover', coverFile);
       await pb.collection('songs').create(formData);
       toast.success('Musique uploadée !');
@@ -496,7 +519,8 @@ export default function Upload() {
           <Input type="file" accept="image/*" onChange={(e) => setCoverFile(e.target.files?.[0] || null)} className="cursor-pointer" />
         </div>
         <Button className="w-full" onClick={submit} disabled={uploading}>
-          <UploadIcon className="h-4 w-4 mr-2" /> {uploading ? 'Upload en cours...' : 'Uploader'}
+          <UploadIcon className="h-4 w-4 mr-2" />
+          {analyzing ? "Analyse de l'audio..." : uploading ? 'Upload en cours...' : 'Uploader'}
         </Button>
       </div>
       )}

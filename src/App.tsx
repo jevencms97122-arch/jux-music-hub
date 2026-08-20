@@ -10,6 +10,8 @@ import { pb } from '@/lib/pocketbase';
 import { isTauri } from '@tauri-apps/api/core';
 import { toast } from 'sonner';
 import { updatePresence, clearPresence } from '@/lib/userPresence';
+import { sendSmartNotification } from '@/lib/smartNotifications';
+import { precacheLibraryForOffline } from '@/lib/offlinePrecache';
 import { usePlayer } from '@/contexts/PlayerContext';
 import { songCoverUrl } from '@/lib/storage';
 import Login from '@/pages/Login';
@@ -48,6 +50,7 @@ import OfflinePlaylistDetail from '@/pages/OfflinePlaylistDetail';
 import { isVRModeEnabled } from '@/hooks/useVRMode';
 import { Toaster } from '@/components/ui/sonner';
 import ChatNotifier from '@/components/ChatNotifier';
+import AutoDownloadNotifier from '@/components/AutoDownloadNotifier';
 
 function shouldShowWebDeprecated(): boolean {
   return false;
@@ -138,6 +141,15 @@ function AppContent() {
     }
   }, [user, loading]);
 
+  // Pré-téléchargement hors connexion : quand on est en ligne, les favoris et
+  // écoutes récentes descendent en local (IndexedDB) en tâche de fond, pour que
+  // le mode hors connexion ait une vraie bibliothèque à offrir.
+  useEffect(() => {
+    if (!user || loading || offline) return;
+    const t = setTimeout(() => { precacheLibraryForOffline(user.id).catch(() => {}); }, 8000);
+    return () => clearTimeout(t);
+  }, [user, loading, offline]);
+
 
   // Notifications temps réel via PocketBase
   const shownNotifIds = useRef<Set<string>>(new Set());
@@ -157,28 +169,27 @@ function AppContent() {
           if (n.type === 'friend_request') {
             const pseudo = n.data?.sender_pseudo || null;
             const message = pseudo ? `${pseudo} a commencé à vous suivre` : 'Quelqu\'un a commencé à vous suivre';
-            if ('Notification' in window && Notification.permission === 'granted') {
-              new Notification(message);
-            }
-            toast(message, {
+            sendSmartNotification('friend_request', {
+              title: message,
               duration: 6000,
               action: { label: 'Voir', onClick: () => navigate('/notifications') },
             });
           } else if (n.type === 'session_invite') {
             const code = n.data?.code;
-            if ('Notification' in window && Notification.permission === 'granted') {
-              new Notification(n.title, { body: n.body ?? '' });
-            }
-            toast(n.title, {
-              description: n.body,
+            sendSmartNotification('session_invite', {
+              title: n.title,
+              body: n.body,
               duration: 15000,
               action: code ? { label: 'Rejoindre', onClick: () => navigate(`/listen-together?code=${code}`) } : undefined,
             });
+          } else if (n.type === 'friend_listening') {
+            sendSmartNotification('friend_listening', {
+              title: n.title,
+              body: n.body ?? undefined,
+              action: { label: 'Voir', onClick: () => navigate('/social') },
+            });
           } else {
-            if ('Notification' in window && Notification.permission === 'granted') {
-              new Notification(n.title, { body: n.body ?? '' });
-            }
-            toast(n.title, { description: n.body ?? undefined });
+            sendSmartNotification('generic', { title: n.title, body: n.body ?? undefined });
           }
         });
       } catch (err) {
@@ -216,11 +227,9 @@ function AppContent() {
             : m.type === 'song_share' ? '🎵 T\'a partagé une musique'
             : (m.text || 'Nouveau message');
 
-          if ('Notification' in window && Notification.permission === 'granted') {
-            new Notification(`Message de ${pseudo}`, { body });
-          }
-          toast(`Message de ${pseudo}`, {
-            description: body,
+          sendSmartNotification('new_message', {
+            title: `Message de ${pseudo}`,
+            body,
             duration: 8000,
             action: { label: 'Ouvrir', onClick: () => navigate(`/chat/${m.sender_id}`) },
           });
@@ -273,6 +282,7 @@ function AppContent() {
         <ScrollToTop />
         <PresenceHeartbeat />
         <ChatNotifier />
+        <AutoDownloadNotifier />
         <GamepadController />
         <JuxAssistant />
         <div className="min-h-screen">
@@ -288,7 +298,7 @@ function AppContent() {
                 <Route path="/profile-setup" element={<PageWrap><ProfileSetup /></PageWrap>} />
                 <Route path="/jux" element={guard(<Home />)} />
                 <Route path="/home" element={<Navigate to="/jux" replace />} />
-                <Route path="/upload" element={guard(<Upload />)} />
+                <Route path="/upload" element={backendGuard(<Upload />)} />
                 <Route path="/u/:userId" element={backendGuard(<UserProfile />)} />
                 <Route path="/profile" element={guard(<ProfilePage />)} />
                 <Route path="/profile-edit" element={guard(<ProfileEdit onBack={() => navigate('/profile')} />)} />

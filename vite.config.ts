@@ -3,7 +3,6 @@ import react from "@vitejs/plugin-react-swc";
 import path from "path";
 import { componentTagger } from "lovable-tagger";
 import { VitePWA } from "vite-plugin-pwa";
-import { mcpPlugin } from "@lovable.dev/mcp-js/stacks/supabase/vite";
 
 export default defineConfig(({ mode }) => ({
   server: {
@@ -42,7 +41,6 @@ export default defineConfig(({ mode }) => ({
     },
   },
   plugins: [
-    mcpPlugin(),
     react(),
     mode === "development" && componentTagger(),
     VitePWA({
@@ -83,7 +81,7 @@ export default defineConfig(({ mode }) => ({
         maximumFileSizeToCacheInBytes: 5 * 1024 * 1024,
         runtimeCaching: [
           {
-            // Audio MP3/M4A depuis Supabase Storage — cache offline
+            // Audio MP3/M4A — cache offline
             urlPattern: /\.(?:mp3|m4a|wav|ogg|aac)(\?.*)?$/i,
             handler: "CacheFirst",
             options: {
@@ -100,17 +98,6 @@ export default defineConfig(({ mode }) => ({
             options: {
               cacheName: "image-cache",
               expiration: { maxEntries: 200, maxAgeSeconds: 60 * 60 * 24 * 30 },
-              cacheableResponse: { statuses: [0, 200] },
-            },
-          },
-          {
-            // Supabase REST/Storage public
-            urlPattern: /^https:\/\/.*\.supabase\.co\//,
-            handler: "NetworkFirst",
-            options: {
-              cacheName: "supabase-cache",
-              networkTimeoutSeconds: 5,
-              expiration: { maxEntries: 100, maxAgeSeconds: 60 * 60 * 24 },
               cacheableResponse: { statuses: [0, 200] },
             },
           },

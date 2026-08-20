@@ -1,29 +1,33 @@
 import { useEffect, useState, useMemo } from 'react';
 import { pb } from '@/lib/pocketbase';
-import { usePlayer } from '@/contexts/PlayerContext';
-import { songCoverUrl } from '@/lib/storage';
+import { usePlayer, type ListenSessionRow } from '@/contexts/PlayerContext';
+import { songCoverUrl, avatarUrl } from '@/lib/storage';
 import SongCard from '@/components/SongCard';
 import CachedImage from '@/components/CachedImage';
 import StoryCircles from '@/components/StoryCircles';
 import { useNavigate } from 'react-router-dom';
 import {
   Play, Heart, Clock, Sparkles,
-  ListMusic, Globe, ArrowRight, Music2, Upload, Bell, Tag, ChevronDown, ScrollText, Mic2, Car, History, TrendingUp
+  ListMusic, Globe, ArrowRight, Music2, Upload, Bell, Tag, ChevronDown, ScrollText, Mic2, Car, History, TrendingUp, Radio
 } from 'lucide-react';
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { useAuth } from '@/contexts/AuthContext';
 import { useOfflineMode } from '@/contexts/OfflineModeContext';
 import { getLocalTracks } from '@/lib/offlineLibrary';
+import { getDownloadedSongs } from '@/lib/offlineManager';
+import FriendsLikeSection from '@/components/FriendsLikeSection';
 import { getLocalListenHistory } from '@/lib/localListenHistory';
 import { useLazySection } from '@/hooks/useLazySection';
 import TrendingSection from '@/components/TrendingSection';
 import AppBanner from '@/components/AppBanner';
 import PatchNotesSheet from '@/components/PatchNotesSheet';
 import { generateDailyMix } from '@/lib/dailyMix';
-import type { Song, Playlist } from '@/types/music';
+import type { Song, Playlist, Profile } from '@/types/music';
 import TutorialModal from '@/components/TutorialModal';
 import { useSeo } from '@/lib/useSeo';
 import { cn } from '@/lib/utils';
 import { recordToSong } from '@/lib/pbUtils';
+import { toast } from 'sonner';
 
 // Shuffle déterministe : même ordre toute la journée, change chaque jour
 function seededShuffle<T>(arr: T[], seed: number): T[] {
@@ -94,7 +98,7 @@ const TUTORIAL_SEEN_KEY = 'jux_tutorial_seen';
 export default function Home() {
   const { user, profile } = useAuth();
   const { offline } = useOfflineMode();
-  const { playSongFromList } = usePlayer();
+  const { playSongFromList, activeSession, joinSession, openPlayer } = usePlayer();
   const navigate = useNavigate();
   const [songs, setSongs] = useState<Song[]>([]);
   const [trending, setTrending] = useState<Song[]>([]);
@@ -118,6 +122,8 @@ export default function Home() {
   const [replaySongs, setReplaySongs] = useState<Song[]>([]);
   const [heroSong, setHeroSong] = useState<Song | null>(null);
   const [heroLoading, setHeroLoading] = useState(true);
+  const [offlineVisibleCount, setOfflineVisibleCount] = useState(10);
+  const [friendSessions, setFriendSessions] = useState<{ session: ListenSessionRow; host: Profile; song: Song | null }[]>([]);
 
   // Lazy loading : chaque section ne déclenche ses requêtes backend que quand
   // l'utilisateur s'en approche à l'écran (évite de charger ce qu'il ne verra pas)
@@ -145,10 +151,15 @@ export default function Home() {
     try { localStorage.setItem(TUTORIAL_SEEN_KEY, '1'); } catch {}
   };
 
-  // Hors ligne : tout vient de l'appareil, pas de lazy loading nécessaire
+  // Hors ligne : tout vient de l'appareil (uploads locaux + sons téléchargés
+  // automatiquement avec leurs métadonnées), pas de lazy loading nécessaire
   useEffect(() => {
     if (!offline) return;
-    getLocalTracks().then((tracks) => {
+    setOfflineVisibleCount(10);
+    Promise.all([getLocalTracks(), getDownloadedSongs()]).then(([local, downloaded]) => {
+      // Dédoublonne au cas où un son serait dans les deux sources
+      const seen = new Set(local.map((t) => t.id));
+      const tracks = [...local, ...downloaded.filter((d) => !seen.has(d.id))];
       setSongs(tracks);
       setArtistSongs(tracks);
       setHeroSong(tracks[0] ?? null);
@@ -289,7 +300,7 @@ export default function Home() {
   }, [offline]);
 
   useEffect(() => {
-    if (!user) { setDailyMixLoading(false); return; }
+    if (!user || offline) { setDailyMixLoading(false); return; }
     setDailyMixLoading(true);
     generateDailyMix(user.id)
       .then(({ songs, genre }) => {
@@ -298,7 +309,7 @@ export default function Home() {
       })
       .catch(() => {})
       .finally(() => setDailyMixLoading(false));
-  }, [user]);
+  }, [user, offline]);
 
   // Section "Réécouter" — pioche aléatoirement dans les sons déjà écoutés
   useEffect(() => {
@@ -343,6 +354,55 @@ export default function Home() {
       }
     })();
   }, [offline, user, replayLazy.visible]);
+
+  // Activité "session permanente" des amis suivis — affichée sous les tendances.
+  // Rafraîchie toutes les 8s tant qu'on n'est pas déjà dans une session.
+  useEffect(() => {
+    if (!user || offline || activeSession) { setFriendSessions([]); return; }
+    let cancelled = false;
+    const pbGetFirst = async (collection: string, filter: string) => {
+      try { const r = await pb.collection(collection).getList(1, 1, { filter, requestKey: null }); return r.items[0] || null; } catch { return null; }
+    };
+    const load = async () => {
+      try {
+        const outF = await pb.collection('follows').getList(1, 200, {
+          filter: `follower_id = "${user.id}" && status = "accepted"`,
+          requestKey: null,
+        });
+        const friendIds = outF.items.map((f: any) => f.following_id);
+        if (cancelled || friendIds.length === 0) { if (!cancelled) setFriendSessions([]); return; }
+        const hostFilter = friendIds.map((id: string) => `host_id = "${id}"`).join(' || ');
+        const res = await pb.collection('listen_sessions').getList(1, 20, {
+          filter: `is_active = true && is_open = true && (${hostFilter})`,
+          requestKey: null,
+        });
+        if (cancelled) return;
+        const items: { session: ListenSessionRow; host: Profile; song: Song | null }[] = [];
+        for (const r of res.items as any[]) {
+          const hostRec = await pbGetFirst('profiles', `user_id = "${r.host_id}"`);
+          if (!hostRec) continue;
+          const host: Profile = { id: hostRec.id, user_id: hostRec.user_id, pseudo: hostRec.pseudo, first_name: hostRec.first_name, last_name: hostRec.last_name, avatar_url: avatarUrl(hostRec), bio: hostRec.bio, profile_completed: hostRec.profile_completed, created_at: hostRec.created, updated_at: hostRec.updated } as Profile;
+          let song: Song | null = null;
+          if (r.song_id) {
+            const songRec = await pbGetFirst('songs', `id = "${r.song_id}"`);
+            if (songRec) song = recordToSong(songRec);
+          }
+          items.push({ session: { id: r.id, code: r.code ?? null, host_id: r.host_id, song_id: r.song_id ?? null, is_playing: r.is_playing, position: r.position ?? 0, tempo: r.tempo || 1, participants: r.participants ?? [], is_active: r.is_active, is_open: true }, host, song });
+        }
+        if (!cancelled) setFriendSessions(items);
+      } catch {
+        if (!cancelled) setFriendSessions([]);
+      }
+    };
+    load();
+    const interval = setInterval(load, 8000);
+    return () => { cancelled = true; clearInterval(interval); };
+  }, [user, offline, activeSession]);
+
+  const handleJoinFriendSession = async (session: ListenSessionRow) => {
+    const ok = await joinSession(session);
+    if (ok) { openPlayer(); } else { toast.error('Impossible de rejoindre la session'); }
+  };
 
   // Badge notifications rafraîchi toutes les 30 s
   useEffect(() => {
@@ -434,13 +494,15 @@ export default function Home() {
               </button>
             }
           />
-          <button
-            onClick={() => navigate('/upload')}
-            className="flex h-9 items-center gap-1.5 rounded-xl border border-white/[0.06] bg-card/60 px-3 text-xs font-semibold text-muted-foreground backdrop-blur-md transition-[background-color,color,transform] duration-150 ease-out hover:bg-card hover:text-foreground active:scale-90"
-          >
-            <Upload className="h-3.5 w-3.5" />
-            Upload
-          </button>
+          {!offline && (
+            <button
+              onClick={() => navigate('/upload')}
+              className="flex h-9 items-center gap-1.5 rounded-xl border border-white/[0.06] bg-card/60 px-3 text-xs font-semibold text-muted-foreground backdrop-blur-md transition-[background-color,color,transform] duration-150 ease-out hover:bg-card hover:text-foreground active:scale-90"
+            >
+              <Upload className="h-3.5 w-3.5" />
+              Upload
+            </button>
+          )}
         </div>
       </header>
 
@@ -515,8 +577,8 @@ export default function Home() {
         </section>
       )}
 
-      {/* Votre Mix — Daily Mix + accès rapides */}
-      {user && (
+      {/* Votre Mix — Daily Mix + accès rapides (indisponible hors connexion) */}
+      {user && !offline && (
         <section className="relative mb-8 px-4 animate-fade-slide-up" style={{ animationDelay: '0.1s' }}>
           <SectionHeader icon={Sparkles} title="Votre Mix" />
           <div className="space-y-3">
@@ -584,6 +646,9 @@ export default function Home() {
         </section>
       )}
 
+      {/* Ce que tes amis aiment — likes récents des personnes suivies */}
+      {user && !offline && !selectedGenre && <FriendsLikeSection />}
+
       {/* Trending — requêtes lancées quand la section approche de l'écran */}
       <div ref={trendingLazy.ref}>
         {trendingLoading ? (
@@ -602,11 +667,77 @@ export default function Home() {
         ) : trending.length > 0 && <TrendingSection trending={trending} />}
       </div>
 
+      {/* Session permanente des amis — activité d'écoute en direct, rejoignable en un clic */}
+      {friendSessions.length > 0 && (
+        <section className="relative mb-8 px-4 animate-fade-slide-up" style={{ animationDelay: '0.12s' }}>
+          <SectionHeader icon={Radio} title="En écoute en ce moment" />
+          <div className="flex snap-x snap-mandatory gap-3 overflow-x-auto pb-2 scrollbar-hide">
+            {friendSessions.map(({ session, host, song }) => (
+              <button
+                key={session.id}
+                onClick={() => handleJoinFriendSession(session)}
+                className="group flex w-64 flex-shrink-0 snap-start items-center gap-3 rounded-2xl border border-white/[0.06] bg-card/60 p-3 text-left backdrop-blur-md transition-[background-color,border-color,transform] duration-150 ease-out hover:border-primary/30 hover:bg-card active:scale-[0.98]"
+              >
+                <div className="relative shrink-0">
+                  <Avatar className="h-11 w-11 ring-2 ring-primary/30">
+                    <AvatarImage src={host.avatar_url || ''} />
+                    <AvatarFallback>{host.pseudo?.[0]?.toUpperCase() || '?'}</AvatarFallback>
+                  </Avatar>
+                  <span className="absolute -bottom-0.5 -right-0.5 flex h-4 w-4 items-center justify-center rounded-full bg-primary ring-2 ring-background">
+                    <Radio className="h-2.5 w-2.5 text-primary-foreground" />
+                  </span>
+                </div>
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-sm font-semibold text-foreground">{host.pseudo}</p>
+                  <p className="truncate text-xs text-muted-foreground">
+                    {song ? `${song.title} · ${song.author}` : 'En écoute…'}
+                  </p>
+                </div>
+                <Play className="h-4 w-4 shrink-0 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100" />
+              </button>
+            ))}
+          </div>
+        </section>
+      )}
+
       {/* Sentinelle lazy pour les sons récents (Nouveautés + Par genre) */}
       <div ref={songsLazy.ref} aria-hidden />
 
-      {/* Découverte — masquée quand un genre est filtré (la grille filtrée est déjà au-dessus) */}
-      {!selectedGenre && (
+      {/* Titres hors connexion — remplace la Découverte quand on est hors ligne */}
+      {!selectedGenre && offline && (
+        <section className="relative mb-8 px-4 animate-fade-slide-up" style={{ animationDelay: '0.15s' }}>
+          <SectionHeader icon={Clock} title="Titres hors connexion" />
+          {songs.length === 0 ? (
+            <div className="flex flex-col items-center justify-center rounded-2xl border border-border bg-card/40 py-12 text-center backdrop-blur-xl">
+              <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-2xl bg-muted">
+                <Music2 className="h-5 w-5 text-muted-foreground" />
+              </div>
+              <p className="mb-1 text-sm font-medium text-foreground">Aucun titre téléchargé pour l'instant</p>
+              <p className="text-xs text-muted-foreground">Les sons écoutés en ligne sont téléchargés automatiquement.</p>
+            </div>
+          ) : (
+            <>
+              <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5">
+                {songs.slice(0, offlineVisibleCount).map((s, i) => (
+                  <SongCard key={s.id} song={s} index={i} onPlay={() => playSongFromList(s, songs)} />
+                ))}
+              </div>
+              {offlineVisibleCount < songs.length && (
+                <button
+                  onClick={() => setOfflineVisibleCount((c) => c + 10)}
+                  className="mt-4 flex w-full items-center justify-center gap-1.5 rounded-xl border border-border/50 bg-card/60 py-2.5 text-xs font-semibold text-muted-foreground transition-colors hover:bg-card hover:text-foreground"
+                >
+                  Voir plus
+                  <ChevronDown className="h-3.5 w-3.5" />
+                </button>
+              )}
+            </>
+          )}
+        </section>
+      )}
+
+      {/* Découverte — masquée quand un genre est filtré (la grille filtrée est déjà au-dessus) ou hors ligne */}
+      {!selectedGenre && !offline && (
         <section className="relative mb-8 px-4 animate-fade-slide-up" style={{ animationDelay: '0.15s' }}>
           <SectionHeader icon={Clock} title="Nouveautés" />
           {discoverLoading ? (
@@ -828,8 +959,10 @@ export default function Home() {
         </section>
       )}
 
-      {/* Public Playlists — requêtes lancées quand la section approche de l'écran */}
-      <section ref={playlistsLazy.ref} className="relative mb-8 px-4 animate-fade-slide-up" style={{ animationDelay: '0.2s' }}>
+      {/* Public Playlists — indisponible hors connexion — requêtes lancées quand la section approche de l'écran */}
+      <div ref={playlistsLazy.ref} aria-hidden />
+      {!offline && (
+      <section className="relative mb-8 px-4 animate-fade-slide-up" style={{ animationDelay: '0.2s' }}>
         <SectionHeader
           icon={Globe}
           title="Playlists Publiques"
@@ -869,8 +1002,9 @@ export default function Home() {
           </div>
         )}
       </section>
+      )}
 
-      {/* Top Artistes — requête lourde (500 sons) lancée quand la section approche de l'écran */}
+      {/* Top Artistes — indisponible hors connexion — requête lourde (500 sons) lancée quand la section approche de l'écran */}
       <div ref={artistsLazy.ref}>
       {artistsLoading && !offline && (
         <section className="relative mb-8 px-4">
@@ -897,7 +1031,7 @@ export default function Home() {
           </div>
         </section>
       )}
-      {!artistsLoading && topArtists.length > 0 && (
+      {!artistsLoading && !offline && topArtists.length > 0 && (
         <section className="relative mb-8 px-4 animate-fade-slide-up" style={{ animationDelay: '0.25s' }}>
           <SectionHeader icon={Mic2} title="Top Artistes" />
 

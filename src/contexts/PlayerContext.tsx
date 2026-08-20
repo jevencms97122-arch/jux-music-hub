@@ -1,22 +1,89 @@
 ﻿import React, { createContext, useContext, useState, useRef, useEffect, useCallback } from 'react';
 import { pb, getPbUrl } from '@/lib/pocketbase';
-import { songAudioUrl, songCoverUrl } from '@/lib/storage';
+import { songAudioUrl, songCoverUrl, songAudioUrlWithCache } from '@/lib/storage';
 import { useAuth } from '@/contexts/AuthContext';
 import { useOfflineMode } from '@/contexts/OfflineModeContext';
 import { extractDominantHsl, applyAccentHsl } from '@/lib/dominantColor';
 import { updateStreak } from '@/lib/streaks';
 import { recordLocalListen } from '@/lib/localListenHistory';
+import { queueOfflinePlay } from '@/lib/offlinePlaySync';
+import { ensureCachedForPlayback } from '@/lib/offlineManager';
 import { setMediaSessionMetadata, setMediaSessionHandlers, setMediaSessionPosition, setMediaSessionPlaybackState, clearMediaSession } from '@/lib/notifications';
 import { sendNowPlayingToNative, clearNowPlayingOnNative, onNativeCommand, resolveCoverUrl } from '@/lib/androidMediaBridge';
 import type { NativeCommandEvent } from '@/lib/androidMediaBridge';
 import { toast } from 'sonner';
 import { updatePresence, clearPresence } from '@/lib/userPresence';
 import { updateDiscordPresence, clearDiscordPresence } from '@/lib/discordBridge';
-import { BeatDetector } from '@/lib/beatDetector';
 import { EQ_BANDS_HZ, EQ_PRESETS, EQ_STORAGE_KEY } from '@/lib/eqPresets';
+import { LiveBpmEstimator, tempoCompatibilityScore } from '@/lib/bpmEstimator';
+import type { BpmConfidence } from '@/lib/bpmEstimator';
 import type { Song } from '@/types/music';
+import { triggerAutoDownload, isAutoDownloadedBefore } from '@/lib/autoDownloadManager';
+import { getPlatform } from '@/lib/platform';
+import {
+  isPermanentSessionEnabled, setPermanentSessionEnabledPref,
+  getStoredPermanentSessionId, setStoredPermanentSessionId,
+} from '@/lib/permanentSession';
 
-export type TransitionMode = 'linear' | 'hardCut' | 'exponential' | 'logarithmic' | 'sine' | 'sCurve' | 'elastic' | 'cubicEaseInOut' | 'quartEaseInOut' | 'tempoShift' | 'bpmSync';
+export type TransitionMode = 'linear' | 'hardCut' | 'vinylStop' | 'filterSweep' | 'equalPower' | 'autoMix';
+
+/** AutoMix : fenêtre max avant la fin du morceau pour déclencher la préparation
+ *  de la transition (la durée réelle, plus courte, est décidée ensuite selon
+ *  la compatibilité de tempo détectée). */
+const AUTOMIX_TRIGGER_LOOKAHEAD_SEC = 8;
+/** AutoMix : au-delà de cette fenêtre, un silence en fin de piste soutenu
+ *  (voir `getMsSinceLastAudible`) déclenche quand même la transition — pour
+ *  ne pas fondre sur du silence si le morceau se termine avant sa durée réelle. */
+const AUTOMIX_SILENCE_TRIGGER_LOOKAHEAD_SEC = AUTOMIX_TRIGGER_LOOKAHEAD_SEC * 2.5;
+const AUTOMIX_TRAILING_SILENCE_MS = 600;
+/** AutoMix : attente max pour caler le début du fondu sur le prochain beat. */
+const AUTOMIX_BEAT_ALIGN_MAX_WAIT_MS = 900;
+
+type AutoMixKind = 'direct' | 'shortMix' | 'dynamicFade';
+
+interface AutoMixPlan {
+  kind: AutoMixKind;
+  durationSec: number;
+  beatAligned: boolean;
+}
+
+/** AutoMix : choisit le type de transition (enchaînement direct, mix court, ou
+ *  fondu dynamique) et sa durée selon la compatibilité de tempo détectée. Le
+ *  calage sur le beat n'a de sens que pour les deux premiers cas — un fondu
+ *  dynamique sert justement à masquer des tempos incompatibles. */
+function planAutoMixTransition(score: number, activeConfidence: BpmConfidence | undefined): AutoMixPlan {
+  if (score > 0.92 && activeConfidence && activeConfidence !== 'low') {
+    return { kind: 'direct', durationSec: 0.3, beatAligned: true };
+  }
+  if (score > 0.75) {
+    return { kind: 'shortMix', durationSec: 2, beatAligned: true };
+  }
+  if (score > 0.55) {
+    return { kind: 'dynamicFade', durationSec: 5, beatAligned: false };
+  }
+  return { kind: 'dynamicFade', durationSec: 7, beatAligned: false };
+}
+
+/** Passe-bas (piste sortante) : fréquence de coupure grand ouverte (inaudible). */
+const FILTER_SWEEP_LOWPASS_OPEN_HZ = 20000;
+/** Passe-bas (piste sortante) : fréquence de coupure au plus fort du sweep — ne laisse
+ *  passer que les basses profondes, son étouffé/voilé façon "filter kill" DJ. */
+const FILTER_SWEEP_LOWPASS_CLOSED_HZ = 120;
+/** Passe-haut (piste entrante) : fréquence de coupure grand ouverte (basses intactes). */
+const FILTER_SWEEP_HIGHPASS_OPEN_HZ = 20;
+/** Passe-haut (piste entrante) : fréquence de coupure au départ du sweep — coupe
+ *  largement les basses, son fin/métallique qui se remplit progressivement. */
+const FILTER_SWEEP_HIGHPASS_CLOSED_HZ = 2000;
+/** Résonance des filtres — un Q élevé crée le petit "wah" caractéristique des
+ *  filtres de table de mix DJ, bien plus perceptible qu'un filtre plat. */
+const FILTER_SWEEP_Q = 3.2;
+
+/** Interpolation logarithmique entre deux fréquences (l'oreille perçoit les
+ *  fréquences de façon logarithmique — une interpolation linéaire en Hz reste
+ *  quasi inaudible sur 90% du sweep et ne se fait sentir qu'à la toute fin). */
+function logLerpHz(from: number, to: number, t: number): number {
+  return from * Math.pow(to / from, t);
+}
 
 export type ConnectionStatus = 'stable' | 'slow' | 'unstable';
 
@@ -30,6 +97,8 @@ export interface ListenSessionRow {
   tempo: number;
   participants: string[];
   is_active: boolean;
+  /** Session ouverte : tous les amis de l'hôte peuvent rejoindre sans code */
+  is_open?: boolean;
 }
 
 interface PlayerContextType {
@@ -49,6 +118,9 @@ interface PlayerContextType {
   activeSession: ListenSessionRow | null;
   isSessionHost: boolean;
   isSessionGuest: boolean;
+  permanentSessionEnabled: boolean;
+  setPermanentSessionEnabled: (enabled: boolean) => Promise<void>;
+  joinSession: (session: ListenSessionRow) => Promise<boolean>;
   connectionStatus: ConnectionStatus;
   isBuffering: boolean;
   refreshSession: () => Promise<void>;
@@ -95,15 +167,10 @@ const TRANSITION_MODE_KEY = 'jux:transitionMode';
 export const TRANSITION_MODES: { value: TransitionMode; label: string; description: string }[] = [
   { value: 'linear', label: 'Linear', description: 'Transition linéaire classique' },
   { value: 'hardCut', label: 'Hard Cut', description: 'Passage instantané (pas de fade)' },
-  { value: 'exponential', label: 'Exponentiel', description: 'Rapide au début, lent à la fin' },
-  { value: 'logarithmic', label: 'Logarithmique', description: 'Lent au début, rapide à la fin' },
-  { value: 'sine', label: 'Sine Wave', description: 'Courbe sinusoïdale très lisse' },
-  { value: 'sCurve', label: 'S-Curve', description: 'Courbe S prononcée' },
-  { value: 'elastic', label: 'Elastic', description: 'Effet élastique avancé' },
-  { value: 'cubicEaseInOut', label: 'Cubic Ease', description: 'Lisse cubique très fluide' },
-  { value: 'quartEaseInOut', label: 'Quart Ease', description: 'Lisse quartique très progressive' },
-  { value: 'tempoShift', label: 'Tempo Shift', description: 'Ralentit puis accélère le tempo' },
-  { value: 'bpmSync', label: 'BPM Sync', description: 'Crossfade calé sur les beats de la musique' },
+  { value: 'equalPower', label: 'Equal Power', description: 'Fondu à puissance constante, comme Spotify' },
+  { value: 'vinylStop', label: 'Vinyl Stop', description: 'Freinage vinyle puis relance façon platine DJ' },
+  { value: 'filterSweep', label: 'Filter Sweep', description: 'Filtre passe-bas façon table de mix DJ' },
+  { value: 'autoMix', label: 'AutoMix', description: 'Détecte le tempo et adapte la durée du fondu, comme Apple Music' },
 ];
 
 function recordToSong(r: any): Song {
@@ -140,7 +207,19 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
   const audioCtxRef = useRef<AudioContext | null>(null);
   const analyserRef = useRef<AnalyserNode | null>(null);
   const eqFiltersRef = useRef<BiquadFilterNode[]>([]);
-  const beatDetectorRef = useRef<BeatDetector | null>(null);
+  const lowpassARef = useRef<BiquadFilterNode | null>(null);
+  const lowpassBRef = useRef<BiquadFilterNode | null>(null);
+  // AutoMix — analyseurs dédiés A/B pour estimer le BPM du morceau en cours en
+  // continu, + un 3ᵉ audio élément caché (muet) qui pré-analyse le morceau
+  // suivant dès qu'on sait lequel c'est, pour avoir un BPM fiable bien avant
+  // le moment de la transition.
+  const bpmAnalyserARef = useRef<AnalyserNode | null>(null);
+  const bpmAnalyserBRef = useRef<AnalyserNode | null>(null);
+  const bpmEstimatorARef = useRef<LiveBpmEstimator | null>(null);
+  const bpmEstimatorBRef = useRef<LiveBpmEstimator | null>(null);
+  const preAnalysisAudioRef = useRef<HTMLAudioElement | null>(null);
+  const preAnalysisEstimatorRef = useRef<LiveBpmEstimator | null>(null);
+  const preAnalysisSongIdRef = useRef<string | null>(null);
   const crossfadingRef = useRef(false);
   const crossfadeIntervalRef = useRef<number | null>(null);
   const userRef = useRef(authUser);
@@ -176,6 +255,15 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
   const videoReadyRef = useRef(false);
   const signalVideoReady = useCallback(() => { videoReadyRef.current = true; }, []);
 
+  // Toast affiché quand un invité tente une action réservée à l'hôte : rappelle
+  // comment quitter la session (Social > session en cours > Quitter).
+  const notifyGuestBlocked = useCallback((action: string) => {
+    toast.info(action, {
+      description: 'Pour quitter, va dans Social > session en cours > Quitter la session',
+      duration: 4500,
+    });
+  }, []);
+
   // Session
   const [activeSession, setActiveSessionState] = useState<ListenSessionRow | null>(null);
   const sessionRef = useRef<ListenSessionRow | null>(null);
@@ -183,6 +271,75 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
   const isSessionHost = !!(activeSession && authUser && activeSession.host_id === authUser.id);
   const isSessionGuest = !!(activeSession && authUser && activeSession.host_id !== authUser.id);
   const setActiveSession = useCallback((s: ListenSessionRow | null) => setActiveSessionState(s), []);
+
+  // ── Session permanente ──────────────────────────────────────────────────
+  const [permanentSessionEnabled, setPermanentSessionEnabledState] = useState(() => isPermanentSessionEnabled());
+
+  const setPermanentSessionEnabled = useCallback(async (enabled: boolean) => {
+    setPermanentSessionEnabledPref(enabled);
+    setPermanentSessionEnabledState(enabled);
+    if (!enabled) {
+      const storedId = getStoredPermanentSessionId();
+      const s = sessionRef.current;
+      if (storedId && s && s.id === storedId && authUser && s.host_id === authUser.id) {
+        try { await pb.collection('listen_sessions').update(s.id, { is_active: false }); } catch {}
+        setActiveSessionState(null);
+      }
+      setStoredPermanentSessionId(null);
+    }
+  }, [authUser]);
+
+  // Rejoindre une session (via code, invitation, ou activité d'un ami en session permanente) :
+  // même mécanique partout — on s'ajoute aux participants, le reste (chargement du titre,
+  // synchro position/lecture) est pris en charge par les effets guest existants.
+  const joinSession = useCallback(async (s: ListenSessionRow): Promise<boolean> => {
+    if (!authUser) return false;
+    try {
+      const participants = (s.participants || []).filter((p) => p !== authUser.id);
+      const nextParticipants = [...participants, authUser.id];
+      await pb.collection('listen_sessions').update(s.id, { participants: nextParticipants });
+      setActiveSessionState({ ...s, participants: nextParticipants });
+      return true;
+    } catch {
+      return false;
+    }
+  }, [authUser]);
+
+  // Tant que le mode est activé : dès qu'une musique est jouée en ligne sans
+  // session active, on en crée une automatiquement (ouverte) pour que les
+  // abonnés puissent voir l'activité et rejoindre. Broadcast/sync ensuite pris
+  // en charge par les mécanismes de session existants (broadcastSong, etc.).
+  const creatingPermanentSessionRef = useRef(false);
+  useEffect(() => {
+    if (!authUser || offlineRef.current) return;
+    if (!permanentSessionEnabled) return;
+    if (!currentSong || !isPlaying) return;
+    if (activeSession) return;
+    if (connectionStatus === 'unstable') return;
+    if (creatingPermanentSessionRef.current) return;
+    creatingPermanentSessionRef.current = true;
+    let cancelled = false;
+    (async () => {
+      try {
+        const code = String(Math.floor(10000000 + Math.random() * 90000000));
+        const newS = await pb.collection('listen_sessions').create({
+          host_id: authUser.id, code, is_active: true, is_playing: true,
+          position: currentTime || 0, tempo: playbackRate, participants: [authUser.id],
+          song_id: currentSong.id, is_open: true,
+        });
+        if (cancelled) return;
+        setStoredPermanentSessionId(newS.id);
+        setActiveSessionState({
+          id: newS.id, code, host_id: authUser.id, song_id: currentSong.id,
+          position: currentTime || 0, tempo: playbackRate, is_playing: true,
+          participants: [authUser.id], is_active: true, is_open: true,
+        });
+      } catch {} finally {
+        creatingPermanentSessionRef.current = false;
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [authUser, permanentSessionEnabled, currentSong?.id, isPlaying, activeSession, connectionStatus]);
 
   // Toutes les écritures session de l'hôte passent par cette file pour garantir l'ordre d'arrivée
   // au serveur. Sans ça, le tick de sync (position de l'ANCIENNE musique, ~fin) pouvait arriver
@@ -200,18 +357,12 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
 
   const getActive = () => (activeRef.current === 'A' ? audioARef.current! : audioBRef.current!);
   const getInactive = () => (activeRef.current === 'A' ? audioBRef.current! : audioARef.current!);
+  const getActiveLowpass = () => (activeRef.current === 'A' ? lowpassARef.current : lowpassBRef.current);
+  const getInactiveLowpass = () => (activeRef.current === 'A' ? lowpassBRef.current : lowpassARef.current);
 
   const calculateFadePosition = useCallback((p: number, mode: TransitionMode): number => {
     if (mode === 'hardCut') return p >= 1 ? 1 : 0;
-    if (mode === 'bpmSync') return Math.sin(p * Math.PI / 2); // courbe rapide, effet DJ
     if (mode === 'linear') return p;
-    if (mode === 'exponential') return p * p * p * p;
-    if (mode === 'logarithmic') return 1 - Math.pow(1 - p, 4);
-    if (mode === 'sine') return Math.pow(Math.sin(p * Math.PI / 2), 2.5);
-    if (mode === 'sCurve') return p < 0.5 ? 2 * Math.pow(p, 3) : 1 - 2 * Math.pow(1 - p, 3);
-    if (mode === 'elastic') { if (p === 0) return 0; if (p === 1) return 1; const c5 = (2 * Math.PI) / 3.5; return Math.pow(2, -12 * p) * Math.sin((p - 0.1) * c5) + 1; }
-    if (mode === 'cubicEaseInOut') { const base = p < 0.5 ? 4 * p * p * p : 1 - Math.pow(-2 * p + 2, 3) / 2; if (p > 0.7) { const overshoot = Math.sin((p - 0.7) * Math.PI / 0.6) * 0.08; return Math.min(base + overshoot, 1); } return base; }
-    if (mode === 'quartEaseInOut') { const base = p < 0.5 ? 8 * p * p * p * p : 1 - Math.pow(-2 * p + 2, 4) / 2; if (p > 0.65) { const overshoot = Math.sin((p - 0.65) * Math.PI / 0.7) * 0.12; return Math.min(base + overshoot, 1); } return base; }
     return p;
   }, []);
 
@@ -264,43 +415,100 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
     crossfadingRef.current = true;
     const active = getActive();
     const inactive = getInactive();
+    const isAutoMix = transitionModeRef.current === 'autoMix';
+    const hasPreAnalysis = preAnalysisSongIdRef.current === nextSong.id;
+    // AutoMix : durée + type de transition décidés selon la compatibilité de tempo
+    // entre le morceau en cours (BPM accumulé en direct depuis le début de sa
+    // lecture) et le suivant (BPM pré-analysé en arrière-plan, voir l'effet dédié)
+    // — repli sur un fondu dynamique moyen si l'un des deux BPM n'a pas pu être
+    // déterminé avec assez de fiabilité.
+    const activeEstimator = activeRef.current === 'A' ? bpmEstimatorARef.current : bpmEstimatorBRef.current;
+    let effectiveFadeSec = fadeSec;
+    let autoMixPlan: AutoMixPlan | null = null;
+    if (isAutoMix) {
+      const activeBpm = activeEstimator?.getBpm() ?? null;
+      const nextBpm = hasPreAnalysis ? preAnalysisEstimatorRef.current?.getBpm() ?? null : null;
+      autoMixPlan = activeBpm && nextBpm
+        ? planAutoMixTransition(tempoCompatibilityScore(activeBpm.bpm, nextBpm.bpm), activeBpm.confidence)
+        : { kind: 'dynamicFade', durationSec: 4, beatAligned: false };
+      effectiveFadeSec = autoMixPlan.durationSec;
+    }
     inactive.src = songAudioUrl(nextSong);
     inactive.volume = 0;
     inactive.playbackRate = playbackRateRef.current;
-    inactive.currentTime = 0;
+    // Coupe les blancs : si on a pré-analysé une intro silencieuse pour ce
+    // morceau, on saute directement dessus au lieu de démarrer à 0.
+    inactive.currentTime = isAutoMix && hasPreAnalysis ? preAnalysisEstimatorRef.current?.getIntroSilenceSec() ?? 0 : 0;
     const startFade = () => {
       const startTs = performance.now();
       const mode = transitionModeRef.current;
-      // BPM Sync : fondu court (max 1.5s) pour effet DJ mix
-      const fadeMs = (mode === 'bpmSync' ? Math.min(fadeSec, 1.5) : fadeSec) * 1000;
+      const fadeMs = effectiveFadeSec * 1000;
       const startVol = active.volume;
       const targetVol = volumeRef.current;
-      if (crossfadeIntervalRef.current) clearInterval(crossfadeIntervalRef.current);
-      crossfadeIntervalRef.current = window.setInterval(() => {
+      const activeLowpass = getActiveLowpass();
+      const inactiveLowpass = getInactiveLowpass();
+      if (mode === 'filterSweep') {
+        // Chaque filtre change de rôle selon quelle piste sort/entre à cette transition :
+        // passe-bas sur la sortante, passe-haut sur l'entrante. Le Q monte pour un
+        // effet "wah" résonant, bien plus perceptible qu'un filtre plat.
+        if (activeLowpass) { activeLowpass.type = 'lowpass'; activeLowpass.Q.value = FILTER_SWEEP_Q; }
+        if (inactiveLowpass) { inactiveLowpass.type = 'highpass'; inactiveLowpass.Q.value = FILTER_SWEEP_Q; }
+      }
+      if (crossfadeIntervalRef.current) cancelAnimationFrame(crossfadeIntervalRef.current);
+      const tick = () => {
         const p = Math.min(1, (performance.now() - startTs) / fadeMs);
         const fadeCurve = calculateFadePosition(p, mode);
-        if (mode === 'tempoShift') {
+        if (mode === 'vinylStop') {
           if (p < 0.5) {
-            const slowdownCurve = p * 2;
-            active.playbackRate = playbackRateRef.current * (1 - slowdownCurve * 0.7);
-            active.volume = Math.max(0, startVol * (1 - slowdownCurve));
+            // Freinage vinyle : décélération agressive jusqu'à un quasi-arrêt, le volume
+            // s'éteint avec le ralenti (comme une platine qu'on freine à la main).
+            const brakeCurve = p * 2;
+            active.playbackRate = Math.max(0.05, playbackRateRef.current * (1 - Math.pow(brakeCurve, 2.2)));
+            active.volume = Math.max(0, startVol * (1 - Math.pow(brakeCurve, 3)));
             inactive.volume = 0;
           } else {
-            const speedupCurve = (p - 0.5) * 2;
-            inactive.playbackRate = playbackRateRef.current * (0.3 + speedupCurve * 0.7);
-            inactive.volume = Math.min(1, targetVol * speedupCurve * 2);
+            // Relance platine : redémarre lentement puis remonte vite en vitesse et en volume.
+            const spinUpCurve = (p - 0.5) * 2;
+            inactive.playbackRate = playbackRateRef.current * Math.min(1, 0.15 + Math.pow(spinUpCurve, 1.8) * 0.85);
+            inactive.volume = Math.min(1, targetVol * Math.pow(spinUpCurve, 0.6));
             active.volume = 0;
           }
+        } else if (mode === 'filterSweep') {
+          // Passe-bas qui se ferme sur la piste sortante : elle perd ses aigus et ne
+          // garde que les basses, son étouffé/voilé façon "filter kill" DJ.
+          // Passe-haut qui s'ouvre sur la piste entrante : elle démarre sans basses
+          // (son fin) puis se remplit à mesure qu'elle monte en volume.
+          active.volume = Math.max(0, startVol * (1 - fadeCurve));
+          inactive.volume = Math.min(1, targetVol * fadeCurve);
+          if (activeLowpass) {
+            activeLowpass.frequency.value = logLerpHz(FILTER_SWEEP_LOWPASS_OPEN_HZ, FILTER_SWEEP_LOWPASS_CLOSED_HZ, fadeCurve);
+          }
+          if (inactiveLowpass) {
+            inactiveLowpass.frequency.value = logLerpHz(FILTER_SWEEP_HIGHPASS_CLOSED_HZ, FILTER_SWEEP_HIGHPASS_OPEN_HZ, fadeCurve);
+          }
+        } else if (mode === 'equalPower' || mode === 'autoMix') {
+          // Fondu à puissance constante (courbes cos/sin) : contrairement à un fondu
+          // linéaire, la somme des deux pistes garde une puissance perçue constante
+          // pendant toute la transition, sans creux de volume au milieu. C'est
+          // exactement la courbe utilisée par Spotify/Apple Music. AutoMix ne fait
+          // que choisir la durée dynamiquement (voir triggerCrossfadeRef) puis
+          // exécute le fondu avec cette même courbe.
+          active.volume = Math.max(0, startVol * Math.cos(p * Math.PI / 2));
+          inactive.volume = Math.min(1, targetVol * Math.sin(p * Math.PI / 2));
         } else {
           active.volume = Math.max(0, startVol * (1 - fadeCurve));
           inactive.volume = Math.min(1, targetVol * fadeCurve);
         }
         if (p >= 1) {
-          if (crossfadeIntervalRef.current) { clearInterval(crossfadeIntervalRef.current); crossfadeIntervalRef.current = null; }
+          crossfadeIntervalRef.current = null;
           try { active.pause(); active.currentTime = 0; active.removeAttribute('src'); active.load(); } catch {}
           activeRef.current = activeRef.current === 'A' ? 'B' : 'A';
           inactive.volume = targetVol;
           inactive.playbackRate = playbackRateRef.current;
+          // Remet les deux filtres en passe-bas grand ouvert et Q neutre (état par
+          // défaut), quel que soit le rôle qu'ils viennent de jouer.
+          if (activeLowpass) { activeLowpass.type = 'lowpass'; activeLowpass.frequency.value = FILTER_SWEEP_LOWPASS_OPEN_HZ; activeLowpass.Q.value = 0.7; }
+          if (inactiveLowpass) { inactiveLowpass.type = 'lowpass'; inactiveLowpass.frequency.value = FILTER_SWEEP_LOWPASS_OPEN_HZ; inactiveLowpass.Q.value = 0.7; }
           setDuration(inactive.duration || 0);
           setCurrentTime(inactive.currentTime || 0);
           setQueueIndex(nextIdx);
@@ -312,10 +520,24 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
             broadcastSongRef.current(nextSong);
           }
           crossfadingRef.current = false;
+          return;
         }
-      }, 50) as unknown as number;
+        crossfadeIntervalRef.current = requestAnimationFrame(tick);
+      };
+      crossfadeIntervalRef.current = requestAnimationFrame(tick);
     };
-    const onReady = () => { inactive.removeEventListener('canplay', onReady); inactive.playbackRate = playbackRateRef.current; inactive.play().then(() => { inactive.playbackRate = playbackRateRef.current; startFade(); }).catch((e) => { console.error('Crossfade play failed', e); crossfadingRef.current = false; }); };
+    const onReady = () => {
+      inactive.removeEventListener('canplay', onReady);
+      inactive.playbackRate = playbackRateRef.current;
+      inactive.play().then(() => {
+        inactive.playbackRate = playbackRateRef.current;
+        // Cale le vrai départ du fondu sur le prochain beat détecté du morceau en
+        // cours — sensible surtout pour un enchaînement direct ou un mix court.
+        const waitMs = autoMixPlan?.beatAligned ? activeEstimator?.getMsUntilNextBeat(AUTOMIX_BEAT_ALIGN_MAX_WAIT_MS) ?? null : null;
+        if (waitMs && waitMs > 20) setTimeout(startFade, waitMs);
+        else startFade();
+      }).catch((e) => { console.error('Crossfade play failed', e); crossfadingRef.current = false; });
+    };
     inactive.addEventListener('canplay', onReady);
     inactive.load();
   });
@@ -351,14 +573,68 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
       });
       analyser.connect(ctx.destination);
 
-      // Les deux sources audio passent dans le premier filtre
-      ctx.createMediaElementSource(audioARef.current).connect(filters[0]);
-      ctx.createMediaElementSource(audioBRef.current).connect(filters[0]);
+      // Filtre dédié à chaque piste (mode Filter Sweep) — passe-bas grand ouvert
+      // (20kHz) par défaut, donc inaudible tant qu'aucun sweep n'est en cours. Son
+      // `type` est basculé dynamiquement en lowpass/highpass selon le rôle
+      // (sortant/entrant) à chaque transition (voir `startFade`).
+      const makeSweepFilter = () => {
+        const f = ctx.createBiquadFilter();
+        f.type = 'lowpass';
+        f.frequency.value = FILTER_SWEEP_LOWPASS_OPEN_HZ;
+        f.Q.value = 0.7;
+        return f;
+      };
+      const sweepA = makeSweepFilter();
+      const sweepB = makeSweepFilter();
+      sweepA.connect(filters[0]);
+      sweepB.connect(filters[0]);
+
+      // Les deux sources audio passent d'abord par leur filtre dédié
+      const sourceA = ctx.createMediaElementSource(audioARef.current);
+      const sourceB = ctx.createMediaElementSource(audioBRef.current);
+      sourceA.connect(sweepA);
+      sourceB.connect(sweepB);
 
       audioCtxRef.current = ctx;
       analyserRef.current = analyser;
       eqFiltersRef.current = filters;
-      beatDetectorRef.current = new BeatDetector(analyser);
+      lowpassARef.current = sweepA;
+      lowpassBRef.current = sweepB;
+
+      // AutoMix — analyseurs dédiés par piste, tapés directement à la source (donc
+      // indépendants d'un éventuel sweep Filter Sweep en cours) pour un BPM fiable.
+      const makeBpmAnalyser = () => {
+        const a = ctx.createAnalyser();
+        a.fftSize = 256;
+        a.smoothingTimeConstant = 0.3;
+        return a;
+      };
+      const bpmAnalyserA = makeBpmAnalyser();
+      const bpmAnalyserB = makeBpmAnalyser();
+      sourceA.connect(bpmAnalyserA);
+      sourceB.connect(bpmAnalyserB);
+      bpmAnalyserARef.current = bpmAnalyserA;
+      bpmAnalyserBRef.current = bpmAnalyserB;
+      bpmEstimatorARef.current = new LiveBpmEstimator(bpmAnalyserA);
+      bpmEstimatorBRef.current = new LiveBpmEstimator(bpmAnalyserB);
+
+      // Élément audio caché dédié à la pré-analyse BPM du morceau suivant — tourne
+      // en parallèle du morceau en cours (voir l'effet plus bas), sans jamais
+      // produire de son (gain à 0, en plus de `.muted`).
+      const preAnalysisAudio = new Audio();
+      preAnalysisAudio.preload = 'auto';
+      preAnalysisAudio.crossOrigin = 'anonymous';
+      preAnalysisAudio.muted = true;
+      preAnalysisAudio.volume = 0;
+      const preAnalysisSource = ctx.createMediaElementSource(preAnalysisAudio);
+      const preAnalysisAnalyser = makeBpmAnalyser();
+      const preAnalysisGain = ctx.createGain();
+      preAnalysisGain.gain.value = 0;
+      preAnalysisSource.connect(preAnalysisAnalyser);
+      preAnalysisAnalyser.connect(preAnalysisGain);
+      preAnalysisGain.connect(ctx.destination);
+      preAnalysisAudioRef.current = preAnalysisAudio;
+      preAnalysisEstimatorRef.current = new LiveBpmEstimator(preAnalysisAnalyser);
     } catch {}
 
     const onTime = (e: Event) => {
@@ -369,25 +645,20 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
       if (!isFinite(dur) || dur <= 0) return;
       const fadeDuration = crossfadeSecondsRef.current;
       const remaining = dur - a.currentTime;
-      if (fadeDuration > 0 && remaining <= fadeDuration && remaining > 0.1 && !crossfadingRef.current && !isSessionGuestRef.current && repeatModeRef.current !== 'one') {
-        // BPM Sync : attendre le prochain beat avant de déclencher le crossfade
-        if (transitionModeRef.current === 'bpmSync' && beatDetectorRef.current) {
-          // Attendre le prochain début de mesure (4 beats) pour un effet DJ mix propre
-          const msUntilMeasure = beatDetectorRef.current.getMsUntilNextMeasure();
-          if (msUntilMeasure !== null && msUntilMeasure < 4000) {
-            setTimeout(() => { if (!crossfadingRef.current) triggerCrossfadeRef.current(); }, msUntilMeasure);
-          } else {
-            // Fallback : prochain beat si mesure non détectée
-            const msUntilBeat = beatDetectorRef.current.getMsUntilNextBeat();
-            if (msUntilBeat !== null && msUntilBeat < 1500) {
-              setTimeout(() => { if (!crossfadingRef.current) triggerCrossfadeRef.current(); }, msUntilBeat);
-            } else {
-              triggerCrossfadeRef.current();
-            }
-          }
-        } else {
-          triggerCrossfadeRef.current();
-        }
+      const isAutoMix = transitionModeRef.current === 'autoMix';
+      // AutoMix : la durée réelle est décidée dynamiquement (voir triggerCrossfadeRef),
+      // mais il faut déjà préparer/précharger la piste suivante un peu avant.
+      const triggerWindow = isAutoMix ? AUTOMIX_TRIGGER_LOOKAHEAD_SEC : fadeDuration;
+      // Coupe les blancs : si la piste est retombée dans le silence depuis un
+      // moment alors qu'on approche de la fin, inutile d'attendre la fin réelle
+      // du fichier — on déclenche la transition dès maintenant.
+      const activeEstimatorForSilence = activeRef.current === 'A' ? bpmEstimatorARef.current : bpmEstimatorBRef.current;
+      const trailingSilence = isAutoMix
+        && remaining <= AUTOMIX_SILENCE_TRIGGER_LOOKAHEAD_SEC
+        && (activeEstimatorForSilence?.getMsSinceLastAudible() ?? 0) > AUTOMIX_TRAILING_SILENCE_MS;
+
+      if (fadeDuration > 0 && (remaining <= triggerWindow || trailingSilence) && remaining > 0.1 && !crossfadingRef.current && !isSessionGuestRef.current && repeatModeRef.current !== 'one') {
+        triggerCrossfadeRef.current();
       }
     };
     const onDur = (e: Event) => { if (e.target === getActive()) setDuration(getActive().duration || 0); };
@@ -403,16 +674,73 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
     };
     const onPause = (e: Event) => { if (e.target !== getActive()) return; if (!crossfadingRef.current) { setIsPlaying(false); setIsBuffering(false); } };
     [audioARef.current, audioBRef.current].forEach((a) => { a.addEventListener('timeupdate', onTime); a.addEventListener('loadedmetadata', onDur); a.addEventListener('ended', onEnd); a.addEventListener('play', onPlay); a.addEventListener('pause', onPause); a.addEventListener('waiting', onWaiting); a.addEventListener('playing', onPlaying); });
+
+    // AutoMix — démarre/arrête/réinitialise l'estimateur BPM de chaque piste
+    // indépendamment de son rôle actif/inactif (contrairement aux listeners
+    // ci-dessus qui ne suivent que la piste active).
+    const onBpmPlayingA = () => { if (transitionModeRef.current === 'autoMix') bpmEstimatorARef.current?.start(); };
+    const onBpmPlayingB = () => { if (transitionModeRef.current === 'autoMix') bpmEstimatorBRef.current?.start(); };
+    const onBpmStopA = () => bpmEstimatorARef.current?.stop();
+    const onBpmStopB = () => bpmEstimatorBRef.current?.stop();
+    const onBpmResetA = () => bpmEstimatorARef.current?.reset();
+    const onBpmResetB = () => bpmEstimatorBRef.current?.reset();
+    audioARef.current.addEventListener('playing', onBpmPlayingA);
+    audioARef.current.addEventListener('pause', onBpmStopA);
+    audioARef.current.addEventListener('ended', onBpmStopA);
+    audioARef.current.addEventListener('loadstart', onBpmResetA);
+    audioBRef.current.addEventListener('playing', onBpmPlayingB);
+    audioBRef.current.addEventListener('pause', onBpmStopB);
+    audioBRef.current.addEventListener('ended', onBpmStopB);
+    audioBRef.current.addEventListener('loadstart', onBpmResetB);
+
     return () => {
-      if (crossfadeIntervalRef.current) { clearInterval(crossfadeIntervalRef.current); crossfadeIntervalRef.current = null; }
+      if (crossfadeIntervalRef.current) { cancelAnimationFrame(crossfadeIntervalRef.current); crossfadeIntervalRef.current = null; }
       crossfadingRef.current = false;
       [audioARef.current, audioBRef.current].forEach((a) => { if (!a) return; a.pause(); a.removeEventListener('timeupdate', onTime); a.removeEventListener('loadedmetadata', onDur); a.removeEventListener('ended', onEnd); a.removeEventListener('play', onPlay); a.removeEventListener('pause', onPause); a.removeEventListener('waiting', onWaiting); a.removeEventListener('playing', onPlaying); });
+      audioARef.current?.removeEventListener('playing', onBpmPlayingA);
+      audioARef.current?.removeEventListener('pause', onBpmStopA);
+      audioARef.current?.removeEventListener('ended', onBpmStopA);
+      audioARef.current?.removeEventListener('loadstart', onBpmResetA);
+      audioBRef.current?.removeEventListener('playing', onBpmPlayingB);
+      audioBRef.current?.removeEventListener('pause', onBpmStopB);
+      audioBRef.current?.removeEventListener('ended', onBpmStopB);
+      audioBRef.current?.removeEventListener('loadstart', onBpmResetB);
+      bpmEstimatorARef.current?.stop();
+      bpmEstimatorBRef.current?.stop();
+      preAnalysisEstimatorRef.current?.stop();
+      try { preAnalysisAudioRef.current?.pause(); } catch {}
       clearMediaSession();
     };
   }, []);
 
   useEffect(() => { const a = getActive(); if (a) a.volume = volume; }, [volume]);
   useEffect(() => { [audioARef.current, audioBRef.current].forEach((a) => { if (a) a.playbackRate = playbackRate; }); }, [playbackRate]);
+
+  // AutoMix — pré-analyse silencieuse du morceau suivant dès qu'on sait lequel
+  // c'est (même logique de calcul du "suivant" que triggerCrossfadeRef), pour
+  // avoir un BPM fiable bien avant le moment réel de la transition.
+  useEffect(() => {
+    const audio = preAnalysisAudioRef.current;
+    const estimator = preAnalysisEstimatorRef.current;
+    if (!audio || !estimator || transitionMode !== 'autoMix') {
+      estimator?.stop();
+      return;
+    }
+    if (queue.length === 0) return;
+    let nextIdx = queueIndex + 1;
+    if (nextIdx >= queue.length) {
+      if (repeatMode === 'all') nextIdx = 0;
+      else { estimator.stop(); return; }
+    }
+    const nextSong = queue[nextIdx];
+    if (!nextSong || preAnalysisSongIdRef.current === nextSong.id) return;
+    preAnalysisSongIdRef.current = nextSong.id;
+    estimator.stop();
+    estimator.reset();
+    audio.src = songAudioUrl(nextSong);
+    audio.currentTime = 0;
+    audio.play().then(() => estimator.start()).catch(() => {});
+  }, [transitionMode, queue, queueIndex, repeatMode]);
 
   // Android bridge
   useEffect(() => {
@@ -438,6 +766,22 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => { setMediaSessionMetadata(currentSong); }, [currentSong]);
   useEffect(() => { setMediaSessionPlaybackState(currentSong ? (isPlaying ? 'playing' : 'paused') : 'none'); }, [isPlaying, currentSong]);
+
+  // ── Auto-download musique (Windows uniquement) ─────────────────────────────
+  useEffect(() => {
+    if (!currentSong || offline) return;
+    // Déclencher le téléchargement automatique
+    (async () => {
+      try {
+        const platform = await getPlatform();
+        // 'slow' = latence élevée mais connecté ; seul 'unstable' doit bloquer le téléchargement
+        const isOnline = connectionStatus !== 'unstable';
+        await triggerAutoDownload(currentSong, platform, isOnline, songAudioUrl, songCoverUrl);
+      } catch (err) {
+        console.error('[PlayerContext] Auto-download failed', err);
+      }
+    })();
+  }, [currentSong, offline, connectionStatus]);
 
   // ── Égaliseur ─────────────────────────────────────────────────────────────
   const setEqPreset = useCallback((id: string) => {
@@ -489,17 +833,6 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
       setSleepTimerMinutes(null);
     }
   }, [sleepTimerMinutes, isPlaying, currentTime, duration]);
-
-  // ── BPM Sync — démarrer/arrêter le beat detector selon le mode ────────────
-  useEffect(() => {
-    const bd = beatDetectorRef.current;
-    if (!bd) return;
-    if (transitionMode === 'bpmSync' && isPlaying) {
-      bd.start();
-    } else {
-      bd.stop();
-    }
-  }, [transitionMode, isPlaying]);
 
   // Discord Rich Presence — uniquement dans l'app Electron
   const discordStartRef = useRef<number | null>(null);
@@ -625,8 +958,19 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
     if (!authUser) return;
     if (pauseTimeoutRef.current) { clearTimeout(pauseTimeoutRef.current); pauseTimeoutRef.current = null; }
 
+    // Hors connexion : on met l'écoute en file locale — elle sera poussée au
+    // serveur (historique + play_count) à la reconnexion.
+    if (offlineRef.current) {
+      queueOfflinePlay(song.id);
+      return;
+    }
+
     // Record listen history
     pb.collection('listen_history').create({ user_id: authUser.id, song_id: song.id, listened_at: new Date().toISOString() }).catch(() => {});
+
+    // Auto-téléchargement : chaque son écouté descend en cache local (audio +
+    // cover + métadonnées) pour rester écoutable en mode hors connexion.
+    if (!song.id.startsWith('local_')) ensureCachedForPlayback(song);
 
     updateStreak(authUser.id);
     updatePresence({ userId: authUser.id, isListening: true, songId: song.id, songTitle: song.title, songAuthor: song.author, songCoverUrl: songCoverUrl(song) });
@@ -666,24 +1010,35 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
 
   const loadAndPlay = useCallback(async (song: Song, autoPlay = true) => {
     setIsBuffering(true);
-    if (crossfadeIntervalRef.current) { clearInterval(crossfadeIntervalRef.current); crossfadeIntervalRef.current = null; }
+    if (crossfadeIntervalRef.current) { cancelAnimationFrame(crossfadeIntervalRef.current); crossfadeIntervalRef.current = null; }
     crossfadingRef.current = false;
     const inactive = getInactive();
     if (inactive) { try { inactive.pause(); inactive.volume = 0; inactive.removeAttribute('src'); inactive.load(); } catch {} }
     const a = getActive();
     if (!a) return;
-    a.src = songAudioUrl(song);
+    const cachedSrc = await songAudioUrlWithCache(song);
+    const serverSrc = songAudioUrl(song);
+    a.src = cachedSrc;
     a.volume = volume;
     const applyRate = () => { a.playbackRate = playbackRate; };
     applyRate();
     a.addEventListener('loadedmetadata', applyRate, { once: true });
     a.addEventListener('playing', applyRate, { once: true });
+    if (cachedSrc !== serverSrc && serverSrc) {
+      const onCachedError = () => {
+        console.error('[Player] Cached audio failed to load, falling back to server URL');
+        a.src = serverSrc;
+        a.load();
+        if (autoPlay) { a.play().catch((e) => console.error('Fallback audio play failed', e)); }
+      };
+      a.addEventListener('error', onCachedError, { once: true });
+    }
     if (!autoPlay) { a.load(); return; }
     try { if (audioCtxRef.current?.state === 'suspended') await audioCtxRef.current.resume().catch(() => {}); await a.play(); a.playbackRate = playbackRate; recordPlay(song); } catch (e) { console.error('Audio play failed', e); }
   }, [playbackRate, volume, recordPlay, authUser]);
 
   const loadAndPlayExternalAudio = useCallback(async (payload: { videoId: string; title: string; author: string; coverUrl: string; audioUrl: string; autoPlay?: boolean }) => {
-    if (crossfadeIntervalRef.current) { clearInterval(crossfadeIntervalRef.current); crossfadeIntervalRef.current = null; }
+    if (crossfadeIntervalRef.current) { cancelAnimationFrame(crossfadeIntervalRef.current); crossfadeIntervalRef.current = null; }
     crossfadingRef.current = false;
     const inactive = getInactive();
     if (inactive) { try { inactive.pause(); inactive.volume = 0; inactive.removeAttribute('src'); inactive.load(); } catch {} }
@@ -738,7 +1093,7 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
   }, [checkConnectionStatus]);
 
   const playSong = useCallback((song: Song) => {
-    if (isSessionGuestRef.current) { toast.info("Seul l'hôte peut changer la musique de la session"); return; }
+    if (isSessionGuestRef.current) { notifyGuestBlocked("Seul l'hôte peut changer la musique de la session"); return; }
     if (audioCtxRef.current?.state === 'suspended') audioCtxRef.current.resume().catch(() => {});
     originalQueueRef.current = [song];
     setCurrentSong(song); setQueue([song]); setQueueIndex(0); setPlayedSongIds(new Set([song.id])); setIsPlayerOpen(true);
@@ -779,7 +1134,7 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
   }, [loadAndPlay, authUser, broadcastSong]);
 
   const playSongFromList = useCallback((song: Song, list: Song[]) => {
-    if (isSessionGuestRef.current) { toast.info("Seul l'hôte peut changer la musique de la session"); return; }
+    if (isSessionGuestRef.current) { notifyGuestBlocked("Seul l'hôte peut changer la musique de la session"); return; }
     if (audioCtxRef.current?.state === 'suspended') audioCtxRef.current.resume().catch(() => {});
     const idx = Math.max(0, list.findIndex((s) => s.id === song.id));
     originalQueueRef.current = [...list];
@@ -792,7 +1147,7 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
   const togglePlay = useCallback(() => {
     const a = getActive();
     if (!a || !currentSong) return;
-    if (isSessionGuestRef.current) { toast.info("Seul l'hôte peut contrôler la lecture"); return; }
+    if (isSessionGuestRef.current) { notifyGuestBlocked("Seul l'hôte peut contrôler la lecture"); return; }
     // Resume AudioContext on user gesture (browser autoplay policy)
     if (audioCtxRef.current?.state === 'suspended') audioCtxRef.current.resume().catch(() => {});
     const shouldPlay = a.paused;
@@ -891,7 +1246,7 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
   const openPlayer = useCallback(() => setIsPlayerOpen(true), []);
   const closePlayer = useCallback(() => setIsPlayerOpen(false), []);
   const setPlaybackRate = useCallback((r: number) => {
-    if (isSessionGuestRef.current) { toast.info("Seul l'hôte peut changer le tempo de la session"); return; }
+    if (isSessionGuestRef.current) { notifyGuestBlocked("Seul l'hôte peut changer le tempo de la session"); return; }
     const v = Math.max(0.5, Math.min(2, r));
     setPlaybackRateState(v);
     const s = sessionRef.current;
@@ -951,6 +1306,7 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
           if (e.action !== 'update') return;
           const r = e.record as any;
           if (!r.is_active) {
+            if (getStoredPermanentSessionId() === r.id) setStoredPermanentSessionId(null);
             setActiveSessionState(null);
             return;
           }
@@ -964,6 +1320,7 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
             tempo: r.tempo || 1,
             participants: r.participants ?? [],
             is_active: r.is_active,
+            is_open: r.is_open ?? false,
           });
         });
       } catch (err) {
@@ -1114,7 +1471,7 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
 
   const playExternalAudio = useCallback((payload: { videoId: string; title: string; author: string; coverUrl: string; audioUrl: string }) => {
     if (!payload?.audioUrl) return;
-    if (isSessionGuestRef.current) { toast.info("Seul l'hôte peut changer la musique de la session"); return; }
+    if (isSessionGuestRef.current) { notifyGuestBlocked("Seul l'hôte peut changer la musique de la session"); return; }
     loadAndPlayExternalAudio({ ...payload, autoPlay: true });
   }, [loadAndPlayExternalAudio]);
 
@@ -1122,6 +1479,7 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
     <PlayerContext.Provider value={{
       currentSong, isPlaying, currentTime, duration, volume, queue, queueIndex, isShuffled, repeatMode, isPlayerOpen, playbackRate, crossfadeSeconds, transitionMode,
       activeSession, isSessionHost, isSessionGuest, connectionStatus, isBuffering, refreshSession, setActiveSession, stopAudio, refreshSongStats,
+      permanentSessionEnabled, setPermanentSessionEnabled, joinSession,
       playSong, playSongFromList, playExternalAudio, togglePlay, next, previous, seek, setVolume, toggleShuffle, cycleRepeat,
       openPlayer, closePlayer, setPlaybackRate, setCrossfadeSeconds, setTransitionMode, addToQueue, startRadio, signalVideoReady,
       getAnalyserNode: () => analyserRef.current,

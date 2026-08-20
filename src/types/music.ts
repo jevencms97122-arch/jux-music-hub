@@ -1,4 +1,4 @@
-// Types alignés sur le schéma Supabase
+// Types alignés sur le schéma PocketBase
 
 export interface Profile {
   id: string;

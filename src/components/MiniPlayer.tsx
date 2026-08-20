@@ -83,7 +83,10 @@ export default function MiniPlayer() {
                   : <Play className="h-4.5 w-4.5 fill-current" />}
             </button>
             <button
-              onClick={(e) => { e.stopPropagation(); next(); }}
+              onClick={(e) => {
+                e.stopPropagation();
+                next();
+              }}
               className="rounded-xl p-2 text-muted-foreground hover:text-foreground hover:bg-white/5"
               aria-label="Suivant"
             >

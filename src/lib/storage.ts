@@ -1,5 +1,7 @@
 import { pb, getPbUrl } from './pocketbase';
 import { isMediaServerConfigured, uploadMedia, type MediaKind } from './mediaServer';
+import { isTauri } from '@tauri-apps/api/core';
+import { getDownloadedAudioPath } from './offlineCacheSync';
 
 /** URL publique d'un fichier depuis PocketBase */
 export function publicUrl(collectionName: string, recordId: string, filename: string): string {
@@ -44,6 +46,25 @@ export function songAudioUrl(song: { audio?: string; audio_url?: string; id?: st
     }
   }
   return '';
+}
+
+/**
+ * Obtient l'URL audio en priorité depuis le cache local (Tauri)
+ * si le fichier a été téléchargé, sinon depuis PocketBase/serveur média
+ */
+export async function songAudioUrlWithCache(song: { audio?: string; audio_url?: string; id?: string; collectionName?: string }): Promise<string> {
+  // Vérifier d'abord le cache local si Tauri est disponible
+  if (isTauri() && song.id) {
+    try {
+      const cachedPath = await getDownloadedAudioPath(song.id);
+      if (cachedPath) {
+        return cachedPath;
+      }
+    } catch { /* fallback to server URL */ }
+  }
+
+  // Sinon, utiliser l'URL du serveur
+  return songAudioUrl(song);
 }
 
 export function avatarUrl(profile: { avatar?: string | null; avatar_url?: string | null; id?: string; collectionId?: string; collectionName?: string }): string {

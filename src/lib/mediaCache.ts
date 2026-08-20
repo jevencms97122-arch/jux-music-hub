@@ -66,18 +66,6 @@ function isYoutubeUrl(url: string): boolean {
 }
 
 /**
- * Vérifie si l'URL est une URL Supabase Storage (qu'on veut cacher).
- */
-function isSupabaseStorageUrl(url: string): boolean {
-  if (url.includes('.supabase.co') || url.includes('/files/') || url.includes('/storage/')) {
-    return true;
-  }
-  // Serveur média externe (PocketBase) configuré via VITE_MEDIA_BASE_URL
-  const mediaBase = (import.meta.env.VITE_MEDIA_BASE_URL || '').replace(/\/+$/, '');
-  return !!mediaBase && url.startsWith(mediaBase);
-}
-
-/**
  * Nettoie l'ancien cache si on dépasse la taille maximale.
  */
 async function enforceMaxSize(): Promise<void> {

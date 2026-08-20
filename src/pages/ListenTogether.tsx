@@ -7,10 +7,8 @@ import { usePlayer, type ListenSessionRow } from '@/contexts/PlayerContext';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
-import { ArrowLeft, Users, Plus, Copy, LogOut, Radio, UserPlus, Loader2 } from 'lucide-react';
+import { ArrowLeft, LogOut, Radio, UserPlus } from 'lucide-react';
 import { toast } from 'sonner';
-import { avatarUrl, songCoverUrl } from '@/lib/storage';
 import type { Profile, Song } from '@/types/music';
 
 function generateSessionCode() { return String(Math.floor(10000000 + Math.random() * 90000000)); }
@@ -136,10 +134,22 @@ export default function ListenTogether() {
 
       {activeSession ? (
         <div className="space-y-4">
-          <div className="rounded-xl bg-gradient-primary p-4 text-primary-foreground">
-            <p className="text-sm opacity-80">Session active</p>
-            <p className="text-2xl font-bold">Code: {activeSession.code}</p>
-          </div>
+          {activeSession.is_open ? (
+            <div className="rounded-xl border border-orange-500/30 bg-orange-500/10 p-4">
+              <p className="flex items-center gap-2 text-sm font-bold text-orange-400">
+                <Radio className="h-4 w-4" />Session permanente
+              </p>
+              <p className="mt-1 text-xs text-muted-foreground">
+                Visible automatiquement par les abonnés de l'hôte — pas de code à partager.
+              </p>
+            </div>
+          ) : (
+            <div className="rounded-xl bg-gradient-primary p-4 text-primary-foreground">
+              <p className="text-sm opacity-80">Session active</p>
+              <p className="text-2xl font-bold">Code: {activeSession.code}</p>
+            </div>
+          )}
+
           <div className="rounded-xl bg-card p-4">
             <p className="font-semibold mb-2">Hôte: {host?.pseudo || 'Chargement...'}</p>
             {hostSong && <p className="text-sm text-muted-foreground">En cours: {hostSong.title}</p>}
@@ -155,7 +165,7 @@ export default function ListenTogether() {
               ))}
             </div>
           </div>
-          {following.length > 0 && isSessionHost && (
+          {!activeSession.is_open && following.length > 0 && isSessionHost && (
             <div className="rounded-xl bg-card p-4">
               <p className="font-semibold mb-2">Inviter des amis</p>
               <div className="flex flex-wrap gap-2">

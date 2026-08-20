@@ -211,6 +211,183 @@ fn smtc_clear(state: State<AppState>) {
 #[tauri::command]
 fn smtc_clear() {}
 
+fn get_downloads_dir(app: &tauri::AppHandle) -> Result<std::path::PathBuf, String> {
+    let cache_dir = app
+        .path()
+        .app_cache_dir()
+        .map_err(|e| format!("Failed to get cache dir: {e}"))?;
+    Ok(cache_dir.join("downloads"))
+}
+
+/// Devine une extension d'image plausible à partir de l'URL de la cover
+fn guess_cover_extension(cover_url: &str) -> &'static str {
+    let lower = cover_url.to_lowercase();
+    if lower.contains(".png") {
+        "png"
+    } else if lower.contains(".webp") {
+        "webp"
+    } else if lower.contains(".gif") {
+        "gif"
+    } else {
+        "jpg"
+    }
+}
+
+/// Cherche un fichier cover existant pour ce song_id, quelle que soit son extension
+fn find_cover_file(downloads_dir: &std::path::Path, song_id: &str) -> Option<std::path::PathBuf> {
+    for ext in ["jpg", "png", "webp", "gif"] {
+        let candidate = downloads_dir.join(format!("{song_id}.cover.{ext}"));
+        if candidate.exists() {
+            return Some(candidate);
+        }
+    }
+    None
+}
+
+/// Télécharge et sauvegarde une musique (+ sa cover) pour l'écoute hors ligne
+#[tauri::command]
+async fn download_song(
+    app: tauri::AppHandle,
+    song_id: String,
+    _title: String,
+    _author: String,
+    audio_url: String,
+    cover_url: String,
+) -> Result<(), String> {
+    // Créer le dossier de cache des téléchargements
+    let downloads_dir = get_downloads_dir(&app)?;
+    std::fs::create_dir_all(&downloads_dir)
+        .map_err(|e| format!("Failed to create downloads dir: {e}"))?;
+
+    // Chemin du fichier audio
+    let audio_file = downloads_dir.join(format!("{}.m4a", song_id));
+
+    // Télécharger le fichier audio
+    let client = reqwest::Client::new();
+    let response = client
+        .get(&audio_url)
+        .send()
+        .await
+        .map_err(|e| format!("Failed to download audio: {e}"))?;
+
+    if !response.status().is_success() {
+        return Err(format!("Download failed with status {}", response.status()));
+    }
+
+    let bytes = response
+        .bytes()
+        .await
+        .map_err(|e| format!("Failed to read audio bytes: {e}"))?;
+
+    // Sauvegarder le fichier
+    std::fs::write(&audio_file, bytes)
+        .map_err(|e| format!("Failed to write audio file: {e}"))?;
+
+    // Télécharger la cover en best-effort : un échec ici ne doit pas faire
+    // échouer le téléchargement de la musique elle-même.
+    if !cover_url.is_empty() {
+        // Retire une éventuelle cover précédente (extension différente) avant d'écrire la nouvelle
+        if let Some(old_cover) = find_cover_file(&downloads_dir, &song_id) {
+            let _ = std::fs::remove_file(old_cover);
+        }
+        if let Ok(cover_response) = client.get(&cover_url).send().await {
+            if cover_response.status().is_success() {
+                if let Ok(cover_bytes) = cover_response.bytes().await {
+                    let ext = guess_cover_extension(&cover_url);
+                    let cover_file = downloads_dir.join(format!("{song_id}.cover.{ext}"));
+                    let _ = std::fs::write(&cover_file, cover_bytes);
+                }
+            }
+        }
+    }
+
+    Ok(())
+}
+
+/// Retourne le chemin d'un fichier audio téléchargé
+#[tauri::command]
+fn get_downloaded_audio_path(app: tauri::AppHandle, song_id: String) -> Result<String, String> {
+    let downloads_dir = get_downloads_dir(&app)?;
+    let audio_file = downloads_dir.join(format!("{}.m4a", song_id));
+
+    if audio_file.exists() {
+        Ok(audio_file.to_string_lossy().to_string())
+    } else {
+        Err("Audio file not found".to_string())
+    }
+}
+
+/// Retourne le chemin de la cover téléchargée pour une musique, si elle existe
+#[tauri::command]
+fn get_downloaded_cover_path(app: tauri::AppHandle, song_id: String) -> Result<String, String> {
+    let downloads_dir = get_downloads_dir(&app)?;
+    match find_cover_file(&downloads_dir, &song_id) {
+        Some(path) => Ok(path.to_string_lossy().to_string()),
+        None => Err("Cover file not found".to_string()),
+    }
+}
+
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+struct CachedAudioFile {
+    song_id: String,
+    local_path: String,
+    size_bytes: u64,
+}
+
+/// Liste tous les fichiers audio téléchargés
+#[tauri::command]
+fn list_downloaded_songs(app: tauri::AppHandle) -> Result<Vec<CachedAudioFile>, String> {
+    let downloads_dir = get_downloads_dir(&app)?;
+
+    if !downloads_dir.exists() {
+        return Ok(Vec::new());
+    }
+
+    let mut songs = Vec::new();
+    for entry in std::fs::read_dir(&downloads_dir)
+        .map_err(|e| format!("Failed to read downloads dir: {e}"))?
+    {
+        let entry = entry.map_err(|e| format!("Failed to read entry: {e}"))?;
+        let path = entry.path();
+
+        // Ne compter que les fichiers audio (.m4a) — les covers (.cover.*) sont
+        // stockées à côté et ne doivent pas apparaître comme des sons distincts.
+        if path.is_file() && path.extension().and_then(|e| e.to_str()) == Some("m4a") {
+            if let Some(filename) = path.file_stem() {
+                if let Some(song_id) = filename.to_str() {
+                    let size_bytes = entry.metadata().map(|m| m.len()).unwrap_or(0);
+                    songs.push(CachedAudioFile {
+                        song_id: song_id.to_string(),
+                        local_path: path.to_string_lossy().to_string(),
+                        size_bytes,
+                    });
+                }
+            }
+        }
+    }
+
+    Ok(songs)
+}
+
+/// Supprime un fichier audio téléchargé (et sa cover si présente)
+#[tauri::command]
+fn delete_downloaded_song(app: tauri::AppHandle, song_id: String) -> Result<(), String> {
+    let downloads_dir = get_downloads_dir(&app)?;
+    let audio_file = downloads_dir.join(format!("{}.m4a", song_id));
+
+    if audio_file.exists() {
+        std::fs::remove_file(&audio_file)
+            .map_err(|e| format!("Failed to delete audio file: {e}"))?;
+    }
+
+    if let Some(cover_file) = find_cover_file(&downloads_dir, &song_id) {
+        let _ = std::fs::remove_file(cover_file);
+    }
+
+    Ok(())
+}
+
 /// Appelé depuis le JS au démarrage (et à chaque changement du réglage) pour que
 /// le comportement de fermeture de fenêtre corresponde à la préférence utilisateur
 /// (stockée côté JS en localStorage — Rust ne la connaît pas tant qu'on ne la lui dit pas).
@@ -452,7 +629,12 @@ pub fn run() {
             set_gpu_adapter,
             arm_vulkan_once,
             smtc_update,
-            smtc_clear
+            smtc_clear,
+            download_song,
+            get_downloaded_audio_path,
+            get_downloaded_cover_path,
+            list_downloaded_songs,
+            delete_downloaded_song
         ])
         .setup(|app| {
             // La fenêtre "main" n'est plus déclarée dans tauri.conf.json sur Windows

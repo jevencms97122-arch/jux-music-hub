@@ -8,7 +8,7 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
-import { Dialog, DialogContent } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { avatarUrl, songCoverUrl } from '@/lib/storage';
 import { toast } from 'sonner';
 import { Headphones, Users, Search, Clock, UserPlus, UserCheck, Check, X, ChevronRight, Compass, Heart, Music2, Activity, Radio, Copy, LogOut, Send, MessageCircle, User as UserIcon } from 'lucide-react';
@@ -57,6 +57,7 @@ export default function Social() {
   const { user, profile } = useAuth();
   const navigate = useNavigate();
   const { activeSession, isSessionHost, setActiveSession, refreshSession, stopAudio } = usePlayer();
+  const isPermanentActiveSession = !!activeSession?.is_open;
   const [following, setFollowing] = useState<Profile[]>([]);
   const [followers, setFollowers] = useState<Profile[]>([]);
   const [requests, setRequests] = useState<(Follow & { profile?: Profile })[]>([]);
@@ -73,6 +74,10 @@ export default function Social() {
   const [showSessionSheet, setShowSessionSheet] = useState(false);
   const [sessionCreating, setSessionCreating] = useState(false);
   const [invitedIds, setInvitedIds] = useState<Set<string>>(new Set());
+  const [showSessionChoice, setShowSessionChoice] = useState(false);
+  const [showJoinDialog, setShowJoinDialog] = useState(false);
+  const [joinCodeInput, setJoinCodeInput] = useState('');
+  const [joiningSession, setJoiningSession] = useState(false);
 
   // Messagerie
   const { unreadTotal, unreadBySender } = useUnreadMessages();
@@ -171,8 +176,12 @@ export default function Social() {
     return () => clearInterval(interval);
   }, [user, following]);
 
-  const openSession = useCallback(async () => {
+  const openSession = useCallback(() => {
     if (activeSession) { setShowSessionSheet(true); return; }
+    setShowSessionChoice(true);
+  }, [activeSession]);
+
+  const createSessionFromSocial = useCallback(async () => {
     if (!user) return;
     setSessionCreating(true);
     try {
@@ -184,15 +193,56 @@ export default function Social() {
       setActiveSession({ id: newS.id, host_id: user.id, song_id: null, position: 0, tempo: 1, is_playing: false, participants: [user.id], is_active: true, code } as ListenSessionRow);
       refreshSession();
       setInvitedIds(new Set());
+      setShowSessionChoice(false);
       setShowSessionSheet(true);
     } catch (e: any) { toast.error(e.message || 'Erreur'); }
     setSessionCreating(false);
-  }, [activeSession, user, setActiveSession, refreshSession]);
+  }, [user, setActiveSession, refreshSession]);
+
+  const joinSessionByCode = useCallback(async () => {
+    if (!user) return;
+    const code = joinCodeInput.trim();
+    if (!code) return;
+    setJoiningSession(true);
+    try {
+      const res = await pb.collection('listen_sessions').getList(1, 1, {
+        filter: `code = "${code}" && is_active = true`,
+        requestKey: null,
+      });
+      const s = res.items[0] as any;
+      if (!s) { toast.error('Code invalide'); setJoiningSession(false); return; }
+      const participants = (s.participants as string[]) || [];
+      const nextParticipants = participants.includes(user.id) ? participants : [...participants, user.id];
+      await pb.collection('listen_sessions').update(s.id, { participants: nextParticipants });
+      setActiveSession({ id: s.id, host_id: s.host_id, song_id: s.song_id, position: s.position ?? 0, tempo: s.tempo || 1, is_playing: s.is_playing, participants: nextParticipants, is_active: true, code: s.code } as ListenSessionRow);
+      refreshSession();
+      setShowJoinDialog(false);
+      setShowSessionChoice(false);
+      setJoinCodeInput('');
+      setShowSessionSheet(true);
+      toast.success('Tu as rejoint la session !');
+    } catch {
+      toast.error('Code invalide');
+    }
+    setJoiningSession(false);
+  }, [user, joinCodeInput, setActiveSession, refreshSession]);
 
   const endSessionFromSocial = useCallback(async () => {
     if (!activeSession || !isSessionHost) return;
     try { await pb.collection('listen_sessions').update(activeSession.id, { is_active: false }); stopAudio(); setActiveSession(null); setShowSessionSheet(false); toast.success('Session terminée'); } catch {}
   }, [activeSession, isSessionHost, stopAudio, setActiveSession]);
+
+  const leaveSessionFromSocial = useCallback(async () => {
+    if (!activeSession || !user || isSessionHost) return;
+    try {
+      const participants = (activeSession.participants || []).filter((p) => p !== user.id);
+      await pb.collection('listen_sessions').update(activeSession.id, { participants });
+      stopAudio();
+      setActiveSession(null);
+      setShowSessionSheet(false);
+      toast.success('Tu as quitté la session');
+    } catch {}
+  }, [activeSession, user, isSessionHost, stopAudio, setActiveSession]);
 
   const inviteFriendFromSocial = useCallback(async (friendId: string) => {
     if (!user || !activeSession) return;
@@ -444,28 +494,32 @@ export default function Social() {
             className={cn(
               'flex w-full items-center gap-3 rounded-2xl border p-4 text-left backdrop-blur-md transition-[background-color,transform] duration-150 ease-out active:scale-[0.98]',
               activeSession
-                ? 'border-green-500/40 bg-green-500/10 hover:bg-green-500/15'
+                ? isPermanentActiveSession
+                  ? 'border-orange-500/40 bg-orange-500/10 hover:bg-orange-500/15'
+                  : 'border-green-500/40 bg-green-500/10 hover:bg-green-500/15'
                 : 'border-primary/30 bg-primary/5 hover:bg-primary/10'
             )}
           >
             <div className={cn(
               'flex h-10 w-10 shrink-0 items-center justify-center rounded-xl',
-              activeSession ? 'bg-green-500/20' : 'bg-primary/15'
+              activeSession ? (isPermanentActiveSession ? 'bg-orange-500/20' : 'bg-green-500/20') : 'bg-primary/15'
             )}>
-              <Radio className={cn('h-5 w-5', activeSession ? 'text-green-400' : 'text-primary')} />
+              <Radio className={cn('h-5 w-5', activeSession ? (isPermanentActiveSession ? 'text-orange-400' : 'text-green-400') : 'text-primary')} />
             </div>
             <div className="min-w-0 flex-1">
               <p className="text-sm font-bold">
-                {activeSession ? 'Session active' : 'Écouter ensemble'}
+                {activeSession ? (isPermanentActiveSession ? 'Session permanente en cours' : 'Session active') : 'Écouter ensemble'}
               </p>
               <p className="text-xs text-muted-foreground">
                 {activeSession
-                  ? `Code : ${activeSession.code} · Tap pour gérer`
+                  ? isPermanentActiveSession
+                    ? `${activeSession.participants?.length ?? 1} personne${(activeSession.participants?.length ?? 1) > 1 ? 's' : ''} connectée${(activeSession.participants?.length ?? 1) > 1 ? 's' : ''} · Tap pour gérer`
+                    : `Code : ${activeSession.code} · Tap pour gérer`
                   : 'Crée une session et invite tes amis'}
               </p>
             </div>
             {activeSession && (
-              <span className="inline-block h-2.5 w-2.5 rounded-full bg-green-500 animate-pulse shrink-0" />
+              <span className={cn('inline-block h-2.5 w-2.5 rounded-full animate-pulse shrink-0', isPermanentActiveSession ? 'bg-orange-500' : 'bg-green-500')} />
             )}
           </button>
 
@@ -811,6 +865,61 @@ export default function Social() {
         </DialogContent>
       </Dialog>
 
+      {/* ── Choix : créer ou rejoindre une session ── */}
+      <Dialog open={showSessionChoice} onOpenChange={setShowSessionChoice}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Radio className="h-5 w-5 text-primary" />
+              Écouter ensemble
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-2.5">
+            <Button
+              className="w-full rounded-xl bg-gradient-primary font-semibold shadow-elegant-sm"
+              disabled={sessionCreating}
+              onClick={createSessionFromSocial}
+            >
+              <Radio className="mr-2 h-4 w-4" />Créer une session
+            </Button>
+            <Button
+              variant="outline"
+              className="w-full rounded-xl font-semibold"
+              onClick={() => { setShowSessionChoice(false); setShowJoinDialog(true); }}
+            >
+              <Users className="mr-2 h-4 w-4" />Rejoindre une session
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* ── Rejoindre par code ── */}
+      <Dialog open={showJoinDialog} onOpenChange={setShowJoinDialog}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Rejoindre une session</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3">
+            <Input
+              placeholder="Code à 8 chiffres"
+              value={joinCodeInput}
+              onChange={(e) => setJoinCodeInput(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && joinSessionByCode()}
+              maxLength={8}
+              autoFocus
+              className="text-center text-lg tracking-widest"
+            />
+            <Button
+              className="w-full rounded-xl bg-gradient-primary font-semibold"
+              disabled={joiningSession || !joinCodeInput.trim()}
+              onClick={joinSessionByCode}
+            >
+              Rejoindre
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
       {/* ── Sheet Écoute partagée ── */}
       <Sheet open={showSessionSheet} onOpenChange={setShowSessionSheet}>
         <SheetContent side="bottom" className="rounded-t-3xl pb-10">
@@ -823,24 +932,40 @@ export default function Social() {
 
           {activeSession && (
             <div className="space-y-5">
-              {/* Code */}
-              <div className="flex items-center justify-between rounded-2xl bg-primary/10 px-4 py-3">
-                <div>
-                  <p className="text-[11px] font-medium text-muted-foreground uppercase tracking-wide">Code de session</p>
-                  <p className="text-2xl font-bold tracking-[0.2em] text-primary">{activeSession.code}</p>
+              {isPermanentActiveSession ? (
+                /* Session permanente : pas de code (fuite = n'importe qui peut rejoindre),
+                   visibilité automatique auprès des abonnés */
+                <div className="rounded-2xl border border-orange-500/30 bg-orange-500/10 px-4 py-3">
+                  <p className="flex items-center gap-2 text-sm font-bold text-orange-400">
+                    <Radio className="h-4 w-4" />Session permanente
+                  </p>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    {isSessionHost
+                      ? 'Visible automatiquement par tes abonnés sur leur accueil — pas de code à partager.'
+                      : "Tu as rejoint la session permanente de l'hôte."}
+                    {' '}{activeSession.participants?.length ?? 1} personne{(activeSession.participants?.length ?? 1) > 1 ? 's' : ''} connectée{(activeSession.participants?.length ?? 1) > 1 ? 's' : ''}.
+                  </p>
                 </div>
-                <Button
-                  size="icon"
-                  variant="ghost"
-                  className="h-10 w-10 rounded-xl"
-                  onClick={() => { navigator.clipboard.writeText(activeSession.code || ''); toast.success('Code copié !'); }}
-                >
-                  <Copy className="h-4 w-4" />
-                </Button>
-              </div>
+              ) : (
+                /* Code */
+                <div className="flex items-center justify-between rounded-2xl bg-primary/10 px-4 py-3">
+                  <div>
+                    <p className="text-[11px] font-medium text-muted-foreground uppercase tracking-wide">Code de session</p>
+                    <p className="text-2xl font-bold tracking-[0.2em] text-primary">{activeSession.code}</p>
+                  </div>
+                  <Button
+                    size="icon"
+                    variant="ghost"
+                    className="h-10 w-10 rounded-xl"
+                    onClick={() => { navigator.clipboard.writeText(activeSession.code || ''); toast.success('Code copié !'); }}
+                  >
+                    <Copy className="h-4 w-4" />
+                  </Button>
+                </div>
+              )}
 
-              {/* Inviter des amis */}
-              {following.length > 0 && (
+              {/* Inviter des amis — non disponible pour une session permanente (auto-visible) */}
+              {!isPermanentActiveSession && following.length > 0 && (
                 <div>
                   <p className="mb-3 text-sm font-bold">Inviter des amis</p>
                   <div className="space-y-2 max-h-64 overflow-y-auto pr-1">
@@ -883,13 +1008,21 @@ export default function Social() {
                 >
                   Ouvrir la session
                 </Button>
-                {isSessionHost && (
+                {isSessionHost ? (
                   <Button
                     variant="destructive"
                     className="flex-1 rounded-xl"
                     onClick={endSessionFromSocial}
                   >
                     <LogOut className="mr-1.5 h-4 w-4" />Terminer
+                  </Button>
+                ) : (
+                  <Button
+                    variant="destructive"
+                    className="flex-1 rounded-xl"
+                    onClick={leaveSessionFromSocial}
+                  >
+                    <LogOut className="mr-1.5 h-4 w-4" />Quitter
                   </Button>
                 )}
               </div>

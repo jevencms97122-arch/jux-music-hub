@@ -13,6 +13,9 @@ import type { Song } from '@/types/music';
 import { recordToSong } from '@/lib/pbUtils';
 import { useSeo } from '@/lib/useSeo';
 import SlidingTabIndicator from '@/components/SlidingTabIndicator';
+import { useOfflineMode } from '@/contexts/OfflineModeContext';
+import { getLocalTracks } from '@/lib/offlineLibrary';
+import { getDownloadedSongs } from '@/lib/offlineManager';
 
 interface UserResult {
   id: string;
@@ -34,6 +37,7 @@ const loadRecent = (): string[] => {
 export default function Search() {
   useSeo({ title: 'Recherche — Nexora Music', description: 'Recherche des musiques et des artistes sur Nexora Music.', path: '/search' });
   const { playSongFromList } = usePlayer();
+  const { offline } = useOfflineMode();
   const navigate = useNavigate();
   const [term, setTerm] = useState('');
   const [songs, setSongs] = useState<Song[]>([]);
@@ -42,6 +46,15 @@ export default function Search() {
   const [loading, setLoading] = useState(false);
   const [tab, setTab] = useState<Tab>('all');
   const [recent, setRecent] = useState<string[]>(loadRecent);
+  const [offlineSongs, setOfflineSongs] = useState<Song[]>([]);
+
+  useEffect(() => {
+    if (!offline) return;
+    Promise.all([getLocalTracks(), getDownloadedSongs()]).then(([local, downloaded]) => {
+      const seen = new Set(local.map((t) => t.id));
+      setOfflineSongs([...local, ...downloaded.filter((d) => !seen.has(d.id))]);
+    });
+  }, [offline]);
 
   const saveRecent = (t: string) => {
     setRecent((prev) => {
@@ -60,6 +73,22 @@ export default function Search() {
     if (!term.trim()) return;
     setLoading(true);
     const t = term.trim();
+
+    if (offline) {
+      const needle = t.toLowerCase();
+      const matches = offlineSongs.filter((s) =>
+        s.title?.toLowerCase().includes(needle)
+        || s.author?.toLowerCase().includes(needle)
+        || s.genre?.toLowerCase().includes(needle)
+      );
+      setSongs(matches);
+      setUsers([]);
+      if (matches.length > 0) saveRecent(t);
+      setSearched(true);
+      setLoading(false);
+      return;
+    }
+
     try {
       const [songRes, userRes] = await Promise.all([
         pb.collection('songs').getList(1, 30, {
@@ -97,7 +126,7 @@ export default function Search() {
     } catch { setSongs([]); setUsers([]); }
     setSearched(true);
     setLoading(false);
-  }, [term]);
+  }, [term, offline, offlineSongs]);
 
   useEffect(() => {
     if (!term.trim()) { setSongs([]); setUsers([]); setSearched(false); setLoading(false); setTab('all'); return; }
@@ -105,16 +134,19 @@ export default function Search() {
     return () => clearTimeout(timer);
   }, [term, doSearch]);
 
-  const tabs: { id: Tab; label: string; icon: typeof Music2; count: number }[] = [
-    { id: 'all', label: 'Tout', icon: LayoutGrid, count: songs.length + users.length },
-    { id: 'songs', label: 'Musiques', icon: Music2, count: songs.length },
-    { id: 'users', label: 'Profils', icon: Users, count: users.length },
-  ];
+  const tabs: { id: Tab; label: string; icon: typeof Music2; count: number }[] = offline
+    ? [{ id: 'songs', label: 'Musiques', icon: Music2, count: songs.length }]
+    : [
+      { id: 'all', label: 'Tout', icon: LayoutGrid, count: songs.length + users.length },
+      { id: 'songs', label: 'Musiques', icon: Music2, count: songs.length },
+      { id: 'users', label: 'Profils', icon: Users, count: users.length },
+    ];
 
   const showSongs = (tab === 'all' || tab === 'songs') && songs.length > 0;
-  const showUsers = (tab === 'all' || tab === 'users') && users.length > 0;
+  const showUsers = !offline && (tab === 'all' || tab === 'users') && users.length > 0;
   const noResults = searched && !loading && (
-    tab === 'all' ? songs.length === 0 && users.length === 0
+    offline ? songs.length === 0
+    : tab === 'all' ? songs.length === 0 && users.length === 0
     : tab === 'songs' ? songs.length === 0
     : users.length === 0
   );
@@ -137,7 +169,7 @@ export default function Search() {
         <div className="relative">
           <SearchIcon className="absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
           <Input
-            placeholder="Titre, artiste, genre, utilisateur..."
+            placeholder={offline ? 'Titre, artiste, genre (hors connexion)…' : 'Titre, artiste, genre, utilisateur...'}
             value={term}
             onChange={(e) => setTerm(e.target.value)}
             autoFocus

@@ -14,7 +14,7 @@ import { Check } from 'lucide-react';
 
 const DEFAULT_TRANSITION_MODE = 'linear';
 
-const VISIBLE_MODES = ['linear', 'tempoShift', 'bpmSync'];
+const VISIBLE_MODES = ['linear', 'equalPower', 'vinylStop', 'filterSweep', 'autoMix'];
 
 const OPTIONS = [
   { value: 'none' as const, label: 'Aucun', description: 'Coupure nette, sans fondu entre les morceaux' },
@@ -90,7 +90,17 @@ export default function CrossfadeSelectorSheet({
                   {isActive && <Check className="h-4 w-4 text-primary flex-shrink-0" />}
                 </button>
 
-                {isActive && opt.value !== 'none' && (
+                {isActive && opt.value === 'autoMix' && (
+                  <div className="mt-2 rounded-xl bg-secondary/30 px-3 py-2.5">
+                    <p className="text-xs text-muted-foreground">
+                      Détecte le tempo des deux morceaux, coupe les silences et choisit seul le type de
+                      transition — enchaînement quasi direct si les tempos matchent, mix court, ou fondu
+                      dynamique plus long sinon. Pas de réglage manuel.
+                    </p>
+                  </div>
+                )}
+
+                {isActive && opt.value !== 'none' && opt.value !== 'autoMix' && (
                   <div className="mt-2 rounded-xl bg-secondary/30 px-3 py-2.5">
                     <div className="flex items-center justify-between">
                       <label className="text-xs text-muted-foreground">Durée du fondu</label>

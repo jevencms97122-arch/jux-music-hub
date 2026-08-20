@@ -95,6 +95,27 @@ function recordToProfile(r: any): Profile {
 }
 
 
+// Cache du profil pour l'auto-connexion hors ligne : le token PocketBase est
+// déjà persisté par le SDK, mais sans backend le fetch du profil échoue et
+// l'app croyait l'utilisateur déconnecté. On garde donc la dernière copie
+// connue du profil en localStorage et on retombe dessus si le réseau manque.
+const PROFILE_CACHE_KEY = 'jux_cached_profile';
+
+function cacheProfile(p: Profile) {
+  try { localStorage.setItem(PROFILE_CACHE_KEY, JSON.stringify(p)); } catch {}
+}
+
+function readCachedProfile(userId: string): Profile | null {
+  try {
+    const raw = localStorage.getItem(PROFILE_CACHE_KEY);
+    if (!raw) return null;
+    const p = JSON.parse(raw) as Profile;
+    return p && p.user_id === userId ? p : null;
+  } catch {
+    return null;
+  }
+}
+
 function profileToPBUser(p: Profile): PBUser {
   return {
     id: p.user_id,
@@ -119,9 +140,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     try {
       const record = await fetchOrCreateProfile(userId);
       const p = recordToProfile(record);
+      cacheProfile(p);
       setProfile(p);
       setUser(profileToPBUser(p));
     } catch (e) {
+      // Backend injoignable (mode hors ligne) : auto-connexion depuis le cache
+      // pour que l'app reste utilisable avec le compte de l'utilisateur.
+      const cached = readCachedProfile(userId);
+      if (cached) {
+        setProfile(cached);
+        setUser(profileToPBUser(cached));
+        return;
+      }
       console.error('loadProfile', e);
     }
   }, []);
@@ -186,6 +216,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   const logout = async () => {
+    try { localStorage.removeItem(PROFILE_CACHE_KEY); } catch {}
     pb.authStore.clear();
     setProfile(null);
     setUser(null);

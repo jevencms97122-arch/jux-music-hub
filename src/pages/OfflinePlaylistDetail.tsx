@@ -13,6 +13,7 @@ import {
   removeTrackFromLocalPlaylist, type LocalPlaylist,
 } from '@/lib/offlinePlaylists';
 import { getLocalTracks } from '@/lib/offlineLibrary';
+import { getDownloadedSongs } from '@/lib/offlineManager';
 
 const fmtDuration = (s: number) => {
   if (!s || s <= 0) return '';
@@ -32,10 +33,11 @@ export default function OfflinePlaylistDetail() {
   const load = async () => {
     if (!id) return;
     setLoading(true);
-    const [pl, tracks] = await Promise.all([getLocalPlaylist(id), getLocalTracks()]);
+    const [pl, local, downloaded] = await Promise.all([getLocalPlaylist(id), getLocalTracks(), getDownloadedSongs()]);
     if (!pl) { navigate('/playlists'); return; }
+    const seen = new Set(local.map((t) => t.id));
     setPlaylist(pl);
-    setAllTracks(tracks);
+    setAllTracks([...local, ...downloaded.filter((d) => !seen.has(d.id))]);
     setLoading(false);
   };
 

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from '@/components/ui/sheet';
 import { Switch } from '@/components/ui/switch';
 import { useAuth } from '@/contexts/AuthContext';
@@ -6,7 +6,7 @@ import { useReactiveBg } from '@/hooks/useReactiveBg';
 import { useThemeEnabled } from '@/hooks/useThemeEnabled';
 import { useTheme } from '@/contexts/ThemeContext';
 import { usePlayer, TRANSITION_MODES } from '@/contexts/PlayerContext';
-import { LogOut, Sparkles, Palette, ChevronRight, RefreshCw, Zap, AudioLines, Glasses, Sliders, Mic, Settings2, Volume2, Gamepad2, BellOff, PictureInPicture2, Cpu, Code2 } from 'lucide-react';
+import { LogOut, Sparkles, Palette, ChevronRight, RefreshCw, Zap, AudioLines, Glasses, Sliders, Mic, Settings2, Volume2, Gamepad2, BellOff, PictureInPicture2, Cpu, Code2, Download, Radio } from 'lucide-react';
 import { useVoiceAssistantSettings, isSpeechRecognitionSupported } from '@/hooks/useVoiceAssistant';
 import { usePerformanceMode } from '@/hooks/usePerformanceMode';
 import { useVRMode } from '@/hooks/useVRMode';
@@ -30,6 +30,8 @@ import { isGamepadEnabled, setGamepadEnabled } from '@/lib/gamepadMapping';
 import EqualizerSheet from '@/components/EqualizerSheet';
 import MicTestSheet from '@/components/MicTestSheet';
 import { EQ_PRESETS } from '@/lib/eqPresets';
+import { isAutoDownloadEnabled, setAutoDownloadEnabled } from '@/lib/autoDownloadManager';
+import DownloadedSongsSheet from '@/components/DownloadedSongsSheet';
 
 export default function SettingsSheet({ trigger }: { trigger: React.ReactNode }) {
   const { logout } = useAuth();
@@ -41,7 +43,7 @@ export default function SettingsSheet({ trigger }: { trigger: React.ReactNode })
   const { enabled: performanceMode, setEnabled: setPerformanceMode } = usePerformanceMode();
   const { enabled: vrMode, setEnabled: setVrMode } = useVRMode();
   const { currentTheme } = useTheme();
-  const { crossfadeSeconds, transitionMode, currentEqPreset } = usePlayer();
+  const { crossfadeSeconds, transitionMode, currentEqPreset, permanentSessionEnabled, setPermanentSessionEnabled } = usePlayer();
   const [showEq, setShowEq] = useState(false);
   const currentCrossfadeLabel = crossfadeSeconds > 0
     ? (TRANSITION_MODES.find((m) => m.value === transitionMode)?.label ?? 'Linear')
@@ -57,6 +59,13 @@ export default function SettingsSheet({ trigger }: { trigger: React.ReactNode })
   const [gpuBackend, setGpuBackendState] = useState<GpuBackend>(() => getGpuBackend());
   const [gpuAdapter, setGpuAdapterState] = useState<GpuAdapter>(() => getGpuAdapter());
   const [gpuChanged, setGpuChanged] = useState(false);
+  const [autoDownload, setAutoDownloadState] = useState(true);
+
+  useEffect(() => {
+    isAutoDownloadEnabled(platform).then((enabled) => {
+      setAutoDownloadState(enabled);
+    });
+  }, [platform]);
 
   const handleDevOptionsToggle = (v: boolean) => {
     setDevOptionsState(v);
@@ -89,6 +98,11 @@ export default function SettingsSheet({ trigger }: { trigger: React.ReactNode })
   const handleSoundOnlyToggle = (v: boolean) => {
     setSoundOnlyState(v);
     setSoundOnlyMode(v);
+  };
+
+  const handleAutoDownloadToggle = (v: boolean) => {
+    setAutoDownloadState(v);
+    setAutoDownloadEnabled(v);
   };
 
   const handleCloseToTrayToggle = (v: boolean) => {
@@ -324,6 +338,22 @@ export default function SettingsSheet({ trigger }: { trigger: React.ReactNode })
             )}
           </div>
 
+          {/* Session permanente — accessible sur toutes les plateformes */}
+          <div className="rounded-2xl border border-white/[0.06] bg-card/60 backdrop-blur-md overflow-hidden">
+            <div className="flex items-center justify-between px-4 py-3.5">
+              <div className="flex items-center gap-3">
+                <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-fuchsia-500/15">
+                  <Radio className="h-4.5 w-4.5 text-fuchsia-400" />
+                </div>
+                <div>
+                  <p className="text-sm font-semibold">Session permanente</p>
+                  <p className="text-xs text-muted-foreground">Tes abonnés voient ta musique en cours et peuvent rejoindre à tout moment</p>
+                </div>
+              </div>
+              <Switch checked={permanentSessionEnabled} onCheckedChange={setPermanentSessionEnabled} />
+            </div>
+          </div>
+
           {/* Son de notification */}
           <div className="rounded-2xl border border-white/[0.06] bg-card/60 backdrop-blur-md overflow-hidden">
             <NotificationSfxSheet
@@ -360,6 +390,31 @@ export default function SettingsSheet({ trigger }: { trigger: React.ReactNode })
                 <Switch checked={soundOnly} onCheckedChange={handleSoundOnlyToggle} />
               </div>
             </div>
+          )}
+
+          {/* Téléchargement automatique de musique (Windows uniquement) */}
+          {isWindows && (
+            <DownloadedSongsSheet
+              trigger={
+                <div className="rounded-2xl border border-white/[0.06] bg-card/60 backdrop-blur-md overflow-hidden cursor-pointer">
+                  <div className="flex items-center justify-between px-4 py-3.5">
+                    <div className="flex items-center gap-3">
+                      <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-blue-500/15">
+                        <Download className="h-4.5 w-4.5 text-blue-400" />
+                      </div>
+                      <div>
+                        <p className="text-sm font-semibold">Téléchargement automatique</p>
+                        <p className="text-xs text-muted-foreground">Télécharge les titres écoutés · touche pour gérer les fichiers</p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-1.5">
+                      <Switch checked={autoDownload} onCheckedChange={handleAutoDownloadToggle} onClick={(e) => e.stopPropagation()} />
+                      <ChevronRight className="h-4 w-4 text-muted-foreground" />
+                    </div>
+                  </div>
+                </div>
+              }
+            />
           )}
 
           {/* Rester actif en arrière-plan (desktop uniquement — pas de barre des tâches sur mobile) */}

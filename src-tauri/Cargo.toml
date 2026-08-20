@@ -1,6 +1,6 @@
 [package]
 name = "nexora-music"
-version = "0.0.5"
+version = "0.1.9"
 description = "A Tauri App"
 authors = ["you"]
 edition = "2021"
@@ -18,7 +18,7 @@ crate-type = ["staticlib", "cdylib", "rlib"]
 tauri-build = { version = "2", features = [] }
 
 [dependencies]
-tauri = { version = "2", features = ["devtools", "tray-icon"] }
+tauri = { version = "2", features = ["protocol-asset", "devtools", "tray-icon"] }
 tauri-plugin-opener = "2"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
@@ -26,6 +26,8 @@ discord-rich-presence = "1.1"
 tauri-plugin-updater = "2.10.1"
 tauri-plugin-process = "2.3.1"
 tauri-plugin-notification = "2.3.3"
+reqwest = { version = "0.11", features = ["stream"] }
+tokio = { version = "1", features = ["full"] }
 
 [target.'cfg(windows)'.dependencies]
 tauri-winrt-notification = "0.7"

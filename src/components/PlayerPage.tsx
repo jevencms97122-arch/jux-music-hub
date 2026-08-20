@@ -9,7 +9,7 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import CachedImage from '@/components/CachedImage';
 import {
   Play, Pause, SkipBack, SkipForward, Shuffle, Repeat,
-  Volume2, ChevronDown, Music2, Wifi, WifiOff, AlertCircle, ListPlus, Gauge, Heart, MoreHorizontal, MessageSquare, ListMusic, Disc3, Repeat2, Share2, Download, Camera, Moon, Send, Link2
+  Volume2, ChevronDown, Music2, Wifi, WifiOff, AlertCircle, ListPlus, Gauge, Heart, MoreHorizontal, MessageSquare, ListMusic, Disc3, Repeat2, Share2, Download, Camera, Moon, Send, Link2, Users
 } from 'lucide-react';
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
@@ -27,6 +27,7 @@ import ShareToFriendSheet from './ShareToFriendSheet';
 import { detectPlatform } from '@/lib/platform';
 import { cn } from '@/lib/utils';
 import ThemeBackgroundLayer from '@/components/ThemeBackgroundLayer';
+import SessionParticipantsSheet from '@/components/SessionParticipantsSheet';
 
 const isAndroidNative = () => detectPlatform() === 'android-app';
 
@@ -38,7 +39,7 @@ export default function PlayerPage() {
     playSong, togglePlay, next, previous, seek, setVolume, volume,
     closePlayer, isShuffled, toggleShuffle, repeatMode, cycleRepeat,
     playbackRate, isPlayerOpen, connectionStatus, getAnalyserNode,
-    sleepTimerMinutes, sleepTimerRemaining,
+    sleepTimerMinutes, sleepTimerRemaining, activeSession,
   } = usePlayer();
 
   const statusInfo = {
@@ -65,6 +66,7 @@ export default function PlayerPage() {
   const [showShareChooser, setShowShareChooser] = useState(false);
   const [showShareToFriend, setShowShareToFriend] = useState(false);
   const [publisherProfile, setPublisherProfile] = useState<{ pseudo: string; avatar_url: string | null; user_id: string } | null>(null);
+  const [showParticipants, setShowParticipants] = useState(false);
 
   const shareSong = () => {
     if (!currentSong) return;
@@ -368,7 +370,18 @@ export default function PlayerPage() {
         >
           <ChevronDown className="h-5 w-5" />
         </button>
-        <p className="text-xs font-semibold tracking-wide text-muted-foreground/80">En écoute</p>
+        {activeSession ? (
+          <button
+            onClick={() => setShowParticipants(true)}
+            className="glass flex items-center gap-1.5 rounded-xl px-2.5 py-1.5 text-muted-foreground hover:text-foreground active:scale-90"
+            aria-label="Voir les participants de la session"
+          >
+            <Users className="h-3.5 w-3.5" />
+            <span className="text-[11px] font-semibold">{activeSession.participants?.length ?? 1}</span>
+          </button>
+        ) : (
+          <p className="text-xs font-semibold tracking-wide text-muted-foreground/80">En écoute</p>
+        )}
         <div className="glass flex items-center gap-1.5 rounded-xl px-2.5 py-1.5">
           {statusInfo[connectionStatus].icon}
           <span className="text-[10px] font-medium text-muted-foreground">
@@ -376,6 +389,8 @@ export default function PlayerPage() {
           </span>
         </div>
       </div>
+
+      <SessionParticipantsSheet session={activeSession} open={showParticipants} onOpenChange={setShowParticipants} />
 
       {/* Cover art */}
       <div className="relative z-10 flex flex-1 items-center justify-center px-8">
@@ -493,7 +508,7 @@ export default function PlayerPage() {
               style={{ left: `${progress}%` }}
             />
           </div>
-          <div className="mt-2 flex justify-between text-[11px] font-medium tabular-nums text-muted-foreground">
+          <div className="mt-2 flex items-center justify-between text-[11px] font-medium tabular-nums text-muted-foreground">
             <span>{formatTime(currentTime)}</span>
             <span>{formatTime(duration)}</span>
           </div>
@@ -513,7 +528,7 @@ export default function PlayerPage() {
 
           <button
             onClick={previous}
-            className="rounded-xl p-2.5 text-muted-foreground hover:text-foreground hover:bg-white/[0.07] active:scale-95"
+            className="rounded-xl p-2.5 text-muted-foreground transition-colors duration-150 hover:text-foreground hover:bg-white/[0.07] active:scale-95"
           >
             <SkipBack className="h-6 w-6" />
           </button>
@@ -532,7 +547,7 @@ export default function PlayerPage() {
 
           <button
             onClick={next}
-            className="rounded-xl p-2.5 text-muted-foreground hover:text-foreground hover:bg-white/[0.07] active:scale-95"
+            className="rounded-xl p-2.5 text-muted-foreground transition-colors duration-150 hover:text-foreground hover:bg-white/[0.07] active:scale-95"
           >
             <SkipForward className="h-6 w-6" />
           </button>

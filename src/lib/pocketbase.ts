@@ -1,6 +1,5 @@
 /**
  * PocketBase client centralisé.
- * Remplace complètement Supabase.
  */
 import PocketBase from 'pocketbase';
 

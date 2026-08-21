@@ -295,10 +295,32 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
   const joinSession = useCallback(async (s: ListenSessionRow): Promise<boolean> => {
     if (!authUser) return false;
     try {
-      const participants = (s.participants || []).filter((p) => p !== authUser.id);
+      // Si j'héberge déjà une session (notamment ma session permanente auto-créée), la
+      // fermer avant de rejoindre celle de mon ami — sinon le polling refreshSession()
+      // re-sélectionne ma propre session (priorité host) et annule le join quelques
+      // secondes plus tard.
+      const mine = sessionRef.current;
+      if (mine && mine.id !== s.id && mine.host_id === authUser.id) {
+        try { await pb.collection('listen_sessions').update(mine.id, { is_active: false }); } catch {}
+        if (getStoredPermanentSessionId() === mine.id) setStoredPermanentSessionId(null);
+      }
+
+      // Repartir de l'état serveur le plus frais possible : la session passée en argument
+      // (venant d'une liste rafraîchie toutes les quelques secondes) peut avoir une position
+      // périmée — on doit démarrer exactement là où l'hôte en est.
+      const fresh = await pb.collection('listen_sessions').getOne(s.id).catch(() => null) as any;
+      const base: ListenSessionRow = fresh
+        ? {
+            id: fresh.id, code: fresh.code ?? null, host_id: fresh.host_id, song_id: fresh.song_id ?? null,
+            is_playing: fresh.is_playing, position: fresh.position ?? 0, tempo: fresh.tempo || 1,
+            participants: fresh.participants ?? [], is_active: fresh.is_active, is_open: fresh.is_open ?? false,
+          }
+        : s;
+
+      const participants = (base.participants || []).filter((p) => p !== authUser.id);
       const nextParticipants = [...participants, authUser.id];
-      await pb.collection('listen_sessions').update(s.id, { participants: nextParticipants });
-      setActiveSessionState({ ...s, participants: nextParticipants });
+      await pb.collection('listen_sessions').update(base.id, { participants: nextParticipants });
+      setActiveSessionState({ ...base, participants: nextParticipants });
       return true;
     } catch {
       return false;
@@ -1209,10 +1231,11 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
   }, [queueIndex, playAtIndex]);
 
   const seek = useCallback((t: number) => {
+    if (isSessionGuestRef.current) { notifyGuestBlocked("Seul l'hôte peut se déplacer dans la musique de la session"); return; }
     const a = getActive(); if (a) a.currentTime = t;
     const s = sessionRef.current;
     if (s && authUser && s.host_id === authUser.id) queueSessionWrite({ position: t });
-  }, [authUser, queueSessionWrite]);
+  }, [authUser, queueSessionWrite, notifyGuestBlocked]);
 
   const setVolume = useCallback((v: number) => setVolumeState(Math.max(0, Math.min(1, v))), []);
   const toggleShuffle = useCallback(() => {
@@ -1347,10 +1370,18 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
         if (!record) return;
         const song = recordToSong(record);
         sessionGuestRecordedRef.current = null; setCurrentSong(song); setQueue([song]); setQueueIndex(0);
-        const a = getActive(); a.src = songAudioUrl(song); a.playbackRate = playbackRate; a.volume = volume; a.load();
+        const a = getActive(); a.src = songAudioUrl(song); a.volume = volume;
+        // audio.load() réinitialise playbackRate à 1 dans certains navigateurs — on doit
+        // donc le réappliquer après, pas seulement avant (même piège que loadAndPlay).
+        const applyRate = () => { a.playbackRate = playbackRateRef.current; };
+        applyRate();
+        a.addEventListener('loadedmetadata', applyRate, { once: true });
+        a.addEventListener('playing', applyRate, { once: true });
+        a.load();
         guestLoadedSongIdRef.current = song.id;
         const onCanPlay = () => {
           a.removeEventListener('canplay', onCanPlay);
+          applyRate();
           const cur = sessionRef.current;
           if (!cur) return;
           // Le titre de la session a changé pendant le chargement : ne rien faire
@@ -1361,6 +1392,7 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
             const drift = Math.abs(a.currentTime - (cur.position ?? 0));
             if (drift > 0.5) a.currentTime = cur.position ?? 0;
             a.play().then(() => {
+              applyRate();
               if (sessionGuestRecordedRef.current !== song.id) {
                 sessionGuestRecordedRef.current = song.id;
                 recordPlayRef.current(song);
@@ -1371,7 +1403,7 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
         a.addEventListener('canplay', onCanPlay);
       } catch {}
     })();
-  }, [isSessionGuest, activeSession?.song_id, authUser, playbackRate, volume]);
+  }, [isSessionGuest, activeSession?.song_id, authUser, volume]);
 
   // Guest sync play/pause — déclenché uniquement par is_playing, pas par position
   // Évite les seeks parasites toutes les 1s causés par la latence réseau

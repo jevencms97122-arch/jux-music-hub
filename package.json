@@ -1,7 +1,7 @@
 {
   "name": "nexora-music",
   "private": true,
-  "version": "0.1.9",
+  "version": "0.0.5",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -74,7 +74,6 @@
     "tailwind-merge": "^2.6.0",
     "tailwindcss-animate": "^1.0.7",
     "vaul": "^0.9.9",
-    "vosk-browser": "^0.0.8",
     "workbox-window": "^7.4.1",
     "zod": "^3.25.76"
   },

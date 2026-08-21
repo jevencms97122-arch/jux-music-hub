@@ -34,7 +34,7 @@ export default function ListenTogether() {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const { user, profile } = useAuth();
-  const { activeSession, isSessionHost, setActiveSession, refreshSession, stopAudio, currentSong } = usePlayer();
+  const { activeSession, isSessionHost, setActiveSession, joinSession, refreshSession, stopAudio, currentSong } = usePlayer();
   const [host, setHost] = useState<Profile | null>(null);
   const [hostSong, setHostSong] = useState<Song | null>(null);
   const [participantsProfiles, setParticipantsProfiles] = useState<Profile[]>([]);
@@ -64,14 +64,13 @@ export default function ListenTogether() {
       if (!s) { toast.error('Session introuvable'); return; }
       const participants = s.participants as string[] || [];
       if (participants.includes(user.id)) { toast.info('Tu es déjà dans cette session'); return; }
-      await pb.collection('listen_sessions').update(s.id, {
-        participants: [...participants, user.id],
-      });
-      setActiveSession({ id: s.id, host_id: s.host_id, song_id: s.song_id, position: s.position ?? 0, tempo: s.tempo || 1, is_playing: s.is_playing, participants: [...participants, user.id], is_active: true, code: s.code } as ListenSessionRow);
+      const row: ListenSessionRow = { id: s.id, code: s.code ?? null, host_id: s.host_id, song_id: s.song_id ?? null, position: s.position ?? 0, tempo: s.tempo || 1, is_playing: s.is_playing, participants, is_active: true, is_open: s.is_open ?? false };
+      const ok = await joinSession(row);
+      if (!ok) { toast.error('Impossible de rejoindre la session'); return; }
       refreshSession();
       navigate('/listen-together');
     } catch { toast.error('Code invalide'); }
-  }, [user, setActiveSession, refreshSession, navigate]);
+  }, [user, joinSession, refreshSession, navigate]);
 
   const createSession = async () => {
     if (!user) return;

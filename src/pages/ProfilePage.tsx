@@ -32,6 +32,8 @@ import SettingsSheet from '@/components/SettingsSheet';
 import AppInfoSheet from '@/components/AppInfoSheet';
 import DonationSheet from '@/components/DonationSheet';
 import TabFade from '@/components/TabFade';
+import RequestPublisherRoleModal from '@/components/RequestPublisherRoleModal';
+import { normalizeBadge, canPublish } from '@/lib/badges';
 import { cn } from '@/lib/utils';
 
 
@@ -58,7 +60,13 @@ export default function ProfilePage() {
   const [historyLoaded, setHistoryLoaded] = useState(false);
   const [favoriteArtists, setFavoriteArtists] = useState<{ name: string; totalPlays: number; songs: Song[] }[]>([]);
   const [favoriteArtistsLoading, setFavoriteArtistsLoading] = useState(true);
+  const [publisherRoleModalOpen, setPublisherRoleModalOpen] = useState(false);
   const artistsLazy = useLazySection();
+
+  const handlePublishClick = () => {
+    if (offline || canPublish(profile?.badge)) navigate('/upload');
+    else setPublisherRoleModalOpen(true);
+  };
 
   useEffect(() => {
     if (offline) {
@@ -256,7 +264,7 @@ export default function ProfilePage() {
 
         <div className="mt-4">
           <div className="flex items-center gap-2">
-            <h2 className={cn('text-xl font-bold leading-tight', profile?.badge?.includes('PDG') && 'text-pdg-gold')}>
+            <h2 className={cn('text-xl font-bold leading-tight', normalizeBadge(profile?.badge) === 'PDG' && 'text-pdg-gold')}>
               {profile?.pseudo ?? 'Utilisateur'}
             </h2>
             {rank && <RankBadge tier={rank.tier} />}
@@ -270,11 +278,9 @@ export default function ProfilePage() {
           <Button size="sm" className="flex-1 rounded-xl bg-gradient-primary font-semibold shadow-elegant-sm" onClick={() => navigate('/profile-edit')}>
             <Pencil className="mr-1.5 h-4 w-4" />Modifier
           </Button>
-          {(offline || profile?.badge) && (
-            <Button size="sm" variant="outline" className="flex-1 rounded-xl font-semibold" onClick={() => navigate('/upload')}>
-              <PlusCircle className="mr-1.5 h-4 w-4" />{offline ? 'Ajouter un son' : 'Publier'}
-            </Button>
-          )}
+          <Button size="sm" variant="outline" className="flex-1 rounded-xl font-semibold" onClick={handlePublishClick}>
+            <PlusCircle className="mr-1.5 h-4 w-4" />{offline ? 'Ajouter un son' : 'Publier'}
+          </Button>
         </div>
       </header>
 
@@ -470,8 +476,8 @@ export default function ProfilePage() {
             <EmptyState
               icon={<Music2 className="h-6 w-6 text-primary" />}
               title="Aucun morceau"
-              subtitle={offline ? "Ajoute un son depuis tes fichiers pour le voir ici." : profile?.badge ? "Publie ton premier son pour le voir ici." : "Seuls les membres avec le badge PDG de Jux Music peuvent publier."}
-              action={(offline || profile?.badge) ? <Button size="sm" className="rounded-xl bg-gradient-primary" onClick={() => navigate('/upload')}><PlusCircle className="mr-1.5 h-4 w-4" />{offline ? 'Ajouter un son' : 'Publier un son'}</Button> : undefined}
+              subtitle={offline ? "Ajoute un son depuis tes fichiers pour le voir ici." : canPublish(profile?.badge) ? "Publie ton premier son pour le voir ici." : "Demande le rôle Publicateur pour pouvoir publier tes musiques."}
+              action={<Button size="sm" className="rounded-xl bg-gradient-primary" onClick={handlePublishClick}><PlusCircle className="mr-1.5 h-4 w-4" />{offline ? 'Ajouter un son' : 'Publier un son'}</Button>}
             />
           )
         ) : tab === 'reposts' ? (
@@ -579,6 +585,7 @@ export default function ProfilePage() {
       </section>
 
       <NativeAppSettings />
+      <RequestPublisherRoleModal open={publisherRoleModalOpen} onOpenChange={setPublisherRoleModalOpen} />
     </div>
   );
 }

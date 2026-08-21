@@ -17,6 +17,7 @@ import PinnedTrack from '@/components/PinnedTrack';
 import TabFade from '@/components/TabFade';
 import SlidingTabIndicator from '@/components/SlidingTabIndicator';
 import { cn } from '@/lib/utils';
+import { normalizeBadge } from '@/lib/badges';
 import type { Profile, Song } from '@/types/music';
 
 function recordToSong(r: any): Song {
@@ -186,7 +187,7 @@ export default function UserProfile() {
         <Button variant="ghost" size="icon" aria-label="Retour" onClick={() => navigate(-1)}>
           <ArrowLeft className="h-5 w-5" />
         </Button>
-        <h1 className={cn('text-base font-bold', profile.badge?.includes('PDG') && 'text-pdg-gold')}>
+        <h1 className={cn('text-base font-bold', normalizeBadge(profile.badge) === 'PDG' && 'text-pdg-gold')}>
           {profile.pseudo || 'Profil'}
         </h1>
         <div className="w-9" />
@@ -212,7 +213,7 @@ export default function UserProfile() {
           )}
         </div>
 
-        <h2 className={cn('mt-4 text-2xl font-extrabold tracking-tight', profile.badge?.includes('PDG') && 'text-pdg-gold')}>
+        <h2 className={cn('mt-4 text-2xl font-extrabold tracking-tight', normalizeBadge(profile.badge) === 'PDG' && 'text-pdg-gold')}>
           {profile.pseudo || 'Utilisateur'}
         </h2>
         {rank && <RankBadge tier={rank.tier} size="md" className="mt-2" />}
@@ -249,7 +250,7 @@ export default function UserProfile() {
         )}
 
         {/* Bannir / Débannir — réservé aux membres avec le badge PDG, sur les profils sans badge */}
-        {!isMe && viewerProfile?.badge && !profile.badge && (
+        {!isMe && normalizeBadge(viewerProfile?.badge) === 'PDG' && !profile.badge && (
           <div className="mt-2 w-full">
             {profile.ban_status ? (
               <Button variant="outline" className="w-full rounded-xl font-semibold" onClick={toggleBan}>

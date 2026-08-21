@@ -1,6 +1,6 @@
 [package]
 name = "nexora-music"
-version = "0.1.9"
+version = "0.0.5"
 description = "A Tauri App"
 authors = ["you"]
 edition = "2021"
@@ -26,7 +26,7 @@ discord-rich-presence = "1.1"
 tauri-plugin-updater = "2.10.1"
 tauri-plugin-process = "2.3.1"
 tauri-plugin-notification = "2.3.3"
-reqwest = { version = "0.11", features = ["stream"] }
+reqwest = { version = "0.11", default-features = false, features = ["stream", "rustls-tls"] }
 tokio = { version = "1", features = ["full"] }
 
 [target.'cfg(windows)'.dependencies]

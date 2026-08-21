@@ -12,6 +12,7 @@ import { ArrowLeft, Upload as UploadIcon, Music2, Youtube, X, Camera, User, Shie
 import { toast } from 'sonner';
 import { MUSIC_GENRES } from '@/types/music';
 import { computeAudioFingerprint } from '@/lib/audioFingerprint';
+import { canPublish } from '@/lib/badges';
 
 // Déduit un titre lisible à partir du nom de fichier (retire l'extension, remplace _ et - par des espaces).
 function titleFromFilename(filename: string): string {
@@ -220,7 +221,7 @@ export default function Upload() {
     }
 
     if (!user) { toast.error('Connecte-toi d\'abord'); return; }
-    if (!profile?.badge) { toast.error('Réservé aux membres avec le badge PDG de Jux Music'); return; }
+    if (!canPublish(profile?.badge)) { toast.error('Réservé aux membres ayant le rôle Publicateur — demande-le sur le Discord Nexora Music'); return; }
     if (!audioFile && !youtubeUrl.trim()) { toast.error('Ajoute un fichier audio ou une URL YouTube'); return; }
     setUploading(true);
     try {
@@ -306,7 +307,7 @@ export default function Upload() {
     }
   };
 
-  if (!offline && !profile?.badge) {
+  if (!offline && !canPublish(profile?.badge)) {
     return (
       <div className="relative min-h-screen pb-40 p-4">
         <header className="flex items-center gap-3 mb-6">
@@ -318,7 +319,7 @@ export default function Upload() {
             <ShieldAlert className="h-6 w-6 text-primary" />
           </div>
           <p className="text-sm font-bold">Publication réservée</p>
-          <p className="text-xs text-muted-foreground">Seuls les membres avec le badge "PDG de Jux Music" peuvent publier des musiques.</p>
+          <p className="text-xs text-muted-foreground">Seuls les membres avec le rôle "PDG" ou "Publicateur" peuvent publier des musiques.</p>
         </div>
       </div>
     );

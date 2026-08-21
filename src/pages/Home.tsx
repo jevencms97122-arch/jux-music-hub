@@ -24,6 +24,8 @@ import PatchNotesSheet from '@/components/PatchNotesSheet';
 import { generateDailyMix } from '@/lib/dailyMix';
 import type { Song, Playlist, Profile } from '@/types/music';
 import TutorialModal from '@/components/TutorialModal';
+import RequestPublisherRoleModal from '@/components/RequestPublisherRoleModal';
+import { canPublish } from '@/lib/badges';
 import { useSeo } from '@/lib/useSeo';
 import { cn } from '@/lib/utils';
 import { recordToSong } from '@/lib/pbUtils';
@@ -98,7 +100,7 @@ const TUTORIAL_SEEN_KEY = 'jux_tutorial_seen';
 export default function Home() {
   const { user, profile } = useAuth();
   const { offline } = useOfflineMode();
-  const { playSongFromList, activeSession, joinSession, openPlayer } = usePlayer();
+  const { playSongFromList, activeSession, isSessionGuest, joinSession, openPlayer } = usePlayer();
   const navigate = useNavigate();
   const [songs, setSongs] = useState<Song[]>([]);
   const [trending, setTrending] = useState<Song[]>([]);
@@ -107,6 +109,7 @@ export default function Home() {
   const [dailyMixLoading, setDailyMixLoading] = useState(true);
   const [loading, setLoading] = useState(true);
   const [tutorialOpen, setTutorialOpen] = useState(false);
+  const [publisherRoleModalOpen, setPublisherRoleModalOpen] = useState(false);
   const [publicPlaylists, setPublicPlaylists] = useState<Playlist[]>([]);
   const [playlistsLoading, setPlaylistsLoading] = useState(true);
   const [unreadCount, setUnreadCount] = useState(0);
@@ -356,9 +359,11 @@ export default function Home() {
   }, [offline, user, replayLazy.visible]);
 
   // Activité "session permanente" des amis suivis — affichée sous les tendances.
-  // Rafraîchie toutes les 8s tant qu'on n'est pas déjà dans une session.
+  // Rafraîchie toutes les 8s. Reste visible même si j'héberge ma propre session
+  // (permanente ou non) : rejoindre un ami ferme automatiquement la mienne. Seul le
+  // fait d'être déjà invité chez quelqu'un d'autre masque la liste.
   useEffect(() => {
-    if (!user || offline || activeSession) { setFriendSessions([]); return; }
+    if (!user || offline || isSessionGuest) { setFriendSessions([]); return; }
     let cancelled = false;
     const pbGetFirst = async (collection: string, filter: string) => {
       try { const r = await pb.collection(collection).getList(1, 1, { filter, requestKey: null }); return r.items[0] || null; } catch { return null; }
@@ -397,11 +402,16 @@ export default function Home() {
     load();
     const interval = setInterval(load, 8000);
     return () => { cancelled = true; clearInterval(interval); };
-  }, [user, offline, activeSession]);
+  }, [user, offline, isSessionGuest]);
 
   const handleJoinFriendSession = async (session: ListenSessionRow) => {
     const ok = await joinSession(session);
     if (ok) { openPlayer(); } else { toast.error('Impossible de rejoindre la session'); }
+  };
+
+  const handlePublishClick = () => {
+    if (canPublish(profile?.badge)) navigate('/upload');
+    else setPublisherRoleModalOpen(true);
   };
 
   // Badge notifications rafraîchi toutes les 30 s
@@ -496,7 +506,7 @@ export default function Home() {
           />
           {!offline && (
             <button
-              onClick={() => navigate('/upload')}
+              onClick={handlePublishClick}
               className="flex h-9 items-center gap-1.5 rounded-xl border border-white/[0.06] bg-card/60 px-3 text-xs font-semibold text-muted-foreground backdrop-blur-md transition-[background-color,color,transform] duration-150 ease-out hover:bg-card hover:text-foreground active:scale-90"
             >
               <Upload className="h-3.5 w-3.5" />
@@ -758,7 +768,7 @@ export default function Home() {
               <p className="mb-1 text-sm font-medium text-foreground">Aucune musique pour l'instant</p>
               <p className="mb-4 text-xs text-muted-foreground">Sois le premier à uploader !</p>
               <button
-                onClick={() => navigate('/upload')}
+                onClick={handlePublishClick}
                 className="inline-flex items-center gap-2 rounded-xl bg-gradient-primary px-4 py-2 text-sm font-semibold text-primary-foreground shadow-elegant-sm hover:shadow-glow active:scale-[0.98]"
               >
                 <Upload className="h-3.5 w-3.5" />
@@ -1123,6 +1133,7 @@ export default function Home() {
       </div>
 
       <TutorialModal open={tutorialOpen} onClose={closeTutorial} />
+      <RequestPublisherRoleModal open={publisherRoleModalOpen} onOpenChange={setPublisherRoleModalOpen} />
     </div>
   );
 }

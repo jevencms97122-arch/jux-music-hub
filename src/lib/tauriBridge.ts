@@ -3,8 +3,7 @@
  * `electron/preload.cjs`. Reproduit exactement la même surface sur
  * `window` (`window.electronAPI`, `window.JuxDesktop`) pour que le
  * reste du code (discordBridge.ts, versionCheck.ts, platform.ts,
- * JuxAssistant.tsx, MicTestSheet.tsx, offlineMode.ts...) fonctionne
- * sans aucune modification.
+ * offlineMode.ts...) fonctionne sans aucune modification.
  *
  * Doit être importé avant tout le reste dans main.tsx.
  */

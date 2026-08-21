@@ -2,6 +2,8 @@ import { useState } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { Input } from '@/components/ui/input';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import LegalDocumentSheet from '@/components/LegalDocumentSheet';
+import { cgu, confidentialite } from '@/lib/legalContent';
 import { cn } from '@/lib/utils';
 
 function emailIssue(email: string): string | null {
@@ -163,7 +165,16 @@ export default function Login() {
         </div>
 
         <p className="mt-6 text-center text-[11px] text-muted-foreground/60">
-          En continuant, tu acceptes les conditions d'utilisation
+          En continuant, tu acceptes les{' '}
+          <LegalDocumentSheet
+            doc={cgu}
+            trigger={<button type="button" className="underline underline-offset-2 hover:text-foreground">conditions d'utilisation</button>}
+          />
+          {' '}et la{' '}
+          <LegalDocumentSheet
+            doc={confidentialite}
+            trigger={<button type="button" className="underline underline-offset-2 hover:text-foreground">politique de confidentialité</button>}
+          />
         </p>
       </div>
     </div>

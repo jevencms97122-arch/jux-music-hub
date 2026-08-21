@@ -4,6 +4,7 @@ import { getVersion } from '@tauri-apps/api/app';
 import { check, type Update } from '@tauri-apps/plugin-updater';
 import { relaunch } from '@tauri-apps/plugin-process';
 import { UPDATE_TRANSITION_KEY } from '@/lib/updateTransition';
+import { getDetectedPlatform } from '@/lib/versionCheck';
 import { Download, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 
@@ -19,7 +20,8 @@ export default function TauriUpdateManager() {
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!isTauri()) return;
+    // tauri-plugin-updater ne supporte pas Android — géré séparément par AndroidUpdateManager
+    if (!isTauri() || getDetectedPlatform() === 'android-app') return;
     (async () => {
       try {
         const result = await check();

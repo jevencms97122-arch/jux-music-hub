@@ -4,7 +4,7 @@
  */
 import PocketBase from 'pocketbase';
 
-const UPDATE_PB_URL = (import.meta.env.VITE_UPDATE_PB_URL || 'http://JUX:8091').replace(/\/+$/, '');
+const UPDATE_PB_URL = (import.meta.env.VITE_UPDATE_PB_URL || 'http://188.115.125.74:8085').replace(/\/+$/, '');
 
 export const updatePb = new PocketBase(UPDATE_PB_URL);
 

@@ -2,12 +2,10 @@ import { useState, useEffect } from 'react';
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from '@/components/ui/sheet';
 import { Switch } from '@/components/ui/switch';
 import { useAuth } from '@/contexts/AuthContext';
-import { useReactiveBg } from '@/hooks/useReactiveBg';
 import { useThemeEnabled } from '@/hooks/useThemeEnabled';
 import { useTheme } from '@/contexts/ThemeContext';
 import { usePlayer, TRANSITION_MODES } from '@/contexts/PlayerContext';
-import { LogOut, Sparkles, Palette, ChevronRight, RefreshCw, Zap, AudioLines, Glasses, Sliders, Mic, Settings2, Volume2, Gamepad2, BellOff, PictureInPicture2, Cpu, Code2, Download, Radio } from 'lucide-react';
-import { useVoiceAssistantSettings, isSpeechRecognitionSupported } from '@/hooks/useVoiceAssistant';
+import { LogOut, Palette, ChevronRight, RefreshCw, Zap, AudioLines, Glasses, Sliders, Volume2, Gamepad2, BellOff, PictureInPicture2, Cpu, Code2, Download, Radio } from 'lucide-react';
 import { usePerformanceMode } from '@/hooks/usePerformanceMode';
 import { useVRMode } from '@/hooks/useVRMode';
 import ThemeSelectorSheet from '@/components/ThemeSelectorSheet';
@@ -28,7 +26,6 @@ import { isDesktopPlatform, isWindowsPlatform } from '@/lib/platform';
 import GamepadMappingSheet from '@/components/GamepadMappingSheet';
 import { isGamepadEnabled, setGamepadEnabled } from '@/lib/gamepadMapping';
 import EqualizerSheet from '@/components/EqualizerSheet';
-import MicTestSheet from '@/components/MicTestSheet';
 import { EQ_PRESETS } from '@/lib/eqPresets';
 import { isAutoDownloadEnabled, setAutoDownloadEnabled } from '@/lib/autoDownloadManager';
 import DownloadedSongsSheet from '@/components/DownloadedSongsSheet';
@@ -38,7 +35,6 @@ export default function SettingsSheet({ trigger }: { trigger: React.ReactNode })
   const platform = usePlatform();
   const isDesktop = isDesktopPlatform(platform);
   const isWindows = isWindowsPlatform(platform);
-  const { enabled, setEnabled } = useReactiveBg();
   const { enabled: themesEnabled, setEnabled: setThemesEnabled } = useThemeEnabled();
   const { enabled: performanceMode, setEnabled: setPerformanceMode } = usePerformanceMode();
   const { enabled: vrMode, setEnabled: setVrMode } = useVRMode();
@@ -48,8 +44,6 @@ export default function SettingsSheet({ trigger }: { trigger: React.ReactNode })
   const currentCrossfadeLabel = crossfadeSeconds > 0
     ? (TRANSITION_MODES.find((m) => m.value === transitionMode)?.label ?? 'Linear')
     : 'Aucun';
-  const { enabled: assistantEnabled, setEnabled: setAssistantEnabled } = useVoiceAssistantSettings();
-  const [reactiveBgChanged, setReactiveBgChanged] = useState(false);
   const [themesChanged, setThemesChanged] = useState(false);
   const [gamepadEnabled, setGamepadEnabledState] = useState(() => isGamepadEnabled());
   const [soundOnly, setSoundOnlyState] = useState(() => isSoundOnlyMode());
@@ -110,11 +104,6 @@ export default function SettingsSheet({ trigger }: { trigger: React.ReactNode })
     setCloseToTrayEnabled(v);
   };
 
-  const handleReactiveBgToggle = (v: boolean) => {
-    setEnabled(v);
-    setReactiveBgChanged(true);
-  };
-
   const handleThemesToggle = (v: boolean) => {
     setThemesEnabled(v);
     setThemesChanged(true);
@@ -165,34 +154,6 @@ export default function SettingsSheet({ trigger }: { trigger: React.ReactNode })
             </div>
           </div>
 
-          {/* Arrière-plan réactif */}
-          <div className="rounded-2xl border border-white/[0.06] bg-card/60 backdrop-blur-md overflow-hidden">
-            <div className="flex items-center justify-between px-4 py-3.5">
-              <div className="flex items-center gap-3">
-                <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-purple-500/15">
-                  <Sparkles className="h-4.5 w-4.5 text-purple-400" />
-                </div>
-                <div>
-                  <p className="text-sm font-semibold">Arrière-plan réactif</p>
-                  <p className="text-xs text-muted-foreground">Le fond du lecteur s'anime avec la musique</p>
-                </div>
-              </div>
-              <Switch checked={enabled} onCheckedChange={handleReactiveBgToggle} />
-            </div>
-            {reactiveBgChanged && (
-              <div className="border-t border-border/40 px-4 pb-3.5 pt-3 flex items-center justify-between gap-3">
-                <p className="text-xs text-amber-400">Rechargez la page pour appliquer le changement.</p>
-                <button
-                  onClick={() => window.location.reload()}
-                  className="flex items-center gap-1.5 rounded-xl bg-amber-500/15 px-3 py-1.5 text-xs font-semibold text-amber-400 transition-[background-color,transform] duration-150 ease-out hover:bg-amber-500/25 active:scale-90 flex-shrink-0"
-                >
-                  <RefreshCw className="h-3.5 w-3.5" />
-                  Recharger
-                </button>
-              </div>
-            )}
-          </div>
-
           {/* Thèmes */}
           <div className="rounded-2xl border border-white/[0.06] bg-card/60 backdrop-blur-md overflow-hidden">
             <div className="flex items-center justify-between px-4 py-3.5">
@@ -238,49 +199,6 @@ export default function SettingsSheet({ trigger }: { trigger: React.ReactNode })
                       {currentTheme.backgroundAnimation && (
                         <span className="text-[10px] font-bold text-purple-400 bg-purple-500/15 px-1.5 py-0.5 rounded-full">✦ animé</span>
                       )}
-                      <ChevronRight className="h-4 w-4 text-muted-foreground flex-shrink-0" />
-                    </button>
-                  }
-                />
-              </div>
-            )}
-          </div>
-
-          {/* Assistant vocal */}
-          <div className="rounded-2xl border border-white/[0.06] bg-card/60 backdrop-blur-md overflow-hidden">
-            <div className="flex items-center justify-between px-4 py-3.5">
-              <div className="flex items-center gap-3">
-                <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-rose-500/15">
-                  <Mic className="h-4.5 w-4.5 text-rose-400" />
-                </div>
-                <div>
-                  <p className="text-sm font-semibold">Assistant</p>
-                  <p className="text-xs text-muted-foreground">Commandes vocales en français pendant la lecture</p>
-                </div>
-              </div>
-              <Switch
-                checked={assistantEnabled}
-                disabled={!isSpeechRecognitionSupported()}
-                onCheckedChange={setAssistantEnabled}
-              />
-            </div>
-            {!isSpeechRecognitionSupported() && (
-              <div className="border-t border-border/40 px-4 pb-3.5 pt-3">
-                <p className="text-xs text-amber-400">Reconnaissance vocale non disponible sur ce navigateur.</p>
-              </div>
-            )}
-            {assistantEnabled && (
-              <div className="border-t border-border/40 px-4 pb-3.5 pt-3 space-y-2">
-                <p className="text-xs font-medium text-muted-foreground">Phrase magique</p>
-                <p className="text-[11px] leading-relaxed text-muted-foreground">
-                  Dis « Jux » ou « Nexora », suivi de « pause », « reprendre », « musique suivante » ou « précédente ».
-                  Les deux mots magiques sont acceptés en même temps. Le micro s'active uniquement quand une musique est lancée.
-                </p>
-                <MicTestSheet
-                  trigger={
-                    <button className="flex w-full items-center gap-3 rounded-xl bg-secondary/50 px-3 py-2.5 transition-[background-color,transform] duration-150 ease-out hover:bg-secondary/80 active:scale-[0.98]">
-                      <Settings2 className="h-4 w-4 text-muted-foreground flex-shrink-0" />
-                      <span className="text-sm font-medium flex-1 text-left">Périphérique &amp; test du micro</span>
                       <ChevronRight className="h-4 w-4 text-muted-foreground flex-shrink-0" />
                     </button>
                   }

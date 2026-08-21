@@ -39,10 +39,10 @@ import BottomNav from '@/components/BottomNav';
 import UpdateChecker from '@/components/UpdateChecker';
 import WebAppUpdateNotifier from '@/components/WebAppUpdateNotifier';
 import TauriUpdateManager from '@/components/TauriUpdateManager';
+import AndroidUpdateManager from '@/components/AndroidUpdateManager';
 import UpdateAppliedNotice from '@/components/UpdateAppliedNotice';
 import WebDeprecatedScreen from '@/components/WebDeprecatedScreen';
 import GamepadController from '@/components/GamepadController';
-import JuxAssistant from '@/components/JuxAssistant';
 import BannedScreen from '@/components/BannedScreen';
 import RequiresBackend from '@/components/RequiresBackend';
 import OfflinePlaylists from '@/pages/OfflinePlaylists';
@@ -284,12 +284,12 @@ function AppContent() {
         <ChatNotifier />
         <AutoDownloadNotifier />
         <GamepadController />
-        <JuxAssistant />
         <div className="min-h-screen">
           {/* UpdateChecker = ancien système (versions codées en dur, Electron/Android) : désactivé sous Tauri desktop, remplacé par TauriUpdateManager */}
           {profileCompleted && !isTauri() && <UpdateChecker />}
           {profileCompleted && <WebAppUpdateNotifier />}
           <TauriUpdateManager />
+          <AndroidUpdateManager />
           <UpdateAppliedNotice />
           <main>
             <AnimatePresence mode="wait" initial={false}>

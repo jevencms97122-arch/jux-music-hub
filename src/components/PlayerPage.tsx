@@ -4,7 +4,6 @@ import { pb } from '@/lib/pocketbase';
 import { songCoverUrl, avatarUrl, songAudioUrl } from '@/lib/storage';
 import { usePlayer } from '@/contexts/PlayerContext';
 import { useAuth } from '@/contexts/AuthContext';
-import { useReactiveBg } from '@/hooks/useReactiveBg';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import CachedImage from '@/components/CachedImage';
 import {
@@ -38,8 +37,8 @@ export default function PlayerPage() {
     currentSong, isPlaying, isBuffering, currentTime, duration, queue, queueIndex,
     playSong, togglePlay, next, previous, seek, setVolume, volume,
     closePlayer, isShuffled, toggleShuffle, repeatMode, cycleRepeat,
-    playbackRate, isPlayerOpen, connectionStatus, getAnalyserNode,
-    sleepTimerMinutes, sleepTimerRemaining, activeSession,
+    playbackRate, isPlayerOpen, connectionStatus,
+    sleepTimerMinutes, sleepTimerRemaining, activeSession, isSessionGuest,
   } = usePlayer();
 
   const statusInfo = {
@@ -98,9 +97,6 @@ export default function PlayerPage() {
   const [reposters, setReposters] = useState<{ id: string; pseudo: string; avatar_url: string | null; user_id: string }[]>([]);
   const [showReposters, setShowReposters] = useState(false);
   const progressRef = useRef<HTMLDivElement>(null);
-  const bgRef = useRef<HTMLDivElement>(null);
-  const rafRef = useRef<number>(0);
-  const { enabled: reactiveBg } = useReactiveBg();
 
   const toSong = recordToSong;
 
@@ -235,70 +231,6 @@ export default function PlayerPage() {
     }
   };
 
-  // Reactive background — frequency-driven animation via Web Audio API analyser
-  useEffect(() => {
-    if (!reactiveBg || !isPlaying) {
-      cancelAnimationFrame(rafRef.current);
-      // Reset : le wrapper overscanné (-inset-[10%]) couvre l'écran sans transform
-      if (bgRef.current) bgRef.current.style.transform = '';
-      return;
-    }
-
-    const analyser = getAnalyserNode();
-    const dataArray = analyser ? new Uint8Array(analyser.frequencyBinCount) : null;
-
-    let startTime: number | null = null;
-    let lastNow: number | null = null;
-    // Zoom piloté par un ressort amorti : l'accélération et la décélération sont
-    // continues, donc aucune cassure au sommet du zoom (contrairement à un lerp
-    // à deux taux montée/descente qui bascule brutalement).
-    let smoothScale = 1; // le wrapper déborde déjà de 10 %, pas besoin de pré-zoom
-    let scaleVel = 0;
-    let smoothX = 0;
-    let smoothY = 0;
-
-    const SPRING_STIFFNESS = 55; // rappel vers la cible (s⁻²)
-    const SPRING_DAMPING = 13; // proche de l'amortissement critique (2·√55 ≈ 14.8)
-
-    const animate = (now: number) => {
-      if (!startTime) startTime = now;
-      const t = (now - startTime) / 1000;
-      const dt = Math.min(0.05, lastNow != null ? (now - lastNow) / 1000 : 1 / 60);
-      lastNow = now;
-
-      let bassEnergy = 0;
-
-      if (analyser && dataArray) {
-        analyser.getByteFrequencyData(dataArray);
-        // Sub-bass only: bins 0-2 (~0-172 Hz)
-        for (let i = 0; i < 3; i++) bassEnergy += dataArray[i];
-        bassEnergy = bassEnergy / 3 / 255;
-        // Threshold + cubic curve: ignore below 65%, cubic exponent for very selective response
-        const threshold = 0.88;
-        bassEnergy = Math.pow(Math.max(0, bassEnergy - threshold) / (1 - threshold), 3);
-      }
-
-      const targetScale = 1 + bassEnergy * 0.45;
-      // Amplitude max ±6 % : reste dans la marge d'overscan de 10 %, aucun bord noir possible
-      const targetX = Math.sin(t * 0.28) * 4 + Math.sin(t * 0.13) * 2;
-      const targetY = Math.cos(t * 0.21) * 4 + Math.cos(t * 0.09) * 2;
-
-      // Intégration du ressort (semi-implicite) — mouvement fluide dans les deux sens
-      scaleVel += ((targetScale - smoothScale) * SPRING_STIFFNESS - scaleVel * SPRING_DAMPING) * dt;
-      smoothScale += scaleVel * dt;
-      smoothX += (targetX - smoothX) * 0.04;
-      smoothY += (targetY - smoothY) * 0.04;
-
-      if (bgRef.current) {
-        bgRef.current.style.transform = `translate(${smoothX}%, ${smoothY}%) scale(${smoothScale})`;
-      }
-      rafRef.current = requestAnimationFrame(animate);
-    };
-
-    rafRef.current = requestAnimationFrame(animate);
-    return () => cancelAnimationFrame(rafRef.current);
-  }, [reactiveBg, isPlaying, getAnalyserNode]);
-
   const formatTime = (s: number) => {
     const m = Math.floor(s / 60);
     const sec = Math.floor(s % 60);
@@ -329,11 +261,8 @@ export default function PlayerPage() {
         closing ? 'animate-slide-out-down' : 'animate-slide-in-up'
       )}
     >
-      {/* Backdrop — cover floutée ou fond du thème (animé/Ultra) sans cover.
-          Le wrapper bgRef est stable (jamais démonté au changement de morceau) et déborde
-          de 10% de chaque côté : l'effet réactif au son peut le déplacer/zoomer sans
-          jamais révéler de bord noir (source du flickering). */}
-      <div ref={bgRef} className="absolute -inset-[10%] will-change-transform">
+      {/* Backdrop — cover floutée ou fond du thème (animé/Ultra) sans cover. */}
+      <div className="absolute -inset-[10%] will-change-transform">
         <AnimatePresence>
           {coverUrl ? (
             <motion.div

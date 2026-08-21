@@ -56,7 +56,7 @@ export default function Social() {
 
   const { user, profile } = useAuth();
   const navigate = useNavigate();
-  const { activeSession, isSessionHost, setActiveSession, refreshSession, stopAudio } = usePlayer();
+  const { activeSession, isSessionHost, setActiveSession, joinSession, refreshSession, stopAudio } = usePlayer();
   const isPermanentActiveSession = !!activeSession?.is_open;
   const [following, setFollowing] = useState<Profile[]>([]);
   const [followers, setFollowers] = useState<Profile[]>([]);
@@ -212,9 +212,9 @@ export default function Social() {
       const s = res.items[0] as any;
       if (!s) { toast.error('Code invalide'); setJoiningSession(false); return; }
       const participants = (s.participants as string[]) || [];
-      const nextParticipants = participants.includes(user.id) ? participants : [...participants, user.id];
-      await pb.collection('listen_sessions').update(s.id, { participants: nextParticipants });
-      setActiveSession({ id: s.id, host_id: s.host_id, song_id: s.song_id, position: s.position ?? 0, tempo: s.tempo || 1, is_playing: s.is_playing, participants: nextParticipants, is_active: true, code: s.code } as ListenSessionRow);
+      const row: ListenSessionRow = { id: s.id, code: s.code ?? null, host_id: s.host_id, song_id: s.song_id ?? null, position: s.position ?? 0, tempo: s.tempo || 1, is_playing: s.is_playing, participants, is_active: true, is_open: s.is_open ?? false };
+      const ok = await joinSession(row);
+      if (!ok) { toast.error('Impossible de rejoindre la session'); setJoiningSession(false); return; }
       refreshSession();
       setShowJoinDialog(false);
       setShowSessionChoice(false);
@@ -225,7 +225,7 @@ export default function Social() {
       toast.error('Code invalide');
     }
     setJoiningSession(false);
-  }, [user, joinCodeInput, setActiveSession, refreshSession]);
+  }, [user, joinCodeInput, joinSession, refreshSession]);
 
   const endSessionFromSocial = useCallback(async () => {
     if (!activeSession || !isSessionHost) return;

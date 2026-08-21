@@ -4,11 +4,14 @@ import { isTauri } from '@tauri-apps/api/core';
 import { getVersion } from '@tauri-apps/api/app';
 import { check, type Update } from '@tauri-apps/plugin-updater';
 import { relaunch } from '@tauri-apps/plugin-process';
-import { updatePb, getUpdatePbUrl } from '@/lib/updatePocketbase';
+import { updatePb } from '@/lib/updatePocketbase';
 import { getDetectedPlatform } from '@/lib/versionCheck';
 import { UPDATE_TRANSITION_KEY } from '@/lib/updateTransition';
-import { Info, Monitor, Smartphone, Globe, RefreshCw, Download, CheckCircle2 } from 'lucide-react';
+import { checkAndroidUpdate, installAndroidUpdate, type AndroidUpdateInfo } from '@/lib/androidUpdate';
+import { Info, Monitor, Smartphone, Globe, RefreshCw, Download, CheckCircle2, ChevronRight, ScrollText, ShieldCheck, FileText } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import LegalDocumentSheet from '@/components/LegalDocumentSheet';
+import { mentionsLegales, cgu, confidentialite } from '@/lib/legalContent';
 
 const PLATFORM_LABELS: Record<string, { label: string; icon: typeof Monitor }> = {
   'windows-app': { label: 'Windows', icon: Monitor },
@@ -23,12 +26,6 @@ const PLATFORM_TO_UPDATE_FIELD: Record<string, string> = {
 };
 
 type CheckPhase = 'idle' | 'checking' | 'up-to-date' | 'available' | 'downloading' | 'installing' | 'error';
-
-interface AndroidUpdateInfo {
-  version: string;
-  notes: string | null;
-  url: string;
-}
 
 export default function AppInfoSheet({ trigger }: { trigger: React.ReactNode }) {
   const [open, setOpen] = useState(false);
@@ -84,16 +81,13 @@ export default function AppInfoSheet({ trigger }: { trigger: React.ReactNode }) 
       setCheckPhase('checking');
       setCheckError(null);
       try {
-        const v = await getVersion();
-        const res = await fetch(`${getUpdatePbUrl()}/api/jux-updater/android/universal/${v}`);
-        if (res.status === 204) {
+        const result = await checkAndroidUpdate();
+        if (!result) {
           setAndroidUpdate(null);
           setCheckPhase('up-to-date');
           return;
         }
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        const data = await res.json();
-        setAndroidUpdate({ version: data.version, notes: data.notes ?? null, url: data.url });
+        setAndroidUpdate(result);
         setCheckPhase('available');
       } catch (e) {
         const msg = e instanceof Error ? e.message : String(e);
@@ -126,11 +120,12 @@ export default function AppInfoSheet({ trigger }: { trigger: React.ReactNode }) 
 
   const handleInstallUpdate = useCallback(async () => {
     if (isAndroid) {
-      if (!androidUpdate || !window.JuxAndroid?.downloadAndInstallApk) return;
+      if (!androidUpdate) return;
       // Le téléchargement (notification système native) et l'ouverture de l'écran
       // d'installation sont entièrement gérés côté Kotlin (JuxMediaBridge.kt) — pas
       // de progression exploitable ici, la notification système en tient lieu.
-      window.JuxAndroid.downloadAndInstallApk(androidUpdate.url);
+      const started = installAndroidUpdate(androidUpdate.url);
+      if (!started) { setCheckError('Pont de mise à jour natif indisponible.'); setCheckPhase('error'); return; }
       setCheckPhase('installing');
       return;
     }
@@ -291,6 +286,45 @@ export default function AppInfoSheet({ trigger }: { trigger: React.ReactNode }) 
               )}
             </div>
           )}
+
+          <div className="rounded-2xl bg-card/60 p-1 space-y-0.5">
+            <LegalDocumentSheet
+              doc={cgu}
+              trigger={
+                <button className="group flex w-full items-center justify-between rounded-xl px-3 py-3 text-left transition-colors hover:bg-card/60">
+                  <div className="flex items-center gap-3">
+                    <ScrollText className="h-4.5 w-4.5 text-muted-foreground transition-colors group-hover:text-primary" />
+                    <span className="text-sm font-medium text-foreground">Conditions Générales d'Utilisation</span>
+                  </div>
+                  <ChevronRight className="h-4 w-4 text-muted-foreground transition-transform group-hover:translate-x-0.5 group-hover:text-primary" />
+                </button>
+              }
+            />
+            <LegalDocumentSheet
+              doc={confidentialite}
+              trigger={
+                <button className="group flex w-full items-center justify-between rounded-xl px-3 py-3 text-left transition-colors hover:bg-card/60">
+                  <div className="flex items-center gap-3">
+                    <ShieldCheck className="h-4.5 w-4.5 text-muted-foreground transition-colors group-hover:text-primary" />
+                    <span className="text-sm font-medium text-foreground">Politique de confidentialité</span>
+                  </div>
+                  <ChevronRight className="h-4 w-4 text-muted-foreground transition-transform group-hover:translate-x-0.5 group-hover:text-primary" />
+                </button>
+              }
+            />
+            <LegalDocumentSheet
+              doc={mentionsLegales}
+              trigger={
+                <button className="group flex w-full items-center justify-between rounded-xl px-3 py-3 text-left transition-colors hover:bg-card/60">
+                  <div className="flex items-center gap-3">
+                    <FileText className="h-4.5 w-4.5 text-muted-foreground transition-colors group-hover:text-primary" />
+                    <span className="text-sm font-medium text-foreground">Mentions légales</span>
+                  </div>
+                  <ChevronRight className="h-4 w-4 text-muted-foreground transition-transform group-hover:translate-x-0.5 group-hover:text-primary" />
+                </button>
+              }
+            />
+          </div>
         </div>
       </SheetContent>
     </Sheet>

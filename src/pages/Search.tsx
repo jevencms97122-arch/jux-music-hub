@@ -9,6 +9,7 @@ import { Button } from '@/components/ui/button';
 import { useNavigate } from 'react-router-dom';
 import { ArrowLeft, Search as SearchIcon, Music2, Users, Flame, X, ChevronRight, History, LayoutGrid } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { normalizeBadge } from '@/lib/badges';
 import type { Song } from '@/types/music';
 import { recordToSong } from '@/lib/pbUtils';
 import { useSeo } from '@/lib/useSeo';
@@ -305,7 +306,7 @@ export default function Search() {
                               {u.pseudo?.charAt(0)?.toUpperCase() ?? '?'}
                             </div>
                           )}
-                          <span className={cn('min-w-0 flex-1 truncate text-sm font-semibold', u.badge?.includes('PDG') && 'text-pdg-gold')}>{u.pseudo}</span>
+                          <span className={cn('min-w-0 flex-1 truncate text-sm font-semibold', normalizeBadge(u.badge) === 'PDG' && 'text-pdg-gold')}>{u.pseudo}</span>
                           {displayStreak >= 3 && (
                             <span className={cn(
                               'flex items-center gap-1 rounded-full bg-secondary px-2 py-0.5 text-xs font-bold',

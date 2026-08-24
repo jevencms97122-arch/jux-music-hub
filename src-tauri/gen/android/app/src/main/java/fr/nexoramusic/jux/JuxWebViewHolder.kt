@@ -11,6 +11,8 @@ object JuxWebViewHolder {
         ref = WeakReference(webView)
     }
 
+    fun get(): WebView? = ref?.get()
+
     fun sendCommand(commandJson: String) {
         val webView = ref?.get() ?: return
         val escaped = commandJson.replace("\\", "\\\\").replace("'", "\\'")
@@ -20,5 +22,14 @@ object JuxWebViewHolder {
                 null
             )
         }
+    }
+
+    /** Exécute du JS arbitraire dans la WebView. Utilisé pour réveiller la logique de
+     * lecture (voir MediaPlaybackService) même quand la page est gelée en arrière-plan :
+     * un appel natif evaluateJavascript passe généralement là où un timer JS interne
+     * (setTimeout/setInterval) resterait bloqué. */
+    fun evaluate(js: String) {
+        val webView = ref?.get() ?: return
+        webView.post { webView.evaluateJavascript(js, null) }
     }
 }

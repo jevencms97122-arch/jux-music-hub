@@ -145,6 +145,24 @@ export function sendNowPlayingToNative(info: NowPlayingInfo): void {
 }
 
 /**
+ * Met à jour uniquement la position/état de lecture côté natif (Android), sans
+ * reconstruire la notification système. À appeler à fréquence réduite (~1x/sec) —
+ * contrairement à sendNowPlayingToNative qui déclenche un rebuild complet de la
+ * notification (image, MediaSession, actions...) et ne doit être appelée qu'au
+ * changement réel de morceau/état, jamais sur chaque tick de `currentTime`.
+ */
+export function sendPlaybackPositionToNative(currentTime: number, isPlaying: boolean): void {
+  if (typeof window === 'undefined') return;
+  try {
+    if (window.JuxAndroid && typeof (window.JuxAndroid as any).updatePosition === 'function') {
+      (window.JuxAndroid as any).updatePosition(currentTime, isPlaying);
+    }
+  } catch (e) {
+    console.error('[androidMediaBridge] sendPlaybackPositionToNative failed', e);
+  }
+}
+
+/**
  * Informe le code natif que la lecture s'est arrêtée (plus de musique en cours).
  */
 export function clearNowPlayingOnNative(): void {

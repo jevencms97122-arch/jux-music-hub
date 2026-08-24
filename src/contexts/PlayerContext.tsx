@@ -9,7 +9,7 @@ import { recordLocalListen } from '@/lib/localListenHistory';
 import { queueOfflinePlay } from '@/lib/offlinePlaySync';
 import { ensureCachedForPlayback } from '@/lib/offlineManager';
 import { setMediaSessionMetadata, setMediaSessionHandlers, setMediaSessionPosition, setMediaSessionPlaybackState, clearMediaSession } from '@/lib/notifications';
-import { sendNowPlayingToNative, clearNowPlayingOnNative, onNativeCommand, resolveCoverUrl } from '@/lib/androidMediaBridge';
+import { sendNowPlayingToNative, sendPlaybackPositionToNative, clearNowPlayingOnNative, onNativeCommand, resolveCoverUrl } from '@/lib/androidMediaBridge';
 import type { NativeCommandEvent } from '@/lib/androidMediaBridge';
 import { toast } from 'sonner';
 import { updatePresence, clearPresence } from '@/lib/userPresence';
@@ -476,7 +476,14 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
         if (activeLowpass) { activeLowpass.type = 'lowpass'; activeLowpass.Q.value = FILTER_SWEEP_Q; }
         if (inactiveLowpass) { inactiveLowpass.type = 'highpass'; inactiveLowpass.Q.value = FILTER_SWEEP_Q; }
       }
-      if (crossfadeIntervalRef.current) cancelAnimationFrame(crossfadeIntervalRef.current);
+      if (crossfadeIntervalRef.current) clearTimeout(crossfadeIntervalRef.current);
+      // setTimeout (~30 fps) et non requestAnimationFrame : rAF est lié au rendu des
+      // frames et ne se déclenche JAMAIS quand la page n'est pas visible (app en
+      // arrière-plan sur Android) — le fondu restait alors figé, la piste entrante
+      // jouait à volume 0 en silence et crossfadingRef bloquait l'enchaînement de
+      // secours. La progression étant calculée sur performance.now(), le passage à
+      // setTimeout ne change ni la durée ni la courbe du fondu.
+      const scheduleTick = (fn: () => void) => window.setTimeout(fn, 33);
       const tick = () => {
         const p = Math.min(1, (performance.now() - startTs) / fadeMs);
         const fadeCurve = calculateFadePosition(p, mode);
@@ -544,9 +551,9 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
           crossfadingRef.current = false;
           return;
         }
-        crossfadeIntervalRef.current = requestAnimationFrame(tick);
+        crossfadeIntervalRef.current = scheduleTick(tick);
       };
-      crossfadeIntervalRef.current = requestAnimationFrame(tick);
+      crossfadeIntervalRef.current = scheduleTick(tick);
     };
     const onReady = () => {
       inactive.removeEventListener('canplay', onReady);
@@ -572,7 +579,13 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
 
     // Web Audio API — analyser + EQ filter chain
     try {
-      const ctx = new AudioContext();
+      // latencyHint 'playback' (et non le défaut 'interactive') : demande au
+      // navigateur un buffer plus large, pensé pour une lecture continue plutôt
+      // que la réactivité minimale d'un jeu/instrument. Sans ça, le petit buffer
+      // "interactive" est inaudible sur le haut-parleur (buffer matériel local
+      // tolérant) mais crépite sur Bluetooth, où la latence radio laisse beaucoup
+      // moins de marge avant qu'un underrun ne devienne audible.
+      const ctx = new AudioContext({ latencyHint: 'playback' });
       const analyser = ctx.createAnalyser();
       analyser.fftSize = 512;
       analyser.smoothingTimeConstant = 0.82;
@@ -659,14 +672,27 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
       preAnalysisEstimatorRef.current = new LiveBpmEstimator(preAnalysisAnalyser);
     } catch {}
 
-    const onTime = (e: Event) => {
-      const a = getActive();
-      if (e.target !== a) return;
+    // Factorisé pour être réutilisable en dehors de l'événement 'timeupdate' natif —
+    // voir window.__juxBackgroundTick plus bas : quand la WebView est gelée en
+    // arrière-plan (Chromium suspend le JS d'une page invisible), 'timeupdate' et
+    // 'ended' n'arrivent plus, mais l'audio natif continue de jouer jusqu'au bout.
+    // Le code natif Android (MediaPlaybackService) réveille alors périodiquement
+    // cette même logique via evaluateJavascript, qui passe même quand les timers
+    // internes de la page sont gelés.
+    const checkTrackProgress = (a: HTMLAudioElement) => {
       setCurrentTime(a.currentTime);
       const dur = a.duration;
       if (!isFinite(dur) || dur <= 0) return;
-      const fadeDuration = crossfadeSecondsRef.current;
       const remaining = dur - a.currentTime;
+      // Filet de sécurité : la piste est terminée (ou quasi) mais rien n'a pris le
+      // relais — cas du réveil natif après un gel JS qui a duré jusqu'à la fin du
+      // morceau. On force l'enchaînement plutôt que d'attendre un 'ended' qui a pu
+      // être manqué pendant le gel.
+      if (a.ended || remaining <= 0.3) {
+        if (!crossfadingRef.current && !isSessionGuestRef.current) nextRef.current();
+        return;
+      }
+      const fadeDuration = crossfadeSecondsRef.current;
       const isAutoMix = transitionModeRef.current === 'autoMix';
       // AutoMix : la durée réelle est décidée dynamiquement (voir triggerCrossfadeRef),
       // mais il faut déjà préparer/précharger la piste suivante un peu avant.
@@ -682,6 +708,15 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
       if (fadeDuration > 0 && (remaining <= triggerWindow || trailingSilence) && remaining > 0.1 && !crossfadingRef.current && !isSessionGuestRef.current && repeatModeRef.current !== 'one') {
         triggerCrossfadeRef.current();
       }
+    };
+    const onTime = (e: Event) => {
+      const a = getActive();
+      if (e.target !== a) return;
+      checkTrackProgress(a);
+    };
+    (window as any).__juxBackgroundTick = () => {
+      const a = getActive();
+      if (a && a.src) checkTrackProgress(a);
     };
     const onDur = (e: Event) => { if (e.target === getActive()) setDuration(getActive().duration || 0); };
     const onEnd = (e: Event) => { if (e.target !== getActive()) return; if (crossfadingRef.current) return; if (isSessionGuestRef.current) return; nextRef.current(); };
@@ -716,7 +751,7 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
     audioBRef.current.addEventListener('loadstart', onBpmResetB);
 
     return () => {
-      if (crossfadeIntervalRef.current) { cancelAnimationFrame(crossfadeIntervalRef.current); crossfadeIntervalRef.current = null; }
+      if (crossfadeIntervalRef.current) { clearTimeout(crossfadeIntervalRef.current); crossfadeIntervalRef.current = null; }
       crossfadingRef.current = false;
       [audioARef.current, audioBRef.current].forEach((a) => { if (!a) return; a.pause(); a.removeEventListener('timeupdate', onTime); a.removeEventListener('loadedmetadata', onDur); a.removeEventListener('ended', onEnd); a.removeEventListener('play', onPlay); a.removeEventListener('pause', onPause); a.removeEventListener('waiting', onWaiting); a.removeEventListener('playing', onPlaying); });
       audioARef.current?.removeEventListener('playing', onBpmPlayingA);
@@ -732,6 +767,7 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
       preAnalysisEstimatorRef.current?.stop();
       try { preAnalysisAudioRef.current?.pause(); } catch {}
       clearMediaSession();
+      delete (window as any).__juxBackgroundTick;
     };
   }, []);
 
@@ -764,12 +800,28 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
     audio.play().then(() => estimator.start()).catch(() => {});
   }, [transitionMode, queue, queueIndex, repeatMode]);
 
-  // Android bridge
+  // Android bridge — métadonnées complètes (titre/auteur/cover/durée/état). Déclenche
+  // côté natif un rebuild complet de la notification système (image, MediaSession,
+  // actions...) : ne DOIT PAS dépendre de `currentTime`, qui change ~4x/sec via
+  // timeupdate — sinon la notification est reconstruite en boucle et ça sature le
+  // Binder/CPU du téléphone au point de faire saccader l'audio (voir l'effet suivant
+  // pour la position, mise à jour séparément à fréquence réduite et sans rebuild).
   useEffect(() => {
     if (!currentSong) { clearNowPlayingOnNative(); return; }
     const coverUrl = resolveCoverUrl(songCoverUrl(currentSong));
-    sendNowPlayingToNative({ songId: currentSong.id, title: currentSong.title || 'Sans titre', author: currentSong.author || 'Inconnu', coverUrl, duration, currentTime, isPlaying, playbackRate, volume, repeatMode, isShuffled });
-  }, [currentSong, isPlaying, currentTime, duration, playbackRate, volume, repeatMode, isShuffled]);
+    sendNowPlayingToNative({ songId: currentSong.id, title: currentSong.title || 'Sans titre', author: currentSong.author || 'Inconnu', coverUrl, duration, currentTime: getActive()?.currentTime ?? 0, isPlaying, playbackRate, volume, repeatMode, isShuffled });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentSong, isPlaying, duration, playbackRate, volume, repeatMode, isShuffled]);
+
+  // Android bridge — position de lecture seule, throttlée à 1x/sec, sans passer par
+  // React state (`currentTime` re-render ~4x/sec) : lit directement l'élément audio actif.
+  useEffect(() => {
+    if (!currentSong) return;
+    const tick = () => { const a = getActive(); sendPlaybackPositionToNative(a?.currentTime ?? 0, isPlaying); };
+    tick();
+    const interval = setInterval(tick, 1000);
+    return () => clearInterval(interval);
+  }, [currentSong, isPlaying]);
 
   useEffect(() => {
     const unsubscribe = onNativeCommand((event: NativeCommandEvent) => {
@@ -1032,7 +1084,7 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
 
   const loadAndPlay = useCallback(async (song: Song, autoPlay = true) => {
     setIsBuffering(true);
-    if (crossfadeIntervalRef.current) { cancelAnimationFrame(crossfadeIntervalRef.current); crossfadeIntervalRef.current = null; }
+    if (crossfadeIntervalRef.current) { clearTimeout(crossfadeIntervalRef.current); crossfadeIntervalRef.current = null; }
     crossfadingRef.current = false;
     const inactive = getInactive();
     if (inactive) { try { inactive.pause(); inactive.volume = 0; inactive.removeAttribute('src'); inactive.load(); } catch {} }
@@ -1060,7 +1112,7 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
   }, [playbackRate, volume, recordPlay, authUser]);
 
   const loadAndPlayExternalAudio = useCallback(async (payload: { videoId: string; title: string; author: string; coverUrl: string; audioUrl: string; autoPlay?: boolean }) => {
-    if (crossfadeIntervalRef.current) { cancelAnimationFrame(crossfadeIntervalRef.current); crossfadeIntervalRef.current = null; }
+    if (crossfadeIntervalRef.current) { clearTimeout(crossfadeIntervalRef.current); crossfadeIntervalRef.current = null; }
     crossfadingRef.current = false;
     const inactive = getInactive();
     if (inactive) { try { inactive.pause(); inactive.volume = 0; inactive.removeAttribute('src'); inactive.load(); } catch {} }

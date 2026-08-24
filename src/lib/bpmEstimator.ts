@@ -72,14 +72,19 @@ export class LiveBpmEstimator {
         }
       }
       this.prevEnergy = energy;
-      this.rafId = requestAnimationFrame(tick);
+      // setTimeout (~30 fps) et non requestAnimationFrame : rAF ne se déclenche pas
+      // quand la page n'est pas visible (app en arrière-plan sur Android), ce qui
+      // gelait l'échantillonnage — lastAudibleTs cessait d'avancer et AutoMix croyait
+      // à tort que la piste était retombée dans le silence. ~33 ms suffisent largement
+      // pour détecter des onsets espacés d'au moins MIN_ONSET_INTERVAL_MS.
+      this.rafId = window.setTimeout(tick, 33);
     };
-    this.rafId = requestAnimationFrame(tick);
+    this.rafId = window.setTimeout(tick, 33);
   }
 
   stop(): void {
     this.running = false;
-    if (this.rafId !== null) cancelAnimationFrame(this.rafId);
+    if (this.rafId !== null) clearTimeout(this.rafId);
     this.rafId = null;
   }
 

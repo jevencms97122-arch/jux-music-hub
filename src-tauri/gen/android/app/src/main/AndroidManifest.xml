@@ -4,6 +4,11 @@
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
+    <!-- Garde le CPU éveillé pendant la lecture en arrière-plan (voir MediaPlaybackService) :
+         sans ça, Android peut ralentir/geler les timers JS de la WebView, ce qui empêche
+         l'enchaînement automatique sur le morceau suivant une fois l'app en arrière-plan. -->
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
+    <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
     <!-- Nécessaire pour proposer l'installation de l'APK de mise à jour téléchargé -->
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
 

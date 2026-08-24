@@ -5,6 +5,7 @@ import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
 import android.app.Service
+import android.content.Context
 import android.content.Intent
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
@@ -12,6 +13,7 @@ import android.os.Build
 import android.os.Handler
 import android.os.IBinder
 import android.os.Looper
+import android.os.PowerManager
 import android.support.v4.media.MediaMetadataCompat
 import android.support.v4.media.session.MediaSessionCompat
 import android.support.v4.media.session.PlaybackStateCompat
@@ -24,22 +26,58 @@ class MediaPlaybackService : Service() {
 
     companion object {
         const val ACTION_UPDATE = "fr.nexoramusic.jux.action.UPDATE_NOW_PLAYING"
+        const val ACTION_UPDATE_POSITION = "fr.nexoramusic.jux.action.UPDATE_POSITION"
         const val ACTION_CLEAR = "fr.nexoramusic.jux.action.CLEAR_NOW_PLAYING"
         const val ACTION_PLAY_PAUSE = "fr.nexoramusic.jux.action.PLAY_PAUSE"
         const val ACTION_NEXT = "fr.nexoramusic.jux.action.NEXT"
         const val ACTION_PREVIOUS = "fr.nexoramusic.jux.action.PREVIOUS"
         private const val CHANNEL_ID = "jux_now_playing"
         private const val NOTIFICATION_ID = 4242
+        /** Fréquence du réveil forcé de la logique JS pendant la lecture (voir startHeartbeat). */
+        private const val HEARTBEAT_INTERVAL_MS = 3000L
     }
 
     private lateinit var mediaSession: MediaSessionCompat
     private var lastCoverUrl: String? = null
     private var lastCoverBitmap: Bitmap? = null
+    private var lastDuration: Double = 0.0
     private val mainHandler = Handler(Looper.getMainLooper())
+    private var wakeLock: PowerManager.WakeLock? = null
+    private var heartbeatRunning = false
+
+    /**
+     * Quand l'app passe en arrière-plan, la WebView Android gèle sa page (comportement
+     * Chromium standard) : les timers JS ('timeupdate', 'setInterval'...) s'arrêtent, mais
+     * l'audio natif continue de jouer jusqu'au bout — la logique JS qui enchaînerait sur le
+     * morceau suivant ne s'exécute alors plus tant que l'app n'est pas raffichée. Un appel
+     * natif evaluateJavascript passe généralement là où un timer interne resterait bloqué :
+     * ce heartbeat réveille donc périodiquement window.__juxBackgroundTick (voir
+     * PlayerContext.tsx) pour vérifier la progression et forcer l'enchaînement si besoin,
+     * tant que la lecture est active (wake lock tenu en parallèle pour garder le CPU éveillé).
+     */
+    private val heartbeatRunnable = object : Runnable {
+        override fun run() {
+            JuxWebViewHolder.evaluate("window.__juxBackgroundTick && window.__juxBackgroundTick()")
+            if (heartbeatRunning) mainHandler.postDelayed(this, HEARTBEAT_INTERVAL_MS)
+        }
+    }
+
+    private fun startHeartbeat() {
+        if (heartbeatRunning) return
+        heartbeatRunning = true
+        mainHandler.postDelayed(heartbeatRunnable, HEARTBEAT_INTERVAL_MS)
+    }
+
+    private fun stopHeartbeat() {
+        heartbeatRunning = false
+        mainHandler.removeCallbacks(heartbeatRunnable)
+    }
 
     override fun onCreate() {
         super.onCreate()
         createNotificationChannel()
+        val powerManager = getSystemService(Context.POWER_SERVICE) as PowerManager
+        wakeLock = powerManager.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "Jux:PlaybackWakeLock")
         mediaSession = MediaSessionCompat(this, "JuxMediaSession").apply {
             setCallback(object : MediaSessionCompat.Callback() {
                 override fun onPlay() { JuxWebViewHolder.sendCommand("""{"command":"play"}""") }
@@ -59,7 +97,13 @@ class MediaPlaybackService : Service() {
             ACTION_CLEAR -> {
                 stopForeground(STOP_FOREGROUND_REMOVE)
                 mediaSession.isActive = false
+                updateWakeLock(false)
                 stopSelf()
+            }
+            ACTION_UPDATE_POSITION -> {
+                val currentTime = intent.getDoubleExtra("currentTime", 0.0)
+                val isPlaying = intent.getBooleanExtra("isPlaying", false)
+                updatePlaybackState(isPlaying, currentTime)
             }
             ACTION_PLAY_PAUSE -> JuxWebViewHolder.sendCommand("""{"command":"togglePlay"}""")
             ACTION_NEXT -> JuxWebViewHolder.sendCommand("""{"command":"next"}""")
@@ -72,6 +116,7 @@ class MediaPlaybackService : Service() {
                 val currentTime = intent?.getDoubleExtra("currentTime", 0.0) ?: 0.0
                 val isPlaying = intent?.getBooleanExtra("isPlaying", false) ?: false
 
+                lastDuration = duration
                 updateSessionMetadata(title, author, duration)
                 updatePlaybackState(isPlaying, currentTime)
 
@@ -96,7 +141,22 @@ class MediaPlaybackService : Service() {
         mediaSession.setMetadata(builder.build())
     }
 
+    /** Garde le CPU éveillé tant que la lecture est active, même écran éteint / app en
+     * arrière-plan — sinon Android peut ralentir les timers JS de la WebView au point
+     * d'empêcher l'enchaînement automatique sur le morceau suivant en fin de piste. */
+    private fun updateWakeLock(isPlaying: Boolean) {
+        val lock = wakeLock ?: return
+        if (isPlaying) {
+            if (!lock.isHeld) lock.acquire(12 * 60 * 60 * 1000L /* filet de sécurité 12h */)
+            startHeartbeat()
+        } else {
+            if (lock.isHeld) lock.release()
+            stopHeartbeat()
+        }
+    }
+
     private fun updatePlaybackState(isPlaying: Boolean, currentTime: Double) {
+        updateWakeLock(isPlaying)
         val state = if (isPlaying) PlaybackStateCompat.STATE_PLAYING else PlaybackStateCompat.STATE_PAUSED
         val playbackState = PlaybackStateCompat.Builder()
             .setActions(
@@ -120,7 +180,7 @@ class MediaPlaybackService : Service() {
             if (bitmap != null) {
                 lastCoverBitmap = bitmap
                 mainHandler.post {
-                    updateSessionMetadata(title, author, 0.0)
+                    updateSessionMetadata(title, author, lastDuration)
                     val manager = getSystemService(NotificationManager::class.java)
                     manager?.notify(NOTIFICATION_ID, buildNotification(title, author, isPlaying, bitmap))
                 }
@@ -169,6 +229,7 @@ class MediaPlaybackService : Service() {
     }
 
     override fun onDestroy() {
+        updateWakeLock(false)
         mediaSession.release()
         super.onDestroy()
     }

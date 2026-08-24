@@ -8,11 +8,13 @@ import { extractYoutubeId } from '@/lib/storage';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, Upload as UploadIcon, Music2, Youtube, X, Camera, User, ShieldAlert, Play, Pause, FolderOpen, Zap, PenLine } from 'lucide-react';
+import { ArrowLeft, Upload as UploadIcon, Music2, Youtube, X, Camera, User, ShieldAlert, Play, Pause, FolderOpen, Zap, PenLine, Image as ImageIcon, Search, HardDrive } from 'lucide-react';
 import { toast } from 'sonner';
 import { MUSIC_GENRES } from '@/types/music';
 import { computeAudioFingerprint } from '@/lib/audioFingerprint';
 import { canPublish } from '@/lib/badges';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
+import { CoverSearchModal } from '@/components/CoverSearchModal';
 
 // Déduit un titre lisible à partir du nom de fichier (retire l'extension, remplace _ et - par des espaces).
 function titleFromFilename(filename: string): string {
@@ -48,6 +50,9 @@ export default function Upload() {
   const [genre, setGenre] = useState('');
   const [audioFile, setAudioFile] = useState<File | null>(null);
   const [coverFile, setCoverFile] = useState<File | null>(null);
+  const [coverPreview, setCoverPreview] = useState<string | null>(null);
+  const [coverSearchOpen, setCoverSearchOpen] = useState(false);
+  const coverInputRef = useRef<HTMLInputElement>(null);
   const [youtubeUrl, setYoutubeUrl] = useState('');
   const [uploading, setUploading] = useState(false);
   const [analyzing, setAnalyzing] = useState(false);
@@ -102,6 +107,14 @@ export default function Upload() {
       URL.revokeObjectURL(url);
     };
   }, [audioFile]);
+
+  // Aperçu de la cover choisie (fichier local ou téléchargée depuis la recherche internet)
+  useEffect(() => {
+    if (!coverFile) { setCoverPreview(null); return; }
+    const url = URL.createObjectURL(coverFile);
+    setCoverPreview(url);
+    return () => URL.revokeObjectURL(url);
+  }, [coverFile]);
 
   const togglePreview = useCallback(() => {
     const audio = audioPreviewRef.current;
@@ -516,8 +529,46 @@ export default function Upload() {
           <Input value={youtubeUrl} onChange={(e) => setYoutubeUrl(e.target.value)} placeholder="https://youtube.com/watch?v=..." />
         </div>
         <div>
-          <label className="text-sm font-medium">Cover (image)</label>
-          <Input type="file" accept="image/*" onChange={(e) => setCoverFile(e.target.files?.[0] || null)} className="cursor-pointer" />
+          <label className="text-sm font-medium flex items-center gap-2"><ImageIcon className="h-4 w-4" />Cover (image)</label>
+          <input
+            ref={coverInputRef}
+            type="file"
+            accept="image/*"
+            className="hidden"
+            onChange={(e) => { const f = e.target.files?.[0] || null; setCoverFile(f); e.target.value = ''; }}
+          />
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <button
+                type="button"
+                className="mt-1 flex w-full items-center gap-3 rounded-xl border border-dashed border-border/60 bg-card/30 px-3 py-2 text-left"
+              >
+                {coverPreview ? (
+                  <img src={coverPreview} alt="Cover" className="h-12 w-12 rounded-lg object-cover" />
+                ) : (
+                  <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-secondary">
+                    <ImageIcon className="h-5 w-5 text-muted-foreground" />
+                  </div>
+                )}
+                <span className="text-sm font-medium">{coverFile ? 'Changer la cover' : 'Ajouter une cover'}</span>
+              </button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="start" className="w-64">
+              <DropdownMenuItem onClick={() => setCoverSearchOpen(true)}>
+                <Search className="h-4 w-4 mr-2" /> Chercher une image sur internet
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => coverInputRef.current?.click()}>
+                <HardDrive className="h-4 w-4 mr-2" /> Choisir depuis l'appareil
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+          <CoverSearchModal
+            open={coverSearchOpen}
+            onOpenChange={setCoverSearchOpen}
+            title={title}
+            author={artists.map((a) => a.name).join(', ')}
+            onSelect={setCoverFile}
+          />
         </div>
         <Button className="w-full" onClick={submit} disabled={uploading}>
           <UploadIcon className="h-4 w-4 mr-2" />

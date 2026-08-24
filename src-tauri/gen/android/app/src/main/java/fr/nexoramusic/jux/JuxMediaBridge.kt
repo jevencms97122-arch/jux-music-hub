@@ -36,6 +36,26 @@ class JuxMediaBridge(private val context: Context) {
         }
     }
 
+    /**
+     * Met à jour uniquement la position/état de lecture (MediaSession), sans reconstruire
+     * la notification. Appelée ~1x/sec depuis la WebView — contrairement à updateNowPlaying
+     * qui rebuild toute la notification et ne doit être appelée qu'au changement réel de
+     * morceau/état (sinon le rebuild en boucle sature le CPU et fait saccader l'audio).
+     */
+    @JavascriptInterface
+    fun updatePosition(currentTime: Double, isPlaying: Boolean) {
+        try {
+            val intent = Intent(context, MediaPlaybackService::class.java).apply {
+                action = MediaPlaybackService.ACTION_UPDATE_POSITION
+                putExtra("currentTime", currentTime)
+                putExtra("isPlaying", isPlaying)
+            }
+            context.startService(intent)
+        } catch (_: Exception) {
+            // Service pas encore démarré (pas de morceau lancé) : on ignore silencieusement
+        }
+    }
+
     @JavascriptInterface
     fun clearNowPlaying() {
         val intent = Intent(context, MediaPlaybackService::class.java).apply {

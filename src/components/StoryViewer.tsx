@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { pb } from '@/lib/pocketbase';
 import { useAuth } from '@/contexts/AuthContext';
-import { songCoverUrl, songAudioUrl } from '@/lib/storage';
+import { songCoverUrl, songAudioUrl, publicUrl } from '@/lib/storage';
 import { X, Music2 } from 'lucide-react';
 
 interface Props {
@@ -21,6 +21,7 @@ export default function StoryViewer({ stories, initialIndex = 0, onClose }: Prop
   const rafRef = useRef<number>(0);
 
   const story = stories[currentIndex];
+  const storyImageUrl = story?.image ? publicUrl('stories', story.id, story.image) : null;
 
   // Charge la song à chaque changement de story
   useEffect(() => {
@@ -78,9 +79,11 @@ export default function StoryViewer({ stories, initialIndex = 0, onClose }: Prop
     }
     progressRef.current = 0;
     setProgress(0);
-    const storyDurationMs = story.song_id
-      ? Math.max(3000, ((story.end_time || 30) - (story.start_time || 0)) * 1000)
-      : 5000;
+    const storyDurationMs = story.image
+      ? 7000
+      : story.song_id
+        ? Math.max(3000, ((story.end_time || 30) - (story.start_time || 0)) * 1000)
+        : 5000;
     const step = 100;
     intervalRef.current = window.setInterval(() => {
       progressRef.current += step;
@@ -103,22 +106,28 @@ export default function StoryViewer({ stories, initialIndex = 0, onClose }: Prop
 
   if (!story) return null;
 
-  const storyDurationMs = story.song_id
-    ? Math.max(3000, ((story.end_time || 30) - (story.start_time || 0)) * 1000)
-    : 5000;
+  const storyDurationMs = story.image
+    ? 7000
+    : story.song_id
+      ? Math.max(3000, ((story.end_time || 30) - (story.start_time || 0)) * 1000)
+      : 5000;
   const coverUrl = song ? songCoverUrl(song) : null;
   const hasCover = coverUrl && coverUrl !== '/placeholder.svg';
 
   return (
     <div className="fixed inset-0 z-50 bg-black" onClick={handleClick}>
-      {/* Fond flouté */}
-      {hasCover && (
+      {/* Image plein écran (ex: carte Wrapped partagée) */}
+      {storyImageUrl && (
+        <img src={storyImageUrl} alt="" className="absolute inset-0 h-full w-full object-cover" />
+      )}
+      {/* Fond flouté (stories musicales classiques) */}
+      {!storyImageUrl && hasCover && (
         <div
           className="absolute inset-0 bg-cover bg-center blur-2xl scale-110"
           style={{ backgroundImage: `url(${coverUrl})` }}
         />
       )}
-      <div className="absolute inset-0 bg-black/40" />
+      {!storyImageUrl && <div className="absolute inset-0 bg-black/40" />}
 
       {/* Bouton fermer */}
       <button
@@ -146,30 +155,42 @@ export default function StoryViewer({ stories, initialIndex = 0, onClose }: Prop
         ))}
       </div>
 
-      {/* Contenu centré */}
-      <div className="relative z-10 flex h-full items-center justify-center">
-        <div className="text-center px-8">
-          {hasCover && (
-            <div className="mb-6 flex justify-center">
-              <img
-                src={coverUrl!}
-                alt={song?.title || 'Cover'}
-                className="h-56 w-56 rounded-3xl object-cover shadow-2xl shadow-black/50 ring-1 ring-white/[0.12]"
-              />
-            </div>
-          )}
-          {song && (
-            <div className="mb-4 flex items-center justify-center gap-2 text-white/80">
-              <Music2 className="h-4 w-4" />
-              <span className="text-sm font-medium">{song.title} — {song.author}</span>
-            </div>
-          )}
-          {story.comment ? (
-            <p className="text-xl font-bold text-white">{story.comment}</p>
-          ) : null}
-          <p className="text-sm text-white/60 mt-2">Story musicale</p>
+      {/* Contenu centré (stories musicales classiques uniquement) */}
+      {!storyImageUrl && (
+        <div className="relative z-10 flex h-full items-center justify-center">
+          <div className="text-center px-8">
+            {hasCover && (
+              <div className="mb-6 flex justify-center">
+                <img
+                  src={coverUrl!}
+                  alt={song?.title || 'Cover'}
+                  className="h-56 w-56 rounded-3xl object-cover shadow-2xl shadow-black/50 ring-1 ring-white/[0.12]"
+                />
+              </div>
+            )}
+            {song && (
+              <div className="mb-4 flex items-center justify-center gap-2 text-white/80">
+                <Music2 className="h-4 w-4" />
+                <span className="text-sm font-medium">{song.title} — {song.author}</span>
+              </div>
+            )}
+            {story.comment ? (
+              <p className="text-xl font-bold text-white">{story.comment}</p>
+            ) : null}
+            <p className="text-sm text-white/60 mt-2">Story musicale</p>
+          </div>
         </div>
-      </div>
+      )}
+
+      {/* Chip discret indiquant le titre joué en fond, pour les cartes Wrapped */}
+      {storyImageUrl && song && (
+        <div className="absolute bottom-8 left-0 right-0 z-10 flex justify-center">
+          <div className="flex items-center gap-2 rounded-full bg-black/40 backdrop-blur-md px-4 py-2 text-white/90 ring-1 ring-white/10">
+            <Music2 className="h-3.5 w-3.5" />
+            <span className="text-xs font-medium">{song.title} — {song.author}</span>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

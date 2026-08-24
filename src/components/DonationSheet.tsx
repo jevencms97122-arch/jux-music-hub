@@ -5,7 +5,7 @@ import { Heart, Copy, Check } from 'lucide-react';
 import { toast } from 'sonner';
 
 const IBAN = 'FR76 4061 8805 1100 0402 4921 374';
-const HOLDER = 'Jux';
+const HOLDER = 'Jules';
 
 export default function DonationSheet({ trigger }: { trigger: React.ReactNode }) {
   const [copied, setCopied] = useState(false);

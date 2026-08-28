@@ -9,7 +9,7 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import {
   Pencil, Sparkles, Trophy, Music2, Settings, PlusCircle, History,
   Flame, Repeat2, QrCode, ChevronRight, Headphones, ListMusic,
-  Mic2, Play, Bell, LogOut, Info, Heart,
+  Mic2, Play, Bell, LogOut, Info, Heart, CalendarDays, Trash2, Download,
 } from 'lucide-react';
 import { useLazySection } from '@/hooks/useLazySection';
 import { avatarUrl, songCoverUrl } from '@/lib/storage';
@@ -31,6 +31,9 @@ import ProfileQrCode from '@/components/ProfileQrCode';
 import SettingsSheet from '@/components/SettingsSheet';
 import AppInfoSheet from '@/components/AppInfoSheet';
 import DonationSheet from '@/components/DonationSheet';
+import NexoraConvertSheet from '@/components/NexoraConvertSheet';
+import WeeklyRecapSheet from '@/components/WeeklyRecapSheet';
+import MySongsSheet from '@/components/MySongsSheet';
 import TabFade from '@/components/TabFade';
 import RequestPublisherRoleModal from '@/components/RequestPublisherRoleModal';
 import { normalizeBadge, canPublish } from '@/lib/badges';
@@ -61,6 +64,7 @@ export default function ProfilePage() {
   const [favoriteArtists, setFavoriteArtists] = useState<{ name: string; totalPlays: number; songs: Song[] }[]>([]);
   const [favoriteArtistsLoading, setFavoriteArtistsLoading] = useState(true);
   const [publisherRoleModalOpen, setPublisherRoleModalOpen] = useState(false);
+  const [mySongsOpen, setMySongsOpen] = useState(false);
   const artistsLazy = useLazySection();
 
   const handlePublishClick = () => {
@@ -329,6 +333,38 @@ export default function ProfilePage() {
           </div>
           <ChevronRight className="h-5 w-5 shrink-0 text-primary-foreground/70 transition-transform group-hover:translate-x-0.5" />
         </button>
+
+        <WeeklyRecapSheet
+          trigger={
+            <button className="group mt-2 flex w-full items-center gap-3 rounded-2xl border border-border/50 bg-card/60 p-4 text-left transition-colors hover:bg-card active:scale-[0.98]">
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary/15">
+                <CalendarDays className="h-5 w-5 text-primary" />
+              </div>
+              <div className="min-w-0 flex-1">
+                <div className="text-sm font-bold">Récap de la semaine</div>
+                <div className="text-[11px] text-muted-foreground">Tes écoutes des 7 derniers jours</div>
+              </div>
+              <ChevronRight className="h-5 w-5 shrink-0 text-muted-foreground/70 transition-transform group-hover:translate-x-0.5" />
+            </button>
+          }
+        />
+
+        {canPublish(profile?.badge) && (
+          <button
+            onClick={() => setMySongsOpen(true)}
+            className="group mt-2 flex w-full items-center gap-3 rounded-2xl border border-border/50 bg-card/60 p-4 text-left transition-colors hover:bg-card active:scale-[0.98]"
+          >
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-destructive/15">
+              <Trash2 className="h-5 w-5 text-destructive" />
+            </div>
+            <div className="min-w-0 flex-1">
+              <div className="text-sm font-bold">Mes musiques publiées</div>
+              <div className="text-[11px] text-muted-foreground">Gérer ou supprimer tes publications</div>
+            </div>
+            <ChevronRight className="h-5 w-5 shrink-0 text-muted-foreground/70 transition-transform group-hover:translate-x-0.5" />
+          </button>
+        )}
+        {user && <MySongsSheet open={mySongsOpen} onOpenChange={setMySongsOpen} userId={user.id} />}
       </section>
 
       {/* ── Rang & Quêtes ── */}
@@ -565,6 +601,17 @@ export default function ProfilePage() {
                 <div className="flex items-center gap-3">
                   <Info className="h-4.5 w-4.5 text-muted-foreground transition-colors group-hover:text-primary" />
                   <span className="text-sm font-medium text-foreground">Informations de l'application</span>
+                </div>
+                <ChevronRight className="h-4 w-4 text-muted-foreground transition-transform group-hover:translate-x-0.5 group-hover:text-primary" />
+              </button>
+            }
+          />
+          <NexoraConvertSheet
+            trigger={
+              <button className="group flex w-full items-center justify-between rounded-xl px-3 py-3 text-left transition-colors hover:bg-card/60">
+                <div className="flex items-center gap-3">
+                  <Download className="h-4.5 w-4.5 text-muted-foreground transition-colors group-hover:text-primary" />
+                  <span className="text-sm font-medium text-foreground">Télécharger Nexora-Convert</span>
                 </div>
                 <ChevronRight className="h-4 w-4 text-muted-foreground transition-transform group-hover:translate-x-0.5 group-hover:text-primary" />
               </button>

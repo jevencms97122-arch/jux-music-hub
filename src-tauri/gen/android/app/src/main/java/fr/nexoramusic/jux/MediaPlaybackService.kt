@@ -41,6 +41,9 @@ class MediaPlaybackService : Service() {
     private var lastCoverUrl: String? = null
     private var lastCoverBitmap: Bitmap? = null
     private var lastDuration: Double = 0.0
+    private var lastTitle: String = "Nexora Music"
+    private var lastAuthor: String = ""
+    private var lastIsPlaying: Boolean = false
     private val mainHandler = Handler(Looper.getMainLooper())
     private var wakeLock: PowerManager.WakeLock? = null
     private var heartbeatRunning = false
@@ -98,6 +101,7 @@ class MediaPlaybackService : Service() {
                 stopForeground(STOP_FOREGROUND_REMOVE)
                 mediaSession.isActive = false
                 updateWakeLock(false)
+                JuxWidgetProvider.showIdle(applicationContext)
                 stopSelf()
             }
             ACTION_UPDATE_POSITION -> {
@@ -117,8 +121,11 @@ class MediaPlaybackService : Service() {
                 val isPlaying = intent?.getBooleanExtra("isPlaying", false) ?: false
 
                 lastDuration = duration
+                lastTitle = title
+                lastAuthor = author
                 updateSessionMetadata(title, author, duration)
                 updatePlaybackState(isPlaying, currentTime)
+                JuxWidgetProvider.updateAll(applicationContext, title, author, isPlaying, lastCoverBitmap)
 
                 if (coverUrl.isNotEmpty() && coverUrl != lastCoverUrl) {
                     lastCoverUrl = coverUrl
@@ -157,6 +164,14 @@ class MediaPlaybackService : Service() {
 
     private fun updatePlaybackState(isPlaying: Boolean, currentTime: Double) {
         updateWakeLock(isPlaying)
+        // Ne rafraîchit le widget que si play/pause a réellement changé — jamais à
+        // chaque tick de position (voir le heartbeat 3s / updatePosition 1x/sec), pour
+        // ne pas reproduire le genre de spam qui causait les saccades audio corrigées
+        // précédemment (voir sendPlaybackPositionToNative vs sendNowPlayingToNative).
+        if (isPlaying != lastIsPlaying) {
+            lastIsPlaying = isPlaying
+            JuxWidgetProvider.updateAll(applicationContext, lastTitle, lastAuthor, isPlaying, lastCoverBitmap)
+        }
         val state = if (isPlaying) PlaybackStateCompat.STATE_PLAYING else PlaybackStateCompat.STATE_PAUSED
         val playbackState = PlaybackStateCompat.Builder()
             .setActions(
@@ -183,6 +198,7 @@ class MediaPlaybackService : Service() {
                     updateSessionMetadata(title, author, lastDuration)
                     val manager = getSystemService(NotificationManager::class.java)
                     manager?.notify(NOTIFICATION_ID, buildNotification(title, author, isPlaying, bitmap))
+                    JuxWidgetProvider.updateAll(applicationContext, title, author, isPlaying, bitmap)
                 }
             }
         }.start()

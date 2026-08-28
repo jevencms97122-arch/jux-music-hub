@@ -9,6 +9,21 @@ import { AnimatePresence, motion } from 'framer-motion';
 import { pb } from '@/lib/pocketbase';
 import { isTauri } from '@tauri-apps/api/core';
 import { toast } from 'sonner';
+import { playInterfaceSound } from '@/lib/interfaceSounds';
+
+// Le module 'sonner' exporte un singleton `toast` — patcher ses méthodes ici
+// suffit à jouer le SFX pour tous les toast.success/toast.error de l'app,
+// sans devoir toucher chaque site d'appel.
+const _toastSuccess = toast.success.bind(toast);
+toast.success = ((...args: Parameters<typeof _toastSuccess>) => {
+  playInterfaceSound('success');
+  return _toastSuccess(...args);
+}) as typeof toast.success;
+const _toastError = toast.error.bind(toast);
+toast.error = ((...args: Parameters<typeof _toastError>) => {
+  playInterfaceSound('error');
+  return _toastError(...args);
+}) as typeof toast.error;
 import { updatePresence, clearPresence } from '@/lib/userPresence';
 import { sendSmartNotification } from '@/lib/smartNotifications';
 import { precacheLibraryForOffline } from '@/lib/offlinePrecache';
@@ -104,7 +119,12 @@ function PresenceHeartbeat() {
 
 function ScrollToTop() {
   const { pathname } = useLocation();
-  useEffect(() => { window.scrollTo(0, 0); }, [pathname]);
+  const firstRun = useRef(true);
+  useEffect(() => {
+    window.scrollTo(0, 0);
+    if (firstRun.current) { firstRun.current = false; return; }
+    playInterfaceSound('transition');
+  }, [pathname]);
   return null;
 }
 

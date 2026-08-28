@@ -13,14 +13,17 @@ interface Props {
   onOpenChange: (open: boolean) => void;
 }
 
-/** Durée max d'un extrait de story, comme sur Instagram. */
-const CLIP_SECONDS = 15;
+/** Durée min/max d'un extrait de story — modifiable par l'utilisateur entre les deux. */
+const MIN_CLIP_SECONDS = 5;
+const MAX_CLIP_SECONDS = 30;
+const DEFAULT_CLIP_SECONDS = 15;
 
 export default function CreateStoryModal({ open, onOpenChange }: Props) {
   const { user } = useAuth();
   const { currentSong, duration } = usePlayer();
   const [comment, setComment] = useState('');
   const [startTime, setStartTime] = useState(0);
+  const [clipLength, setClipLength] = useState(DEFAULT_CLIP_SECONDS);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isPreviewPlaying, setIsPreviewPlaying] = useState(false);
   const [previewProgress, setPreviewProgress] = useState(0);
@@ -29,8 +32,6 @@ export default function CreateStoryModal({ open, onOpenChange }: Props) {
   const rangeRef = useRef<HTMLDivElement>(null);
   const rafRef = useRef<number>(0);
 
-  // Longueur fixe de l'extrait — on ne fait que déplacer la fenêtre, pas la redimensionner
-  const clipLength = Math.max(1, Math.min(CLIP_SECONDS, duration || CLIP_SECONDS));
   const endTime = Math.min(startTime + clipLength, duration);
 
   // Refs pour éviter les closures périmées dans les handlers de drag
@@ -45,6 +46,7 @@ export default function CreateStoryModal({ open, onOpenChange }: Props) {
   useEffect(() => {
     if (open) {
       setStartTime(0);
+      setClipLength(Math.max(MIN_CLIP_SECONDS, Math.min(DEFAULT_CLIP_SECONDS, duration || DEFAULT_CLIP_SECONDS)));
       setComment('');
       setPreviewProgress(0);
       setIsPreviewPlaying(false);
@@ -87,6 +89,74 @@ export default function CreateStoryModal({ open, onOpenChange }: Props) {
       const deltaTime = (deltaX / rect.width) * duration;
       const maxStart = Math.max(0, duration - clipLengthRef.current);
       setStartTime(Math.max(0, Math.min(timeAtPointerStart + deltaTime, maxStart)));
+    };
+    const onUp = () => {
+      setDragging(false);
+      document.removeEventListener('mousemove', onMove);
+      document.removeEventListener('mouseup', onUp);
+      document.removeEventListener('touchmove', onMove);
+      document.removeEventListener('touchend', onUp);
+    };
+    document.addEventListener('mousemove', onMove);
+    document.addEventListener('mouseup', onUp);
+    document.addEventListener('touchmove', onMove, { passive: false });
+    document.addEventListener('touchend', onUp);
+  };
+
+  // Poignée gauche : déplace le début de l'extrait, l'autre bord reste fixe — la durée
+  // (clipLength) est donc recalculée en direct, entre MIN_CLIP_SECONDS et MAX_CLIP_SECONDS.
+  const handleLeftHandleDrag = (e: React.MouseEvent | React.TouchEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const rect = rangeRef.current?.getBoundingClientRect();
+    if (!rect || duration <= 0) return;
+
+    const pointerStartX = getClientX(e.nativeEvent as MouseEvent | TouchEvent);
+    const fixedEnd = endTimeRef.current;
+    const timeAtPointerStart = startTimeRef.current;
+    setDragging(true);
+
+    const onMove = (ev: MouseEvent | TouchEvent) => {
+      const deltaX = getClientX(ev) - pointerStartX;
+      const deltaTime = (deltaX / rect.width) * duration;
+      const rawStart = timeAtPointerStart + deltaTime;
+      const clampedStart = Math.max(0, Math.min(rawStart, fixedEnd - MIN_CLIP_SECONDS));
+      const newLength = Math.max(MIN_CLIP_SECONDS, Math.min(MAX_CLIP_SECONDS, fixedEnd - clampedStart));
+      setStartTime(fixedEnd - newLength);
+      setClipLength(newLength);
+    };
+    const onUp = () => {
+      setDragging(false);
+      document.removeEventListener('mousemove', onMove);
+      document.removeEventListener('mouseup', onUp);
+      document.removeEventListener('touchmove', onMove);
+      document.removeEventListener('touchend', onUp);
+    };
+    document.addEventListener('mousemove', onMove);
+    document.addEventListener('mouseup', onUp);
+    document.addEventListener('touchmove', onMove, { passive: false });
+    document.addEventListener('touchend', onUp);
+  };
+
+  // Poignée droite : déplace la fin de l'extrait, le début reste fixe.
+  const handleRightHandleDrag = (e: React.MouseEvent | React.TouchEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const rect = rangeRef.current?.getBoundingClientRect();
+    if (!rect || duration <= 0) return;
+
+    const pointerStartX = getClientX(e.nativeEvent as MouseEvent | TouchEvent);
+    const fixedStart = startTimeRef.current;
+    const timeAtPointerStart = endTimeRef.current;
+    setDragging(true);
+
+    const onMove = (ev: MouseEvent | TouchEvent) => {
+      const deltaX = getClientX(ev) - pointerStartX;
+      const deltaTime = (deltaX / rect.width) * duration;
+      const rawEnd = timeAtPointerStart + deltaTime;
+      const clampedEnd = Math.min(duration, Math.max(rawEnd, fixedStart + MIN_CLIP_SECONDS));
+      const newLength = Math.max(MIN_CLIP_SECONDS, Math.min(MAX_CLIP_SECONDS, clampedEnd - fixedStart));
+      setClipLength(newLength);
     };
     const onUp = () => {
       setDragging(false);
@@ -197,7 +267,7 @@ export default function CreateStoryModal({ open, onOpenChange }: Props) {
               <div className="flex items-center justify-between">
                 <span className="text-xs font-medium text-muted-foreground">Sélectionne l'extrait</span>
                 <span className="text-xs font-medium text-muted-foreground">
-                  {formatTime(startTime)} — {formatTime(endTime)}
+                  {formatTime(startTime)} — {formatTime(endTime)} ({Math.round(clipLength)}s)
                 </span>
               </div>
 
@@ -221,19 +291,41 @@ export default function CreateStoryModal({ open, onOpenChange }: Props) {
                   />
                 )}
 
-                {/* Fenêtre d'extrait — largeur fixe, on la fait glisser sur toute la piste */}
+                {/* Fenêtre d'extrait — glisser au centre déplace l'extrait, les poignées aux
+                    bords redimensionnent (entre MIN_CLIP_SECONDS et MAX_CLIP_SECONDS) */}
                 <div
                   className={cn(
-                    'absolute top-0 bottom-0 z-10 flex cursor-grab items-center justify-center rounded-lg border-2 border-primary bg-primary/15 shadow-lg active:cursor-grabbing',
+                    'absolute top-0 bottom-0 z-10 rounded-lg border-2 border-primary bg-primary/15 shadow-lg',
                     dragging && 'ring-2 ring-primary/40'
                   )}
                   style={{ left: `${startPercent}%`, width: `${endPercent - startPercent}%` }}
-                  onMouseDown={handleWindowDrag}
-                  onTouchStart={handleWindowDrag}
                 >
-                  <div className="flex items-center gap-1 rounded-full bg-primary/90 px-1.5 py-2.5">
-                    <span className="h-3 w-0.5 rounded-full bg-primary-foreground/90" />
-                    <span className="h-3 w-0.5 rounded-full bg-primary-foreground/90" />
+                  <div
+                    className="absolute inset-y-0 left-0 right-0 flex cursor-grab items-center justify-center active:cursor-grabbing"
+                    onMouseDown={handleWindowDrag}
+                    onTouchStart={handleWindowDrag}
+                  >
+                    <div className="flex items-center gap-1 rounded-full bg-primary/90 px-1.5 py-2.5 pointer-events-none">
+                      <span className="h-3 w-0.5 rounded-full bg-primary-foreground/90" />
+                      <span className="h-3 w-0.5 rounded-full bg-primary-foreground/90" />
+                    </div>
+                  </div>
+
+                  {/* Poignée de redimensionnement gauche */}
+                  <div
+                    className="absolute inset-y-0 -left-2 z-20 flex w-6 cursor-ew-resize items-center justify-center touch-none"
+                    onMouseDown={handleLeftHandleDrag}
+                    onTouchStart={handleLeftHandleDrag}
+                  >
+                    <div className="h-8 w-1.5 rounded-full bg-primary shadow" />
+                  </div>
+                  {/* Poignée de redimensionnement droite */}
+                  <div
+                    className="absolute inset-y-0 -right-2 z-20 flex w-6 cursor-ew-resize items-center justify-center touch-none"
+                    onMouseDown={handleRightHandleDrag}
+                    onTouchStart={handleRightHandleDrag}
+                  >
+                    <div className="h-8 w-1.5 rounded-full bg-primary shadow" />
                   </div>
                 </div>
               </div>

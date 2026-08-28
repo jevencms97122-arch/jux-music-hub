@@ -841,7 +841,7 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => { setMediaSessionMetadata(currentSong); }, [currentSong]);
   useEffect(() => { setMediaSessionPlaybackState(currentSong ? (isPlaying ? 'playing' : 'paused') : 'none'); }, [isPlaying, currentSong]);
 
-  // ── Auto-download musique (Windows uniquement) ─────────────────────────────
+  // ── Auto-download musique (toute plateforme native Tauri) ──────────────────
   useEffect(() => {
     if (!currentSong || offline) return;
     // Déclencher le téléchargement automatique

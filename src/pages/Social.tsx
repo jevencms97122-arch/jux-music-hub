@@ -11,13 +11,14 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sh
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { avatarUrl, songCoverUrl } from '@/lib/storage';
 import { toast } from 'sonner';
-import { Headphones, Users, Search, Clock, UserPlus, UserCheck, Check, X, ChevronRight, Compass, Heart, Music2, Activity, Radio, Copy, LogOut, Send, MessageCircle, User as UserIcon } from 'lucide-react';
+import { Headphones, Users, Search, UserPlus, Check, X, ChevronRight, Trophy, Heart, Music2, Activity, Radio, Copy, LogOut, Send, MessageCircle, User as UserIcon } from 'lucide-react';
 import { useUnreadMessages } from '@/hooks/useChat';
 import { cn } from '@/lib/utils';
 import type { Profile, Follow, Song } from '@/types/music';
 import { useSeo } from '@/lib/useSeo';
 import { recordToSong } from '@/lib/pbUtils';
 import { usePlayer, type ListenSessionRow } from '@/contexts/PlayerContext';
+import FriendsWeeklyLeaderboard from '@/components/FriendsWeeklyLeaderboard';
 
 interface FriendPresence {
   user: Profile;
@@ -39,7 +40,7 @@ function recordToProfile(r: any): Profile {
   } as Profile;
 }
 
-type Tab = 'friends' | 'discover' | 'activity';
+type Tab = 'friends' | 'activity' | 'score';
 
 interface ActivityItem {
   id: string;
@@ -358,68 +359,6 @@ export default function Social() {
     return 0;
   });
 
-  const [discoverTerm, setDiscoverTerm] = useState('');
-  const [discoverResults, setDiscoverResults] = useState<Profile[]>([]);
-  const [discoverSearched, setDiscoverSearched] = useState(false);
-  const [followStatuses, setFollowStatuses] = useState<Record<string, 'none' | 'pending' | 'accepted'>>({});
-
-  const searchDiscover = useCallback(async (term: string) => {
-    if (!term.trim() || !user) return;
-    try {
-      const res = await pb.collection('profiles').getList(1, 30, {
-        filter: `pseudo ~ "${term.trim()}" && user_id != "${user.id}"`,
-        requestKey: null,
-      });
-      const profiles = res.items.map(recordToProfile);
-      setDiscoverResults(profiles);
-
-      // Statuts de suivi en une seule requête groupée
-      const statuses: Record<string, 'none' | 'pending' | 'accepted'> = {};
-      for (const p of profiles) statuses[p.user_id] = 'none';
-      if (profiles.length > 0) {
-        try {
-          const idsFilter = profiles.map((p) => `following_id = "${p.user_id}"`).join(' || ');
-          const fRes = await pb.collection('follows').getList(1, 50, {
-            filter: `follower_id = "${user.id}" && (${idsFilter})`,
-            requestKey: null,
-          });
-          for (const f of fRes.items) statuses[f.following_id as string] = f.status as 'pending' | 'accepted';
-        } catch {}
-      }
-      setFollowStatuses(statuses);
-      setDiscoverSearched(true);
-    } catch {}
-  }, [user]);
-
-  // Recherche avec debounce
-  useEffect(() => {
-    if (!discoverTerm.trim()) { setDiscoverResults([]); setDiscoverSearched(false); return; }
-    const timer = setTimeout(() => { searchDiscover(discoverTerm); }, 400);
-    return () => clearTimeout(timer);
-  }, [discoverTerm, searchDiscover]);
-
-  const followUser = async (targetUserId: string) => {
-    if (!user) return;
-    try {
-      await pb.collection('follows').create({ follower_id: user.id, following_id: targetUserId, status: 'pending' });
-      setFollowStatuses((s) => ({ ...s, [targetUserId]: 'pending' }));
-      toast.success('Demande envoyée');
-    } catch (e: any) { toast.error(e.message); }
-  };
-
-  const unfollowUser = async (targetUserId: string) => {
-    if (!user) return;
-    try {
-      const res = await pb.collection('follows').getList(1, 1, {
-        filter: `follower_id = "${user.id}" && following_id = "${targetUserId}"`,
-        requestKey: null,
-      });
-      if (res.items[0]) await pb.collection('follows').delete(res.items[0].id);
-      setFollowStatuses((s) => ({ ...s, [targetUserId]: 'none' }));
-      toast.success('Abonnement retiré');
-    } catch {}
-  };
-
   const isPresenceFresh = (p: FriendPresence) =>
     p.last_seen_at && Date.now() - new Date(p.last_seen_at).getTime() < 45_000;
 
@@ -433,7 +372,7 @@ export default function Social() {
   const tabs: { id: Tab; label: string; icon: typeof Users; badge: number }[] = [
     { id: 'friends', label: 'Amis', icon: Users, badge: requests.length },
     { id: 'activity', label: 'Activité', icon: Activity, badge: 0 },
-    { id: 'discover', label: 'Découvrir', icon: Compass, badge: 0 },
+    { id: 'score', label: 'Score', icon: Trophy, badge: 0 },
   ];
 
   return (
@@ -620,8 +559,8 @@ export default function Social() {
                 </div>
                 <p className="text-sm font-bold">Tu ne suis personne</p>
                 <p className="text-xs text-muted-foreground">Trouve des amis pour voir ce qu'ils écoutent en direct.</p>
-                <Button size="sm" className="mt-3 rounded-xl bg-gradient-primary" onClick={() => setTab('discover')}>
-                  <Compass className="mr-1.5 h-4 w-4" />Découvrir des profils
+                <Button size="sm" className="mt-3 rounded-xl bg-gradient-primary" onClick={() => navigate('/search')}>
+                  <Search className="mr-1.5 h-4 w-4" />Découvrir des profils
                 </Button>
               </div>
             ) : (
@@ -744,75 +683,8 @@ export default function Social() {
         </div>
       ) : (
         <div className="space-y-4">
-          {/* ── Recherche ── */}
-          <div className="relative">
-            <Search className="absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-            <Input
-              placeholder="Chercher un utilisateur..."
-              value={discoverTerm}
-              onChange={(e) => setDiscoverTerm(e.target.value)}
-              className="h-12 rounded-2xl border-white/[0.06] bg-card/60 pl-11 pr-10 text-sm backdrop-blur-md"
-            />
-            {discoverTerm && (
-              <button
-                onClick={() => setDiscoverTerm('')}
-                aria-label="Effacer"
-                className="absolute right-3 top-1/2 flex h-6 w-6 -translate-y-1/2 items-center justify-center rounded-full bg-secondary text-muted-foreground transition-[color,transform] duration-150 ease-out hover:text-foreground active:scale-90"
-              >
-                <X className="h-3.5 w-3.5" />
-              </button>
-            )}
-          </div>
-
-          {!discoverTerm.trim() ? (
-            <div className="flex flex-col items-center gap-2 rounded-2xl border border-dashed border-border/60 bg-card/30 px-6 py-12 text-center">
-              <div className="mb-1 flex h-12 w-12 items-center justify-center rounded-2xl bg-primary/10">
-                <Compass className="h-6 w-6 text-primary" />
-              </div>
-              <p className="text-sm font-bold">Découvre de nouveaux profils</p>
-              <p className="text-xs text-muted-foreground">Cherche un pseudo pour trouver des utilisateurs à suivre.</p>
-            </div>
-          ) : discoverSearched && discoverResults.length === 0 ? (
-            <div className="flex flex-col items-center gap-2 rounded-2xl border border-dashed border-border/60 bg-card/30 px-6 py-12 text-center">
-              <div className="mb-1 flex h-12 w-12 items-center justify-center rounded-2xl bg-primary/10">
-                <Search className="h-6 w-6 text-primary" />
-              </div>
-              <p className="text-sm font-bold">Aucun résultat</p>
-              <p className="text-xs text-muted-foreground">Personne trouvé pour « {discoverTerm.trim()} ».</p>
-            </div>
-          ) : (
-            <div className="space-y-2">
-              {discoverResults.map((p) => {
-                const status = followStatuses[p.user_id] ?? 'none';
-                return (
-                  <div key={p.user_id} className="flex items-center gap-3 rounded-2xl border border-white/[0.06] bg-card/50 p-3 backdrop-blur-md">
-                    <Avatar className="h-11 w-11 shrink-0 cursor-pointer transition-transform duration-150 active:scale-90" onClick={() => navigate(`/u/${p.user_id}`)}>
-                      <AvatarImage src={p.avatar_url || ''} />
-                      <AvatarFallback>{p.pseudo?.[0] || '?'}</AvatarFallback>
-                    </Avatar>
-                    <button className="min-w-0 flex-1 text-left" onClick={() => navigate(`/u/${p.user_id}`)}>
-                      <p className="truncate text-sm font-semibold">{p.pseudo || 'Anonyme'}</p>
-                      {p.bio && <p className="truncate text-xs text-muted-foreground">{p.bio}</p>}
-                    </button>
-                    {status === 'none' && (
-                      <Button size="sm" className="rounded-xl bg-gradient-primary font-semibold shadow-elegant-sm" onClick={() => followUser(p.user_id)}>
-                        <UserPlus className="mr-1 h-3.5 w-3.5" />Suivre
-                      </Button>
-                    )}
-                    {status === 'pending' && (
-                      <Button size="sm" variant="outline" className="rounded-xl font-semibold" onClick={() => unfollowUser(p.user_id)}>
-                        <Clock className="mr-1 h-3.5 w-3.5" />En attente
-                      </Button>
-                    )}
-                    {status === 'accepted' && (
-                      <Button size="sm" variant="secondary" className="rounded-xl font-semibold" onClick={() => unfollowUser(p.user_id)}>
-                        <UserCheck className="mr-1 h-3.5 w-3.5" />Suivi
-                      </Button>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
+          {user && (
+            <FriendsWeeklyLeaderboard currentUserId={user.id} currentUserProfile={profile} friends={following} />
           )}
         </div>
       )}

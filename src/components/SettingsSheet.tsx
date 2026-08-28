@@ -10,8 +10,8 @@ import { usePerformanceMode } from '@/hooks/usePerformanceMode';
 import { useVRMode } from '@/hooks/useVRMode';
 import ThemeSelectorSheet from '@/components/ThemeSelectorSheet';
 import CrossfadeSelectorSheet from '@/components/CrossfadeSelectorSheet';
-import NotificationSfxSheet from '@/components/NotificationSfxSheet';
-import { isSoundOnlyMode, setSoundOnlyMode } from '@/lib/notificationSfx';
+import SoundEffectsSettingsSheet from '@/components/SoundEffectsSettingsSheet';
+import NotificationPreferencesSheet from '@/components/NotificationPreferencesSheet';
 import { isCloseToTrayEnabled, setCloseToTrayEnabled } from '@/lib/closeToTray';
 import {
   isGpuAccelerationEnabled, setGpuAccelerationEnabled,
@@ -22,7 +22,7 @@ import { isDevOptionsEnabled, setDevOptionsEnabled } from '@/lib/devOptions';
 import { relaunch } from '@tauri-apps/plugin-process';
 import { cn } from '@/lib/utils';
 import { usePlatform } from '@/hooks/usePlatform';
-import { isDesktopPlatform, isWindowsPlatform } from '@/lib/platform';
+import { isDesktopPlatform, isWindowsPlatform, canDownloadNatively } from '@/lib/platform';
 import GamepadMappingSheet from '@/components/GamepadMappingSheet';
 import { isGamepadEnabled, setGamepadEnabled } from '@/lib/gamepadMapping';
 import EqualizerSheet from '@/components/EqualizerSheet';
@@ -35,6 +35,7 @@ export default function SettingsSheet({ trigger }: { trigger: React.ReactNode })
   const platform = usePlatform();
   const isDesktop = isDesktopPlatform(platform);
   const isWindows = isWindowsPlatform(platform);
+  const canAutoDownload = canDownloadNatively(platform);
   const { enabled: themesEnabled, setEnabled: setThemesEnabled } = useThemeEnabled();
   const { enabled: performanceMode, setEnabled: setPerformanceMode } = usePerformanceMode();
   const { enabled: vrMode, setEnabled: setVrMode } = useVRMode();
@@ -46,7 +47,6 @@ export default function SettingsSheet({ trigger }: { trigger: React.ReactNode })
     : 'Aucun';
   const [themesChanged, setThemesChanged] = useState(false);
   const [gamepadEnabled, setGamepadEnabledState] = useState(() => isGamepadEnabled());
-  const [soundOnly, setSoundOnlyState] = useState(() => isSoundOnlyMode());
   const [closeToTray, setCloseToTrayState] = useState(() => isCloseToTrayEnabled());
   const [devOptions, setDevOptionsState] = useState(() => isDevOptionsEnabled());
   const [gpuAccel, setGpuAccelState] = useState(() => isGpuAccelerationEnabled());
@@ -87,11 +87,6 @@ export default function SettingsSheet({ trigger }: { trigger: React.ReactNode })
   const handleGamepadToggle = (v: boolean) => {
     setGamepadEnabledState(v);
     setGamepadEnabled(v);
-  };
-
-  const handleSoundOnlyToggle = (v: boolean) => {
-    setSoundOnlyState(v);
-    setSoundOnlyMode(v);
   };
 
   const handleAutoDownloadToggle = (v: boolean) => {
@@ -272,18 +267,18 @@ export default function SettingsSheet({ trigger }: { trigger: React.ReactNode })
             </div>
           </div>
 
-          {/* Son de notification */}
+          {/* Notifications (visibilité par catégorie) */}
           <div className="rounded-2xl border border-white/[0.06] bg-card/60 backdrop-blur-md overflow-hidden">
-            <NotificationSfxSheet
+            <NotificationPreferencesSheet
               trigger={
                 <button className="flex w-full items-center justify-between px-4 py-3.5 transition-transform duration-150 ease-out active:scale-[0.98]">
                   <div className="flex items-center gap-3">
-                    <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-orange-500/15">
-                      <Volume2 className="h-4.5 w-4.5 text-orange-400" />
+                    <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-rose-500/15">
+                      <BellOff className="h-4.5 w-4.5 text-rose-400" />
                     </div>
                     <div className="text-left">
-                      <p className="text-sm font-semibold">Son de notification</p>
-                      <p className="text-xs text-muted-foreground">Nouveau message reçu</p>
+                      <p className="text-sm font-semibold">Notifications</p>
+                      <p className="text-xs text-muted-foreground">Choisis lesquelles tu veux recevoir</p>
                     </div>
                   </div>
                   <ChevronRight className="h-4 w-4 text-muted-foreground" />
@@ -292,26 +287,29 @@ export default function SettingsSheet({ trigger }: { trigger: React.ReactNode })
             />
           </div>
 
-          {/* Son seul sans notification (Windows uniquement) */}
-          {isWindows && (
-            <div className="rounded-2xl border border-white/[0.06] bg-card/60 backdrop-blur-md overflow-hidden">
-              <div className="flex items-center justify-between px-4 py-3.5">
-                <div className="flex items-center gap-3">
-                  <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-amber-500/15">
-                    <BellOff className="h-4.5 w-4.5 text-amber-400" />
+          {/* Effets sonores (notifications + interface) */}
+          <div className="rounded-2xl border border-white/[0.06] bg-card/60 backdrop-blur-md overflow-hidden">
+            <SoundEffectsSettingsSheet
+              isWindows={isWindows}
+              trigger={
+                <button className="flex w-full items-center justify-between px-4 py-3.5 transition-transform duration-150 ease-out active:scale-[0.98]">
+                  <div className="flex items-center gap-3">
+                    <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-orange-500/15">
+                      <Volume2 className="h-4.5 w-4.5 text-orange-400" />
+                    </div>
+                    <div className="text-left">
+                      <p className="text-sm font-semibold">Effets sonores</p>
+                      <p className="text-xs text-muted-foreground">Sons de notification et d'interface</p>
+                    </div>
                   </div>
-                  <div>
-                    <p className="text-sm font-semibold">Son seul, sans notification</p>
-                    <p className="text-xs text-muted-foreground">Joue le son de notif sans afficher le popup Windows</p>
-                  </div>
-                </div>
-                <Switch checked={soundOnly} onCheckedChange={handleSoundOnlyToggle} />
-              </div>
-            </div>
-          )}
+                  <ChevronRight className="h-4 w-4 text-muted-foreground" />
+                </button>
+              }
+            />
+          </div>
 
-          {/* Téléchargement automatique de musique (Windows uniquement) */}
-          {isWindows && (
+          {/* Téléchargement automatique de musique (toute plateforme native) */}
+          {canAutoDownload && (
             <DownloadedSongsSheet
               trigger={
                 <div className="rounded-2xl border border-white/[0.06] bg-card/60 backdrop-blur-md overflow-hidden cursor-pointer">

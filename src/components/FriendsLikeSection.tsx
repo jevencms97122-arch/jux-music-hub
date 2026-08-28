@@ -17,10 +17,13 @@ interface FriendLike {
   likedAt: string;
 }
 
+/** Nombre maximum de titres likés récents affichés par ami. */
+const MAX_PER_FRIEND = 3;
+
 /**
  * Section "Ce que tes amis aiment" (page d'accueil) : les derniers titres likés
- * par les personnes que l'utilisateur suit, un ami par carte (son like le plus
- * récent), affichés en rangée horizontale scrollable.
+ * par les personnes que l'utilisateur suit — jusqu'à MAX_PER_FRIEND titres par
+ * ami (les plus récents), affichés en rangée horizontale scrollable.
  */
 export default function FriendsLikeSection() {
   const { user } = useAuth();
@@ -52,20 +55,22 @@ export default function FriendsLikeSection() {
         });
         if (likesRes.items.length === 0) { if (!cancelled) setLoading(false); return; }
 
-        // 3. Un like (le plus récent) par ami
-        const byFriend = new Map<string, any>();
+        // 3. Jusqu'à MAX_PER_FRIEND likes (les plus récents) par ami
+        const byFriend = new Map<string, any[]>();
         for (const l of likesRes.items as any[]) {
-          if (!byFriend.has(l.user_id)) byFriend.set(l.user_id, l);
+          const list = byFriend.get(l.user_id) ?? [];
+          if (list.length < MAX_PER_FRIEND) { list.push(l); byFriend.set(l.user_id, list); }
         }
-        const picked = [...byFriend.values()].slice(0, 12);
+        const picked = [...byFriend.values()].flat().slice(0, 36);
 
         // 4. Résolution songs + profiles en lot
         const songIds = [...new Set(picked.map((l) => l.song_id as string))];
+        const friendUserIds = [...new Set(picked.map((l) => l.user_id as string))];
         const songFilter = songIds.map((id) => `id = "${id}"`).join(' || ');
-        const profFilter = picked.map((l) => `user_id = "${l.user_id}"`).join(' || ');
+        const profFilter = friendUserIds.map((id) => `user_id = "${id}"`).join(' || ');
         const [songsRes, profsRes] = await Promise.all([
           pb.collection('songs').getList(1, songIds.length, { filter: songFilter, requestKey: null }),
-          pb.collection('profiles').getList(1, picked.length, { filter: profFilter, requestKey: null }),
+          pb.collection('profiles').getList(1, friendUserIds.length, { filter: profFilter, requestKey: null }),
         ]);
         const songMap = new Map(songsRes.items.map((s: any) => [s.id, recordToSong(s)]));
         const profMap = new Map(profsRes.items.map((p: any) => [p.user_id, p]));

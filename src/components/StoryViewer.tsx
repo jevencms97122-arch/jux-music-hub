@@ -15,6 +15,10 @@ export default function StoryViewer({ stories, initialIndex = 0, onClose }: Prop
   const [currentIndex, setCurrentIndex] = useState(initialIndex);
   const [progress, setProgress] = useState(0);
   const [song, setSong] = useState<any | null>(null);
+  // Vrai dès que la story n'a pas de son à charger, ou dès que la lecture a réellement
+  // démarré — la barre de progression ne défile qu'à partir de là (voir plus bas), pour
+  // ne pas décompter dans le vide pendant que le fichier audio charge encore.
+  const [audioReady, setAudioReady] = useState(false);
   const progressRef = useRef(0);
   const intervalRef = useRef<number | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
@@ -26,10 +30,11 @@ export default function StoryViewer({ stories, initialIndex = 0, onClose }: Prop
   // Charge la song à chaque changement de story
   useEffect(() => {
     setSong(null);
+    setAudioReady(!story?.song_id); // pas de son à charger pour cette story : prêt immédiatement
     if (!story?.song_id) return;
     pb.collection('songs').getOne(story.song_id, { requestKey: null })
       .then((rec) => setSong(rec))
-      .catch(() => {});
+      .catch(() => setAudioReady(true)); // échec de chargement : ne pas bloquer la story indéfiniment
   }, [story?.id]);
 
   // Lecture audio de l'extrait
@@ -43,7 +48,7 @@ export default function StoryViewer({ stories, initialIndex = 0, onClose }: Prop
     if (!song) return;
 
     const audioUrl = songAudioUrl(song);
-    if (!audioUrl) return;
+    if (!audioUrl) { setAudioReady(true); return; } // pas de son exploitable, ne pas bloquer la story
 
     const audio = new Audio(audioUrl);
     audio.volume = 0.3;
@@ -51,7 +56,7 @@ export default function StoryViewer({ stories, initialIndex = 0, onClose }: Prop
     const startAt = story?.start_time ?? 0;
     const endAt = story?.end_time ?? 30;
     audio.currentTime = startAt;
-    audio.play().catch(() => {});
+    audio.play().then(() => setAudioReady(true)).catch(() => setAudioReady(true));
 
     const ensureStop = () => {
       if (audioRef.current && audioRef.current.currentTime >= endAt) {
@@ -71,14 +76,16 @@ export default function StoryViewer({ stories, initialIndex = 0, onClose }: Prop
     };
   }, [song]);
 
-  // Progression de la story
+  // Progression de la story — ne démarre qu'une fois le son chargé et lancé (audioReady),
+  // sinon la barre défilait pendant que l'audio chargeait encore, en silence.
   useEffect(() => {
     if (!story) return;
+    progressRef.current = 0;
+    setProgress(0);
+    if (!audioReady) return;
     if (user) {
       pb.collection('story_views').create({ story_id: story.id, viewer_id: user.id }).catch(() => {});
     }
-    progressRef.current = 0;
-    setProgress(0);
     const storyDurationMs = story.image
       ? 7000
       : story.song_id
@@ -95,7 +102,7 @@ export default function StoryViewer({ stories, initialIndex = 0, onClose }: Prop
       }
     }, step);
     return () => { if (intervalRef.current) clearInterval(intervalRef.current); };
-  }, [story?.id, currentIndex, user]);
+  }, [story?.id, currentIndex, user, audioReady]);
 
   const handleClick = (e: React.MouseEvent) => {
     const x = e.clientX / window.innerWidth;

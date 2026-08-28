@@ -1,4 +1,5 @@
 import { toast } from 'sonner';
+import { isNotificationCategoryEnabled } from './notificationSettings';
 
 /**
  * Notifications intelligentes : anti-spam par type (plafond journalier),
@@ -109,6 +110,10 @@ function flushBatch(type: SmartNotifType) {
  * silencieuses → plafond journalier → batching.
  */
 export function sendSmartNotification(type: SmartNotifType, data: SmartNotifData): void {
+  // Réglage utilisateur (catégorie désactivée dans Paramètres > Notifications) —
+  // prioritaire même sur les types "critiques" (sauf new_message, verrouillé actif).
+  if (!isNotificationCategoryEnabled(type)) return;
+
   const config = CONFIGS[type] ?? CONFIGS.generic;
   const critical = CRITICAL_TYPES.includes(type);
 

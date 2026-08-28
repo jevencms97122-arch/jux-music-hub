@@ -1,6 +1,8 @@
 /**
- * Gestionnaire de téléchargement automatique de musique
- * (Windows seulement pour l'instant)
+ * Gestionnaire de téléchargement automatique de musique — toute plateforme
+ * native Tauri (Windows, Android...). Repose sur les commandes Rust
+ * cross-platform `download_song` / `list_downloaded_songs` (voir
+ * src-tauri/src/lib.rs), qui n'ont aucune dépendance spécifique à Windows.
  *
  * Fonction :
  * 1. Tracker les songs téléchargées automatiquement depuis la dernière maj
@@ -8,7 +10,7 @@
  * 3. Notifier l'app quand un téléchargement est en cours
  */
 
-import { isWindowsPlatform, type NativePlatform, detectPlatform, requestNativeDownload, type DownloadPayload, onDownloadProgress, type DownloadProgressEvent } from './platform';
+import { canDownloadNatively, type NativePlatform, detectPlatform, requestNativeDownload, type DownloadPayload, onDownloadProgress, type DownloadProgressEvent } from './platform';
 import { getNativePreferences, setNativePreference, isNativeAppSettingsAvailable } from './nativeSettings';
 import { saveTauriDownloadMetadata } from './offlineManager';
 import type { Song } from '@/types/music';
@@ -60,8 +62,7 @@ function emitDownloadProgress(notification: DownloadNotification) {
 }
 
 export async function isAutoDownloadEnabled(platform: NativePlatform | null): Promise<boolean> {
-  // Fonctionnalité Windows seulement pour l'instant
-  if (!isWindowsPlatform(platform)) return false;
+  if (!canDownloadNatively(platform)) return false;
 
   if (isNativeAppSettingsAvailable()) {
     const prefs = await getNativePreferences();
@@ -130,8 +131,8 @@ export async function triggerAutoDownload(
   songAudioUrl: (song: Song) => string,
   songCoverUrl: (song: Song) => string
 ): Promise<void> {
-  // Ne télécharger que si on est en ligne et que c'est Windows
-  if (!isOnline || !isWindowsPlatform(platform)) return;
+  // Ne télécharger que si on est en ligne et sur une plateforme native (pas web)
+  if (!isOnline || !canDownloadNatively(platform)) return;
 
   // Sons externes (lecture YouTube) ou déjà locaux : rien de distant à télécharger
   if (song.id.startsWith('external:') || song.id.startsWith('local_')) return;

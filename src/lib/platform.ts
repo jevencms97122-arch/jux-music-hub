@@ -190,3 +190,13 @@ export function isDesktopPlatform(p: NativePlatform | null): boolean {
 export function isWindowsPlatform(p: NativePlatform | null): boolean {
   return p === 'windows';
 }
+
+/**
+ * true sur toute plateforme native Tauri (desktop OU mobile) — c'est-à-dire
+ * partout où `invoke()` fonctionne, donc où les commandes Rust de
+ * téléchargement (`download_song`, `list_downloaded_songs`...) sont
+ * disponibles. `false` uniquement sur le web (pas de backend Tauri).
+ */
+export function canDownloadNatively(p: NativePlatform | null): boolean {
+  return p !== null;
+}

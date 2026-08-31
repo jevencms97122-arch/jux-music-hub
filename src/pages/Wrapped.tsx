@@ -262,7 +262,7 @@ async function buildShareCanvas(
     ctx.textAlign = 'center';
     ctx.font = '800 44px system-ui, sans-serif';
     ctx.fillStyle = 'rgba(255,255,255,0.95)';
-    ctx.fillText('JUX', cx, 96);
+    ctx.fillText('NEXORA-MUSIC', cx, 96);
     ctx.font = '500 26px system-ui, sans-serif';
     ctx.fillStyle = 'rgba(255,255,255,0.55)';
     ctx.fillText(monthText, cx, 140);
@@ -356,7 +356,7 @@ async function buildShareCanvas(
     ctx.textAlign = 'left';
     ctx.font = '800 42px system-ui, sans-serif';
     ctx.fillStyle = 'rgba(255,255,255,0.95)';
-    ctx.fillText('JUX', pad, 90);
+    ctx.fillText('NEXORA-MUSIC', pad, 90);
     ctx.font = '500 24px system-ui, sans-serif';
     ctx.fillStyle = 'rgba(255,255,255,0.55)';
     ctx.fillText(monthText, pad, 130);
@@ -975,8 +975,8 @@ function ShareSlide({
       if (navigator.canShare && navigator.canShare({ files: [file] })) {
         await navigator.share({
           files: [file],
-          title: 'Mon Wrapped Jux',
-          text: `Mon résumé musical ${monthLabel} sur Jux 🎧`,
+          title: 'Mon Wrapped Nexora-Music',
+          text: `Mon résumé musical ${monthLabel} sur Nexora-Music 🎧`,
         });
         setDownloading(false);
         return;
@@ -1018,7 +1018,7 @@ function ShareSlide({
           className="w-full flex items-center justify-center gap-2 rounded-xl bg-white text-black font-semibold py-3 transition-transform duration-100 active:scale-[0.97] disabled:opacity-60 disabled:active:scale-100"
         >
           <Share2 className="h-4 w-4" />
-          {sharingStory ? 'Publication…' : 'Partager en story Jux'}
+          {sharingStory ? 'Publication…' : 'Partager en story Nexora-Music'}
         </button>
 
         <div

@@ -45,13 +45,13 @@ const RANK_DEFS: { name: string; emoji: string; color: string; levels: number; u
   { name: 'Maestro', emoji: '🎼', color: '#fb923c', levels: 4 },
   { name: 'Légende', emoji: '🌟', color: '#facc15', levels: 4 },
   { name: 'Icône', emoji: '💎', color: '#f472b6', levels: 4 },
-  { name: 'Panthéon Jux', emoji: '👑', color: '#fbbf24', levels: 1, ultimate: true },
+  { name: 'Divin de Nexora', emoji: '👑', color: '#fbbf24', levels: 1, ultimate: true },
 ];
 
 export const TOTAL_QUESTS = 26;
 
 /**
- * Les 30 paliers : Amateur I → Panthéon Jux.
+ * Les 30 paliers : Amateur I → Divin de Nexora.
  * Les seuils sont répartis proportionnellement sur les quêtes : le palier 1 est offert,
  * le palier 30 (ultime) requiert toutes les quêtes.
  */

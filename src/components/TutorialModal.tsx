@@ -90,7 +90,7 @@ const SLIDES: Slide[] = [
     description: 'Plus tu écoutes, plus ton profil prend vie.',
     items: [
       { icon: Flame, label: 'Série d\'écoute', text: 'Écoute chaque jour pour faire grimper ta flamme.' },
-      { icon: Award, label: 'Rang', text: 'Accomplis des quêtes pour monter de palier, d\'Amateur I au Panthéon Jux.' },
+      { icon: Award, label: 'Rang', text: 'Accomplis des quêtes pour monter de palier, d\'Amateur I au Divin de Nexora.' },
       { icon: Sparkles, label: 'Wrapped', text: 'Tes stats d\'écoute résumées, accessibles depuis ton profil.' },
     ],
   },

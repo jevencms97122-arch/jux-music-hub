@@ -219,6 +219,40 @@ fn get_downloads_dir(app: &tauri::AppHandle) -> Result<std::path::PathBuf, Strin
     Ok(cache_dir.join("downloads"))
 }
 
+/// Devine une extension audio plausible à partir de l'URL du fichier source.
+/// Important : ne PAS renvoyer une extension arbitraire (ex: toujours ".m4a")
+/// — le lecteur média d'Android (contrairement à WebView2 sur Windows, plus
+/// tolérant) se fie à l'extension pour déterminer le conteneur/codec, et une
+/// extension incorrecte (ex: un vrai fichier .mp3 sauvegardé en .m4a) fait
+/// planter le décodage en cours de lecture au lieu de la refuser d'emblée.
+fn guess_audio_extension(audio_url: &str) -> &'static str {
+    let lower = audio_url.to_lowercase();
+    if lower.contains(".m4a") || lower.contains(".mp4") || lower.contains(".aac") {
+        "m4a"
+    } else if lower.contains(".wav") {
+        "wav"
+    } else if lower.contains(".opus") {
+        "opus"
+    } else if lower.contains(".ogg") {
+        "ogg"
+    } else {
+        // Format le plus courant accepté à l'upload (voir Upload.tsx) — valeur
+        // par défaut si l'URL ne porte pas d'extension explicite reconnue.
+        "mp3"
+    }
+}
+
+/// Cherche un fichier audio téléchargé pour ce song_id, quelle que soit son extension
+fn find_audio_file(downloads_dir: &std::path::Path, song_id: &str) -> Option<std::path::PathBuf> {
+    for ext in ["mp3", "m4a", "wav", "ogg", "opus"] {
+        let candidate = downloads_dir.join(format!("{song_id}.{ext}"));
+        if candidate.exists() {
+            return Some(candidate);
+        }
+    }
+    None
+}
+
 /// Devine une extension d'image plausible à partir de l'URL de la cover
 fn guess_cover_extension(cover_url: &str) -> &'static str {
     let lower = cover_url.to_lowercase();
@@ -259,8 +293,16 @@ async fn download_song(
     std::fs::create_dir_all(&downloads_dir)
         .map_err(|e| format!("Failed to create downloads dir: {e}"))?;
 
-    // Chemin du fichier audio
-    let audio_file = downloads_dir.join(format!("{}.m4a", song_id));
+    // Retire un éventuel fichier audio précédent pour ce morceau (peut avoir
+    // été sauvegardé avec une autre extension par une ancienne version de l'app).
+    if let Some(old_audio) = find_audio_file(&downloads_dir, &song_id) {
+        let _ = std::fs::remove_file(old_audio);
+    }
+
+    // Chemin du fichier audio — extension devinée depuis l'URL source, PAS
+    // codée en dur (voir le commentaire de guess_audio_extension).
+    let ext = guess_audio_extension(&audio_url);
+    let audio_file = downloads_dir.join(format!("{song_id}.{ext}"));
 
     // Télécharger le fichier audio
     let client = reqwest::Client::new();
@@ -308,13 +350,29 @@ async fn download_song(
 #[tauri::command]
 fn get_downloaded_audio_path(app: tauri::AppHandle, song_id: String) -> Result<String, String> {
     let downloads_dir = get_downloads_dir(&app)?;
-    let audio_file = downloads_dir.join(format!("{}.m4a", song_id));
-
-    if audio_file.exists() {
-        Ok(audio_file.to_string_lossy().to_string())
-    } else {
-        Err("Audio file not found".to_string())
+    match find_audio_file(&downloads_dir, &song_id) {
+        Some(path) => Ok(path.to_string_lossy().to_string()),
+        None => Err("Audio file not found".to_string()),
     }
+}
+
+/// Lit et renvoie les octets bruts d'un fichier audio téléchargé.
+///
+/// Utilisé uniquement sur Android en remplacement de `convertFileSrc` +
+/// protocole `asset://` — ce protocole coupe la lecture en cours de route sur
+/// Android (durée mal détectée / pas de support fiable des requêtes de plage
+/// pour ce type de ressource dans la WebView système), alors qu'il fonctionne
+/// bien sur Windows (WebView2). Ici, le fichier est lu intégralement et
+/// renvoyé tel quel : côté JS, il est reconstruit en Blob (voir
+/// `getDownloadedAudioBlobUrl` dans offlineCacheSync.ts), ce qui garantit une
+/// lecture complète et fiable quelle que soit la taille du fichier.
+#[tauri::command]
+fn read_downloaded_audio(app: tauri::AppHandle, song_id: String) -> Result<tauri::ipc::Response, String> {
+    let downloads_dir = get_downloads_dir(&app)?;
+    let path = find_audio_file(&downloads_dir, &song_id)
+        .ok_or_else(|| "Audio file not found".to_string())?;
+    let bytes = std::fs::read(&path).map_err(|e| format!("Failed to read audio file: {e}"))?;
+    Ok(tauri::ipc::Response::new(bytes))
 }
 
 /// Retourne le chemin de la cover téléchargée pour une musique, si elle existe
@@ -351,9 +409,12 @@ fn list_downloaded_songs(app: tauri::AppHandle) -> Result<Vec<CachedAudioFile>, 
         let entry = entry.map_err(|e| format!("Failed to read entry: {e}"))?;
         let path = entry.path();
 
-        // Ne compter que les fichiers audio (.m4a) — les covers (.cover.*) sont
-        // stockées à côté et ne doivent pas apparaître comme des sons distincts.
-        if path.is_file() && path.extension().and_then(|e| e.to_str()) == Some("m4a") {
+        // Ne compter que les fichiers audio — les covers (.cover.*) sont stockées
+        // à côté (extensions image, jamais audio) et ne doivent pas apparaître
+        // comme des sons distincts.
+        let ext = path.extension().and_then(|e| e.to_str());
+        let is_audio_ext = matches!(ext, Some("mp3") | Some("m4a") | Some("wav") | Some("ogg") | Some("opus"));
+        if path.is_file() && is_audio_ext {
             if let Some(filename) = path.file_stem() {
                 if let Some(song_id) = filename.to_str() {
                     let size_bytes = entry.metadata().map(|m| m.len()).unwrap_or(0);
@@ -374,9 +435,8 @@ fn list_downloaded_songs(app: tauri::AppHandle) -> Result<Vec<CachedAudioFile>, 
 #[tauri::command]
 fn delete_downloaded_song(app: tauri::AppHandle, song_id: String) -> Result<(), String> {
     let downloads_dir = get_downloads_dir(&app)?;
-    let audio_file = downloads_dir.join(format!("{}.m4a", song_id));
 
-    if audio_file.exists() {
+    if let Some(audio_file) = find_audio_file(&downloads_dir, &song_id) {
         std::fs::remove_file(&audio_file)
             .map_err(|e| format!("Failed to delete audio file: {e}"))?;
     }
@@ -632,6 +692,7 @@ pub fn run() {
             smtc_clear,
             download_song,
             get_downloaded_audio_path,
+            read_downloaded_audio,
             get_downloaded_cover_path,
             list_downloaded_songs,
             delete_downloaded_song

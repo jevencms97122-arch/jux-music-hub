@@ -4,7 +4,7 @@
  * cache Tauri avec les métadonnées (titre/auteur) stockées à côté.
  */
 
-import { listDownloadedSongs, deleteDownloadedSong } from './offlineCacheSync';
+import { listDownloadedSongs, deleteDownloadedSong, revokeDownloadedAudioBlobUrl } from './offlineCacheSync';
 import { getTauriDownloadMetadataMap, removeTauriDownloadMetadata } from './offlineManager';
 import { unmarkAutoDownloaded } from './autoDownloadManager';
 
@@ -45,4 +45,5 @@ export async function deleteDownloadedSongCompletely(songId: string): Promise<vo
   await deleteDownloadedSong(songId);
   await removeTauriDownloadMetadata(songId);
   unmarkAutoDownloaded(songId);
+  revokeDownloadedAudioBlobUrl(songId);
 }

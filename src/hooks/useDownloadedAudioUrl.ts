@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
-import { getDownloadedAudioPath } from '@/lib/offlineCacheSync';
+import { getDownloadedAudioPath, getDownloadedAudioBlobUrl } from '@/lib/offlineCacheSync';
 import { songAudioUrl } from '@/lib/storage';
+import { detectPlatform } from '@/lib/platform';
 import type { Song } from '@/types/music';
 
 /**
@@ -17,8 +18,13 @@ export function useDownloadedAudioUrl(song: Song | null): string {
     }
 
     (async () => {
-      // Vérifier si le fichier est téléchargé localement
-      const cachedPath = await getDownloadedAudioPath(song.id);
+      // Vérifier si le fichier est téléchargé localement — sur Android, le
+      // protocole asset:// (convertFileSrc) coupe la lecture en cours de
+      // route, on passe donc par un blob: reconstruit à partir des octets
+      // bruts (voir storage.ts::songAudioUrlWithCache pour le détail).
+      const cachedPath = detectPlatform() === 'android-app'
+        ? await getDownloadedAudioBlobUrl(song.id)
+        : await getDownloadedAudioPath(song.id);
       if (cachedPath) {
         setAudioUrl(cachedPath);
       } else {

@@ -1,7 +1,8 @@
 import { pb, getPbUrl } from './pocketbase';
 import { isMediaServerConfigured, uploadMedia, type MediaKind } from './mediaServer';
 import { isTauri } from '@tauri-apps/api/core';
-import { getDownloadedAudioPath } from './offlineCacheSync';
+import { getDownloadedAudioPath, getDownloadedAudioBlobUrl } from './offlineCacheSync';
+import { detectPlatform } from './platform';
 
 /** URL publique d'un fichier depuis PocketBase */
 export function publicUrl(collectionName: string, recordId: string, filename: string): string {
@@ -56,7 +57,13 @@ export async function songAudioUrlWithCache(song: { audio?: string; audio_url?: 
   // Vérifier d'abord le cache local si Tauri est disponible
   if (isTauri() && song.id) {
     try {
-      const cachedPath = await getDownloadedAudioPath(song.id);
+      // Android : convertFileSrc/asset:// coupe la lecture en cours de route
+      // sur la WebView système — on reconstruit un blob: à partir des octets
+      // bruts à la place (voir getDownloadedAudioBlobUrl). Windows (WebView2)
+      // n'a pas ce problème et garde convertFileSrc, plus léger.
+      const cachedPath = detectPlatform() === 'android-app'
+        ? await getDownloadedAudioBlobUrl(song.id)
+        : await getDownloadedAudioPath(song.id);
       if (cachedPath) {
         return cachedPath;
       }

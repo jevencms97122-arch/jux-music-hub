@@ -52,7 +52,6 @@ import MiniPlayer from '@/components/MiniPlayer';
 import PlayerPage from '@/components/PlayerPage';
 import BottomNav from '@/components/BottomNav';
 import UpdateChecker from '@/components/UpdateChecker';
-import WebAppUpdateNotifier from '@/components/WebAppUpdateNotifier';
 import TauriUpdateManager from '@/components/TauriUpdateManager';
 import AndroidUpdateManager from '@/components/AndroidUpdateManager';
 import UpdateAppliedNotice from '@/components/UpdateAppliedNotice';
@@ -307,7 +306,6 @@ function AppContent() {
         <div className="min-h-screen">
           {/* UpdateChecker = ancien système (versions codées en dur, Electron/Android) : désactivé sous Tauri desktop, remplacé par TauriUpdateManager */}
           {profileCompleted && !isTauri() && <UpdateChecker />}
-          {profileCompleted && <WebAppUpdateNotifier />}
           <TauriUpdateManager />
           <AndroidUpdateManager />
           <UpdateAppliedNotice />

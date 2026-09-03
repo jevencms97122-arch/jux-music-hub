@@ -21,7 +21,6 @@ import VolumeControl from './VolumeControl';
 import SleepTimerSheet from './SleepTimerSheet';
 import PlaybackRateControl from './PlaybackRateControl';
 import AddToPlaylistModal from './AddToPlaylistModal';
-import CreateStoryModal from './CreateStoryModal';
 import ShareToFriendSheet from './ShareToFriendSheet';
 import { detectPlatform } from '@/lib/platform';
 import { cn } from '@/lib/utils';
@@ -52,7 +51,6 @@ export default function PlayerPage() {
   const [showAddToPlaylist, setShowAddToPlaylist] = useState(false);
   const [showMenu, setShowMenu] = useState(false);
   const [showComments, setShowComments] = useState(false);
-  const [showCreateStory, setShowCreateStory] = useState(false);
   const [showQueue, setShowQueue] = useState(false);
   const [showSleepTimer, setShowSleepTimer] = useState(false);
   const [showSimilar, setShowSimilar] = useState(false);
@@ -538,7 +536,6 @@ export default function PlayerPage() {
       <PlaybackRateControl open={showPlaybackRate} onClose={() => setShowPlaybackRate(false)} />
       <AddToPlaylistModal open={showAddToPlaylist} onOpenChange={setShowAddToPlaylist} songId={currentSong.id} />
       <CommentsModal open={showComments} onOpenChange={setShowComments} songId={currentSong.id} />
-      <CreateStoryModal open={showCreateStory} onOpenChange={setShowCreateStory} />
 
       {/* Choix du mode de partage */}
       <Sheet open={showShareChooser} onOpenChange={setShowShareChooser}>
@@ -821,7 +818,13 @@ export default function PlayerPage() {
               <span className="text-sm font-medium">Commentaires</span>
             </button>
             <button
-              onClick={() => { setShowMenu(false); setShowCreateStory(true); }}
+              onClick={() => {
+                // La composition se fait sur sa propre page : on referme le lecteur d'abord,
+                // sinon il resterait affiché par-dessus.
+                setShowMenu(false);
+                setClosing(true);
+                setTimeout(() => { setClosing(false); closePlayer(); navigate('/create-story'); }, 100);
+              }}
               className="flex w-full items-center gap-4 rounded-2xl px-4 py-3.5 hover:bg-white/[0.06] transition-colors"
             >
               <Camera className="h-5 w-5 text-muted-foreground" />

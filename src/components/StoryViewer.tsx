@@ -1,13 +1,31 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { pb } from '@/lib/pocketbase';
 import { useAuth } from '@/contexts/AuthContext';
 import { songCoverUrl, songAudioUrl, publicUrl } from '@/lib/storage';
 import { X, Music2 } from 'lucide-react';
+import StoryMusicWidget from '@/components/StoryMusicWidget';
+import { LAYOUT_FIELD, parseStoryLayout } from '@/lib/storyLayout';
 
 interface Props {
   stories: any[];
   initialIndex?: number;
   onClose: () => void;
+}
+
+/**
+ * Durée d'affichage d'une story. L'extrait musical prime quand il est renseigné ;
+ * les stories image-seule (ex: cartes Wrapped, qui ne posent pas start/end_time)
+ * gardent leurs 7 s.
+ */
+function storyDuration(story: any): number {
+  const clipMs =
+    story?.start_time != null && story?.end_time != null
+      ? (story.end_time - story.start_time) * 1000
+      : 0;
+  if (clipMs > 0) return Math.max(3000, clipMs);
+  if (story?.image) return 7000;
+  if (story?.song_id) return 30000;
+  return 5000;
 }
 
 export default function StoryViewer({ stories, initialIndex = 0, onClose }: Props) {
@@ -24,8 +42,24 @@ export default function StoryViewer({ stories, initialIndex = 0, onClose }: Prop
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const rafRef = useRef<number>(0);
 
+  const canvasRef = useRef<HTMLDivElement>(null);
+  const [canvasWidth, setCanvasWidth] = useState(0);
+
   const story = stories[currentIndex];
   const storyImageUrl = story?.image ? publicUrl('stories', story.id, story.image) : null;
+  // `null` = story publiée avant cette fonctionnalité : on garde l'ancien rendu.
+  const layout = useMemo(() => parseStoryLayout(story?.[LAYOUT_FIELD]), [story?.id]);
+
+  // Le widget dimensionne son texte à partir de la largeur du canvas 9:16.
+  useEffect(() => {
+    const el = canvasRef.current;
+    if (!el) return;
+    const measure = () => setCanvasWidth(el.getBoundingClientRect().width);
+    measure();
+    const ro = new ResizeObserver(measure);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [layout]);
 
   // Charge la song à chaque changement de story
   useEffect(() => {
@@ -86,11 +120,7 @@ export default function StoryViewer({ stories, initialIndex = 0, onClose }: Prop
     if (user) {
       pb.collection('story_views').create({ story_id: story.id, viewer_id: user.id }).catch(() => {});
     }
-    const storyDurationMs = story.image
-      ? 7000
-      : story.song_id
-        ? Math.max(3000, ((story.end_time || 30) - (story.start_time || 0)) * 1000)
-        : 5000;
+    const storyDurationMs = storyDuration(story);
     const step = 100;
     intervalRef.current = window.setInterval(() => {
       progressRef.current += step;
@@ -113,28 +143,67 @@ export default function StoryViewer({ stories, initialIndex = 0, onClose }: Prop
 
   if (!story) return null;
 
-  const storyDurationMs = story.image
-    ? 7000
-    : story.song_id
-      ? Math.max(3000, ((story.end_time || 30) - (story.start_time || 0)) * 1000)
-      : 5000;
+  const storyDurationMs = storyDuration(story);
   const coverUrl = song ? songCoverUrl(song) : null;
   const hasCover = coverUrl && coverUrl !== '/placeholder.svg';
 
   return (
     <div className="fixed inset-0 z-50 bg-black" onClick={handleClick}>
+      {/* Story composée : canvas 9:16 letterboxé, widget musique à la position enregistrée.
+          Le canvas garde toujours la même forme que celui de l'éditeur, sinon les
+          coordonnées relatives ne tomberaient pas au même endroit. */}
+      {layout && (
+        <div className="absolute inset-0 flex items-center justify-center">
+          <div
+            ref={canvasRef}
+            className="relative overflow-hidden"
+            style={{ width: 'min(100vw, calc(100vh * 9 / 16))', aspectRatio: '9 / 16', maxHeight: '100vh' }}
+          >
+            {storyImageUrl ? (
+              <img src={storyImageUrl} alt="" className="absolute inset-0 h-full w-full object-cover" />
+            ) : hasCover ? (
+              <>
+                <div
+                  className="absolute inset-0 scale-110 bg-cover bg-center blur-2xl"
+                  style={{ backgroundImage: `url(${coverUrl})` }}
+                />
+                <div className="absolute inset-0 bg-black/40" />
+              </>
+            ) : (
+              <div className="absolute inset-0 bg-gradient-to-br from-primary/25 to-black" />
+            )}
+
+            {song && (
+              <StoryMusicWidget
+                title={song.title}
+                author={song.author}
+                coverUrl={coverUrl}
+                layout={layout.music}
+                canvasWidth={canvasWidth}
+              />
+            )}
+
+            {story.comment && (
+              <div className="absolute inset-x-0 bottom-6 flex justify-center px-6">
+                <p className="text-center text-lg font-bold text-white drop-shadow-lg">{story.comment}</p>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
       {/* Image plein écran (ex: carte Wrapped partagée) */}
-      {storyImageUrl && (
+      {!layout && storyImageUrl && (
         <img src={storyImageUrl} alt="" className="absolute inset-0 h-full w-full object-cover" />
       )}
       {/* Fond flouté (stories musicales classiques) */}
-      {!storyImageUrl && hasCover && (
+      {!layout && !storyImageUrl && hasCover && (
         <div
           className="absolute inset-0 bg-cover bg-center blur-2xl scale-110"
           style={{ backgroundImage: `url(${coverUrl})` }}
         />
       )}
-      {!storyImageUrl && <div className="absolute inset-0 bg-black/40" />}
+      {!layout && !storyImageUrl && <div className="absolute inset-0 bg-black/40" />}
 
       {/* Bouton fermer */}
       <button
@@ -163,7 +232,7 @@ export default function StoryViewer({ stories, initialIndex = 0, onClose }: Prop
       </div>
 
       {/* Contenu centré (stories musicales classiques uniquement) */}
-      {!storyImageUrl && (
+      {!layout && !storyImageUrl && (
         <div className="relative z-10 flex h-full items-center justify-center">
           <div className="text-center px-8">
             {hasCover && (
@@ -190,7 +259,7 @@ export default function StoryViewer({ stories, initialIndex = 0, onClose }: Prop
       )}
 
       {/* Chip discret indiquant le titre joué en fond, pour les cartes Wrapped */}
-      {storyImageUrl && song && (
+      {!layout && storyImageUrl && song && (
         <div className="absolute bottom-8 left-0 right-0 z-10 flex justify-center">
           <div className="flex items-center gap-2 rounded-full bg-black/40 backdrop-blur-md px-4 py-2 text-white/90 ring-1 ring-white/10">
             <Music2 className="h-3.5 w-3.5" />

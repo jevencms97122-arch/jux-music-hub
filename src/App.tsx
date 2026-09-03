@@ -48,6 +48,7 @@ import Wrapped from '@/pages/Wrapped';
 import CarMode from '@/pages/CarMode';
 import Rank from '@/pages/Rank';
 import SongPlayer from '@/pages/SongPlayer';
+import CreateStory from '@/pages/CreateStory';
 import MiniPlayer from '@/components/MiniPlayer';
 import PlayerPage from '@/components/PlayerPage';
 import BottomNav from '@/components/BottomNav';
@@ -291,7 +292,9 @@ function AppContent() {
       '/playlists': 'playlists',
     };
     const active = pathToActive[location.pathname] || (location.pathname.startsWith('/playlist/') ? 'playlists' : (location.pathname.startsWith('/u/') || location.pathname.startsWith('/chat/')) ? 'social' : 'home');
-    const hideBottomNav = location.pathname.startsWith('/chat/');
+    // La composition de story occupe tout l'écran : nav et mini lecteur masqueraient l'aperçu.
+    const fullScreenPage = location.pathname === '/create-story';
+    const hideBottomNav = location.pathname.startsWith('/chat/') || fullScreenPage;
 
     const guard = (el: JSX.Element) => profileCompleted ? <PageWrap>{el}</PageWrap> : <Navigate to="/profile-setup" replace />;
     const backendGuard = (el: JSX.Element) => offline ? <PageWrap><RequiresBackend /></PageWrap> : guard(el);
@@ -333,11 +336,12 @@ function AppContent() {
                 <Route path="/car-mode" element={guard(<CarMode />)} />
                 <Route path="/rank" element={backendGuard(<Rank />)} />
                 <Route path="/song/:id" element={backendGuard(<SongPlayer />)} />
+                <Route path="/create-story" element={backendGuard(<CreateStory />)} />
                 <Route path="*" element={<Navigate to="/jux" replace />} />
               </Routes>
             </AnimatePresence>
           </main>
-          <MiniPlayer />
+          {!fullScreenPage && <MiniPlayer />}
           <PlayerPage />
           {profileCompleted && !hideBottomNav && (
             <BottomNav

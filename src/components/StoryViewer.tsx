@@ -2,8 +2,9 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { pb } from '@/lib/pocketbase';
 import { useAuth } from '@/contexts/AuthContext';
 import { songCoverUrl, songAudioUrl, publicUrl } from '@/lib/storage';
-import { X, Music2 } from 'lucide-react';
+import { X, Music2, Eye } from 'lucide-react';
 import StoryMusicWidget from '@/components/StoryMusicWidget';
+import StoryViewersSheet from '@/components/StoryViewersSheet';
 import { LAYOUT_FIELD, parseStoryLayout } from '@/lib/storyLayout';
 
 interface Props {
@@ -17,6 +18,15 @@ interface Props {
  * les stories image-seule (ex: cartes Wrapped, qui ne posent pas start/end_time)
  * gardent leurs 7 s.
  */
+/** Durée du fondu (secondes) quand la feuille "Vu par" s'ouvre ou se ferme. */
+const DUCK_SWEEP_SECONDS = 0.45;
+/** Volume relatif du son une fois assourdi — jamais coupé, juste en retrait. */
+const DUCK_GAIN = 0.32;
+const DUCK_LOWPASS_OPEN_HZ = 20000;
+/** Assez bas pour un rendu clairement étouffé/grave, sans devenir inaudible. */
+const DUCK_LOWPASS_CLOSED_HZ = 350;
+const DUCK_FILTER_Q = 2.4;
+
 function storyDuration(story: any): number {
   const clipMs =
     story?.start_time != null && story?.end_time != null
@@ -42,10 +52,48 @@ export default function StoryViewer({ stories, initialIndex = 0, onClose }: Prop
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const rafRef = useRef<number>(0);
 
+  // Graphe Web Audio pour le "duck" du son de l'extrait pendant la feuille "Vu par" —
+  // mêmes valeurs (fréquences, forme de sweep) que le filter sweep du crossfade dans
+  // PlayerContext, pour la même sensation : le son ne coupe jamais, il s'assourdit et
+  // passe en grave, comme si on éloignait la musique.
+  const duckCtxRef = useRef<AudioContext | null>(null);
+  const duckGainRef = useRef<GainNode | null>(null);
+  const duckFilterRef = useRef<BiquadFilterNode | null>(null);
+
   const canvasRef = useRef<HTMLDivElement>(null);
   const [canvasWidth, setCanvasWidth] = useState(0);
 
+  // La barre de progression continue de défiler pendant que l'auteur consulte la
+  // liste des personnes ayant vu sa story — seul le son réagit (fondu + grave via
+  // le graphe Web Audio ci-dessus), la story elle-même ne s'arrête jamais.
+  const [showViewers, setShowViewers] = useState(false);
+  useEffect(() => {
+    const ctx = duckCtxRef.current;
+    const gainNode = duckGainRef.current;
+    const filter = duckFilterRef.current;
+    if (!ctx || !gainNode || !filter) return;
+
+    const now = ctx.currentTime;
+    const target = now + DUCK_SWEEP_SECONDS;
+
+    gainNode.gain.cancelScheduledValues(now);
+    gainNode.gain.setValueAtTime(gainNode.gain.value, now);
+    gainNode.gain.linearRampToValueAtTime(showViewers ? DUCK_GAIN : 1, target);
+
+    filter.frequency.cancelScheduledValues(now);
+    filter.frequency.setValueAtTime(filter.frequency.value, now);
+    filter.frequency.exponentialRampToValueAtTime(
+      showViewers ? DUCK_LOWPASS_CLOSED_HZ : DUCK_LOWPASS_OPEN_HZ,
+      target
+    );
+
+    filter.Q.cancelScheduledValues(now);
+    filter.Q.setValueAtTime(filter.Q.value, now);
+    filter.Q.linearRampToValueAtTime(showViewers ? DUCK_FILTER_Q : 0.7, target);
+  }, [showViewers]);
+
   const story = stories[currentIndex];
+  const isOwner = !!user && story?.user_id === user.id;
   const storyImageUrl = story?.image ? publicUrl('stories', story.id, story.image) : null;
   // `null` = story publiée avant cette fonctionnalité : on garde l'ancien rendu.
   const layout = useMemo(() => parseStoryLayout(story?.[LAYOUT_FIELD]), [story?.id]);
@@ -86,10 +134,39 @@ export default function StoryViewer({ stories, initialIndex = 0, onClose }: Prop
 
     const audio = new Audio(audioUrl);
     audio.volume = 0.3;
+    // Nécessaire pour router l'élément dans le graphe Web Audio ci-dessous — PocketBase
+    // sert les fichiers avec `Access-Control-Allow-Origin: *`, donc ça passe sans souci.
+    audio.crossOrigin = 'anonymous';
 
     const startAt = story?.start_time ?? 0;
     const endAt = story?.end_time ?? 30;
     audio.currentTime = startAt;
+
+    // Le "duck" (fondu + grave) du bouton "Vu par" a besoin d'un filtre dans le
+    // signal : on route l'élément <audio> dans un petit graphe Web Audio. En cas
+    // d'échec (navigateur trop ancien, ressource non éligible...), on retombe sur
+    // la lecture native — la story reste jouable, elle perd juste le fondu filtré.
+    try {
+      const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
+      const ctx = new AudioCtx();
+      const source = ctx.createMediaElementSource(audio);
+      const filter = ctx.createBiquadFilter();
+      filter.type = 'lowpass';
+      filter.frequency.value = DUCK_LOWPASS_OPEN_HZ;
+      filter.Q.value = 0.7;
+      const gainNode = ctx.createGain();
+      gainNode.gain.value = showViewers ? DUCK_GAIN : 1;
+      source.connect(filter).connect(gainNode).connect(ctx.destination);
+      if (ctx.state === 'suspended') ctx.resume().catch(() => {});
+      duckCtxRef.current = ctx;
+      duckFilterRef.current = filter;
+      duckGainRef.current = gainNode;
+    } catch {
+      duckCtxRef.current = null;
+      duckFilterRef.current = null;
+      duckGainRef.current = null;
+    }
+
     audio.play().then(() => setAudioReady(true)).catch(() => setAudioReady(true));
 
     const ensureStop = () => {
@@ -107,6 +184,10 @@ export default function StoryViewer({ stories, initialIndex = 0, onClose }: Prop
       audio.pause();
       audioRef.current = null;
       cancelAnimationFrame(rafRef.current);
+      duckCtxRef.current?.close().catch(() => {});
+      duckCtxRef.current = null;
+      duckFilterRef.current = null;
+      duckGainRef.current = null;
     };
   }, [song]);
 
@@ -117,7 +198,8 @@ export default function StoryViewer({ stories, initialIndex = 0, onClose }: Prop
     progressRef.current = 0;
     setProgress(0);
     if (!audioReady) return;
-    if (user) {
+    // L'auteur qui revoit sa propre story ne doit pas se compter comme spectateur.
+    if (user && story.user_id !== user.id) {
       pb.collection('story_views').create({ story_id: story.id, viewer_id: user.id }).catch(() => {});
     }
     const storyDurationMs = storyDuration(story);
@@ -135,6 +217,12 @@ export default function StoryViewer({ stories, initialIndex = 0, onClose }: Prop
   }, [story?.id, currentIndex, user, audioReady]);
 
   const handleClick = (e: React.MouseEvent) => {
+    // La feuille "Vu par" est un Portal Radix : son DOM vit hors de ce conteneur
+    // (append à la fin de <body>), mais React fait bien remonter ses événements
+    // le long de l'arbre RÉACT (et non l'arbre DOM réel) — un clic n'importe où
+    // dedans finissait donc ici et fermait toute la story. On l'ignore tant que
+    // la feuille est ouverte.
+    if (showViewers) return;
     const x = e.clientX / window.innerWidth;
     if (x < 0.3 && currentIndex > 0) setCurrentIndex((i) => i - 1);
     else if (x > 0.7 && currentIndex < stories.length - 1) setCurrentIndex((i) => i + 1);
@@ -146,48 +234,67 @@ export default function StoryViewer({ stories, initialIndex = 0, onClose }: Prop
   const storyDurationMs = storyDuration(story);
   const coverUrl = song ? songCoverUrl(song) : null;
   const hasCover = coverUrl && coverUrl !== '/placeholder.svg';
+  // Ce qui remplit l'écran derrière le canvas net, en flouté — l'image de la story
+  // si elle en a une, sinon la pochette du morceau.
+  const backdropUrl = storyImageUrl || (hasCover ? coverUrl : null);
 
   return (
     <div className="fixed inset-0 z-50 bg-black" onClick={handleClick}>
-      {/* Story composée : canvas 9:16 letterboxé, widget musique à la position enregistrée.
-          Le canvas garde toujours la même forme que celui de l'éditeur, sinon les
-          coordonnées relatives ne tomberaient pas au même endroit. */}
+      {/* Story composée : canvas 9:16, à la même forme que celui de l'éditeur (sinon les
+          coordonnées relatives du widget ne tomberaient pas au même endroit).
+          Sur un écran large/paysage, un "contain" nu laisse des bandes noires, et un
+          "cover" plein écran rognerait trop verticalement — le widget musique, souvent
+          posé près du bas, sortirait carrément du cadre. On reprend donc le procédé
+          Spotify/TikTok/Instagram desktop : le fond de la story elle-même, flouté et
+          agrandi, remplit tout l'écran derrière un canvas net qui garde ses proportions. */}
       {layout && (
-        <div className="absolute inset-0 flex items-center justify-center">
-          <div
-            ref={canvasRef}
-            className="relative overflow-hidden"
-            style={{ width: 'min(100vw, calc(100vh * 9 / 16))', aspectRatio: '9 / 16', maxHeight: '100vh' }}
-          >
-            {storyImageUrl ? (
-              <img src={storyImageUrl} alt="" className="absolute inset-0 h-full w-full object-cover" />
-            ) : hasCover ? (
-              <>
-                <div
-                  className="absolute inset-0 scale-110 bg-cover bg-center blur-2xl"
-                  style={{ backgroundImage: `url(${coverUrl})` }}
-                />
-                <div className="absolute inset-0 bg-black/40" />
-              </>
-            ) : (
-              <div className="absolute inset-0 bg-gradient-to-br from-primary/25 to-black" />
-            )}
-
-            {song && (
-              <StoryMusicWidget
-                title={song.title}
-                author={song.author}
-                coverUrl={coverUrl}
-                layout={layout.music}
-                canvasWidth={canvasWidth}
+        <div className="absolute inset-0 overflow-hidden">
+          {backdropUrl && (
+            <>
+              <div
+                className="absolute inset-0 scale-125 bg-cover bg-center blur-3xl"
+                style={{ backgroundImage: `url(${backdropUrl})` }}
               />
-            )}
+              <div className="absolute inset-0 bg-black/50" />
+            </>
+          )}
 
-            {story.comment && (
-              <div className="absolute inset-x-0 bottom-6 flex justify-center px-6">
-                <p className="text-center text-lg font-bold text-white drop-shadow-lg">{story.comment}</p>
-              </div>
-            )}
+          <div className="absolute inset-0 flex items-center justify-center">
+            <div
+              ref={canvasRef}
+              className="relative overflow-hidden rounded-2xl shadow-2xl shadow-black/60"
+              style={{ width: 'min(100vw, calc(100vh * 9 / 16))', aspectRatio: '9 / 16', maxHeight: '100vh' }}
+            >
+              {storyImageUrl ? (
+                <img src={storyImageUrl} alt="" className="absolute inset-0 h-full w-full object-cover" />
+              ) : hasCover ? (
+                <>
+                  <div
+                    className="absolute inset-0 scale-110 bg-cover bg-center blur-2xl"
+                    style={{ backgroundImage: `url(${coverUrl})` }}
+                  />
+                  <div className="absolute inset-0 bg-black/40" />
+                </>
+              ) : (
+                <div className="absolute inset-0 bg-gradient-to-br from-primary/25 to-black" />
+              )}
+
+              {song && (
+                <StoryMusicWidget
+                  title={song.title}
+                  author={song.author}
+                  coverUrl={coverUrl}
+                  layout={layout.music}
+                  canvasWidth={canvasWidth}
+                />
+              )}
+
+              {story.comment && (
+                <div className="absolute inset-x-0 bottom-6 flex justify-center px-6">
+                  <p className="text-center text-lg font-bold text-white drop-shadow-lg">{story.comment}</p>
+                </div>
+              )}
+            </div>
           </div>
         </div>
       )}
@@ -267,6 +374,23 @@ export default function StoryViewer({ stories, initialIndex = 0, onClose }: Prop
           </div>
         </div>
       )}
+
+      {/* Réservé à l'auteur — voir qui a regardé sa story, comme sur Instagram */}
+      {isOwner && (
+        <button
+          onClick={(e) => { e.stopPropagation(); setShowViewers(true); }}
+          className="absolute bottom-24 left-1/2 z-10 flex -translate-x-1/2 items-center gap-1.5 rounded-full bg-black/40 px-3.5 py-2 text-white/90 backdrop-blur-md ring-1 ring-white/10"
+        >
+          <Eye className="h-3.5 w-3.5" />
+          <span className="text-xs font-medium">Vu par</span>
+        </button>
+      )}
+
+      {/* Même remarque que dans handleClick : sans stopPropagation ici, un clic
+          dans la feuille (Portal Radix) remonte quand même jusqu'à handleClick. */}
+      <div onClick={(e) => e.stopPropagation()}>
+        <StoryViewersSheet storyId={story.id} open={showViewers} onOpenChange={setShowViewers} />
+      </div>
     </div>
   );
 }

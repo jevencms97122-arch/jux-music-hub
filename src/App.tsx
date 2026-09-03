@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import SplashScreen from '@/components/SplashScreen';
+import ErrorBoundary from '@/components/ErrorBoundary';
 import { AuthProvider, useAuth } from '@/contexts/AuthContext';
 import { OfflineModeProvider, useOfflineMode } from '@/contexts/OfflineModeContext';
 import { PlayerProvider } from '@/contexts/PlayerContext';
@@ -383,6 +384,7 @@ function AppContent() {
 
 function AppWithTheme() {
   const { currentTheme } = useTheme();
+  const location = useLocation();
   const isAnimated = currentTheme.backgroundAnimation != null;
   const isUltra = currentTheme.isUltra === true;
   return (
@@ -395,7 +397,11 @@ function AppWithTheme() {
       }}
       data-animated-bg={isAnimated ? '' : undefined}
     >
-      <AppContent />
+      {/* resetKey = pathname : un crash sur une page ne bloque que cette page,
+          la navigation suivante réessaie automatiquement au lieu de rester noire. */}
+      <ErrorBoundary resetKey={location.pathname}>
+        <AppContent />
+      </ErrorBoundary>
     </div>
   );
 }
@@ -410,13 +416,15 @@ export default function App() {
   }
   return (
     <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
-      <OfflineModeProvider>
-        <ThemeProvider>
-          <AuthProvider>
-            <AppWithTheme />
-          </AuthProvider>
-        </ThemeProvider>
-      </OfflineModeProvider>
+      <ErrorBoundary>
+        <OfflineModeProvider>
+          <ThemeProvider>
+            <AuthProvider>
+              <AppWithTheme />
+            </AuthProvider>
+          </ThemeProvider>
+        </OfflineModeProvider>
+      </ErrorBoundary>
     </BrowserRouter>
   );
 }

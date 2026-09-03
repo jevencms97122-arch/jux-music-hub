@@ -13,8 +13,15 @@ export default defineConfig(({ mode }) => ({
     // avec "Blocked request. This host is not allowed" en mode dev.
     allowedHosts: true,
     hmr: {
-      overlay: false,
-      clientPort: 8080,
+      // `overlay: true` (défaut) : affiche les erreurs de compilation/HMR à l'écran
+      // au lieu de laisser un état cassé silencieux — la principale piste des
+      // "écrans noirs" en dev.
+      //
+      // Pas de `clientPort` figé : le forcer à 8080 cassait le HMR dès que ce
+      // port était pris (fréquent — plusieurs `npm run dev` restent parfois
+      // lancés) et que Vite basculait sur 8081/8082/... Le client se connectait
+      // alors au mauvais port en boucle, échouait silencieusement, et les
+      // changements ne s'appliquaient plus qu'après un F5 complet.
     },
     // Empêche Vite de surveiller les artefacts de compilation Rust (verrouillés
     // pendant `cargo build`, ce qui fait planter le watcher avec EBUSY sous Windows).

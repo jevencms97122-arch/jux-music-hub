@@ -1,6 +1,6 @@
 [package]
 name = "nexora-music"
-version = "1.0.3"
+version = "1.0.5"
 description = "A Tauri App"
 authors = ["you"]
 edition = "2021"

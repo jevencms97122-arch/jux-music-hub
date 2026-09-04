@@ -89,6 +89,7 @@ function recordToProfile(r: any): Profile {
     badge: r.badge || null,
     ban_status: r.ban_status ?? false,
     profile_completed: r.profile_completed ?? false,
+    banner_video_url: r.banner_video_url || null,
     created_at: r.created,
     updated_at: r.updated,
   };
@@ -238,6 +239,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     if (data.last_name !== undefined) formData.append('last_name', data.last_name ?? '');
     if (data.bio !== undefined) formData.append('bio', data.bio ?? '');
     if (data.profile_completed !== undefined) formData.append('profile_completed', String(data.profile_completed));
+    if (data.banner_video_url !== undefined) formData.append('banner_video_url', data.banner_video_url ?? '');
     if (avatarFile) formData.append('avatar', avatarFile);
 
     const updated = await pb.collection('profiles').update(record.id, formData);

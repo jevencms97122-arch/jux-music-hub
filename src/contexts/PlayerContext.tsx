@@ -4,7 +4,7 @@ import { songAudioUrl, songCoverUrl, songAudioUrlWithCache } from '@/lib/storage
 import { useAuth } from '@/contexts/AuthContext';
 import { useOfflineMode } from '@/contexts/OfflineModeContext';
 import { extractDominantHsl, applyAccentHsl } from '@/lib/dominantColor';
-import { updateStreak } from '@/lib/streaks';
+import { recordListen } from '@/lib/listenStats';
 import { recordLocalListen } from '@/lib/localListenHistory';
 import { queueOfflinePlay } from '@/lib/offlinePlaySync';
 import { ensureCachedForPlayback } from '@/lib/offlineManager';
@@ -1046,7 +1046,7 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
     // cover + métadonnées) pour rester écoutable en mode hors connexion.
     if (!song.id.startsWith('local_')) ensureCachedForPlayback(song);
 
-    updateStreak(authUser.id);
+    recordListen(authUser.id);
     updatePresence({ userId: authUser.id, isListening: true, songId: song.id, songTitle: song.title, songAuthor: song.author, songCoverUrl: songCoverUrl(song) });
 
     incrementPlayCount(song.id);

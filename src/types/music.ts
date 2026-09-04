@@ -15,6 +15,8 @@ export interface Profile {
   pinned_song_id: string | null;
   pinned_start: number | null;
   pinned_end: number | null;
+  /** Lien direct vers un fichier vidéo (mp4/webm) affiché en fond du header de profil. */
+  banner_video_url: string | null;
   collectionName?: string;
   collectionId?: string;
   created_at: string;
@@ -147,10 +149,7 @@ export interface StoryView {
 export interface UserStats {
   id: string;
   user_id: string;
-  current_streak: number;
-  longest_streak: number;
   total_listens: number;
-  last_listen_date: string | null;
   created_at: string;
   updated_at: string;
 }

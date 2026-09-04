@@ -48,7 +48,7 @@ const RANK_DEFS: { name: string; emoji: string; color: string; levels: number; u
   { name: 'Divin de Nexora', emoji: '👑', color: '#fbbf24', levels: 1, ultimate: true },
 ];
 
-export const TOTAL_QUESTS = 26;
+export const TOTAL_QUESTS = 22;
 
 /**
  * Les 30 paliers : Amateur I → Divin de Nexora.
@@ -103,7 +103,6 @@ export async function getRankProgress(userId: string): Promise<RankProgress | nu
 
     const uploads = songsRes.length;
     const uploadPlays = songsRes.reduce((s: number, u: any) => s + (u.play_count ?? 0), 0);
-    const longestStreak = (statsRes as any)?.longest_streak ?? 0;
     const totalListens = (statsRes as any)?.total_listens ?? 0;
 
     const q = (id: string, name: string, description: string, emoji: string, value: number, target: number): Quest =>
@@ -117,11 +116,6 @@ export async function getRankProgress(userId: string): Promise<RankProgress | nu
       q('viral', 'Viral', '100 écoutes cumulées sur tes sons', '🚀', uploadPlays, 100),
       q('star', 'Étoile montante', '1 000 écoutes cumulées sur tes sons', '⭐', uploadPlays, 1000),
       q('hit-maker', 'Hit-maker', '10 000 écoutes cumulées sur tes sons', '🏆', uploadPlays, 10000),
-      // Série
-      q('streak-3', 'Régularité', "3 jours d'écoute consécutifs", '🔥', longestStreak, 3),
-      q('streak-7', 'Une semaine', "7 jours d'écoute consécutifs", '🔥', longestStreak, 7),
-      q('streak-30', 'Inarrêtable', "30 jours d'écoute consécutifs", '⚡', longestStreak, 30),
-      q('streak-100', 'Centurion', "100 jours d'écoute consécutifs", '☄️', longestStreak, 100),
       // Écoute
       q('first-listen', 'Première écoute', 'Écoute ton premier son', '▶️', totalListens, 1),
       q('listener-100', 'Auditeur assidu', '100 écoutes au total', '🎧', totalListens, 100),

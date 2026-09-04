@@ -7,7 +7,7 @@ import SongCard from '@/components/SongCard';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, Search as SearchIcon, Music2, Users, Flame, X, ChevronRight, History, LayoutGrid } from 'lucide-react';
+import { ArrowLeft, Search as SearchIcon, Music2, Users, X, ChevronRight, History, LayoutGrid } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { normalizeBadge } from '@/lib/badges';
 import type { Song } from '@/types/music';
@@ -24,8 +24,6 @@ interface UserResult {
   pseudo: string;
   badge: string | null;
   avatar_url: string;
-  current_streak: number;
-  longest_streak: number;
 }
 
 type Tab = 'all' | 'songs' | 'users';
@@ -104,23 +102,12 @@ export default function Search() {
 
       setSongs(songRes.items.map(recordToSong));
 
-      // Fetch streak stats for all found users in one query
-      let statsMap: Record<string, any> = {};
-      const userIds = userRes.items.map((r: any) => r.user_id).filter(Boolean) as string[];
-      if (userIds.length > 0) {
-        const statsFilter = userIds.map((id) => `user_id = "${id}"`).join(' || ');
-        const statsRes = await pb.collection('user_stats').getList(1, 50, { filter: statsFilter, requestKey: null });
-        for (const s of statsRes.items) statsMap[s.user_id as string] = s;
-      }
-
       setUsers(userRes.items.map((r: any) => ({
         id: r.id,
         user_id: r.user_id,
         pseudo: r.pseudo,
         badge: r.badge ?? null,
         avatar_url: avatarUrl(r),
-        current_streak: statsMap[r.user_id]?.current_streak ?? 0,
-        longest_streak: statsMap[r.user_id]?.longest_streak ?? 0,
       })));
 
       if (songRes.items.length > 0 || userRes.items.length > 0) saveRecent(t);
@@ -291,8 +278,6 @@ export default function Search() {
                   )}
                   <div className="space-y-2">
                     {users.map((u) => {
-                      const displayStreak = u.current_streak >= 3 ? u.current_streak : u.longest_streak >= 3 ? u.longest_streak : 0;
-                      const isActive = u.current_streak >= 3;
                       return (
                         <button
                           key={u.id}
@@ -307,15 +292,6 @@ export default function Search() {
                             </div>
                           )}
                           <span className={cn('min-w-0 flex-1 truncate text-sm font-semibold', normalizeBadge(u.badge) === 'PDG' && 'text-pdg-gold')}>{u.pseudo}</span>
-                          {displayStreak >= 3 && (
-                            <span className={cn(
-                              'flex items-center gap-1 rounded-full bg-secondary px-2 py-0.5 text-xs font-bold',
-                              isActive ? 'text-orange-400' : 'text-muted-foreground'
-                            )}>
-                              <Flame className={cn('h-3.5 w-3.5', isActive && 'animate-flame')} />
-                              {displayStreak}
-                            </span>
-                          )}
                           <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground transition-transform group-hover:translate-x-0.5" />
                         </button>
                       );

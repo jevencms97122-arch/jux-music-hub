@@ -3,12 +3,13 @@ import { useAuth } from '@/contexts/AuthContext';
 import { avatarUrl, songAudioUrl, songCoverUrl } from '@/lib/storage';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
-import { ArrowLeft, Camera, User, Check, Pin, Play, Pause, Search, X } from 'lucide-react';
+import { ArrowLeft, Camera, User, Check, Pin, Play, Pause, Search, X, Film } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { pb } from '@/lib/pocketbase';
 import type { Song } from '@/types/music';
+import { useBannerMediaMode } from '@/hooks/useBannerMediaMode';
 
 const fmtTime = (s: number) => s < 60 ? `${s}s` : `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
 
@@ -21,6 +22,8 @@ export default function ProfileEdit({ onBack }: Props) {
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
   const [bio, setBio] = useState('');
+  const [bannerVideoUrl, setBannerVideoUrl] = useState('');
+  const { mode: bannerMode, onVideoError: onBannerVideoError, onImageError: onBannerImageError } = useBannerMediaMode(bannerVideoUrl);
   const [avatar, setAvatar] = useState<File | null>(null);
   const [avatarPreview, setAvatarPreview] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
@@ -44,6 +47,7 @@ export default function ProfileEdit({ onBack }: Props) {
     setFirstName(profile.first_name ?? '');
     setLastName(profile.last_name ?? '');
     setBio(profile.bio ?? '');
+    setBannerVideoUrl(profile.banner_video_url ?? '');
   }, [profile]);
 
   // Load user songs + existing pinned
@@ -136,6 +140,7 @@ export default function ProfileEdit({ onBack }: Props) {
           first_name: firstName.trim() || null,
           last_name: lastName.trim() || null,
           bio: bio.trim() || null,
+          banner_video_url: bannerVideoUrl.trim() || null,
         },
         avatar ?? undefined,
       );
@@ -261,6 +266,64 @@ export default function ProfileEdit({ onBack }: Props) {
               className="resize-none border-white/10 bg-white/[0.05] text-foreground placeholder:text-muted-foreground/40 focus:border-primary/50"
             />
           </Field>
+
+          {/* Vidéo d'arrière-plan du profil */}
+          <div className="space-y-2 pt-1">
+            <div className="flex items-center gap-2">
+              <Film className="h-3.5 w-3.5 text-primary" />
+              <label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                Vidéo d'arrière-plan
+              </label>
+              {bannerVideoUrl && (
+                <button
+                  type="button"
+                  onClick={() => setBannerVideoUrl('')}
+                  className="ml-auto flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
+                >
+                  <X className="h-3 w-3" />Retirer
+                </button>
+              )}
+            </div>
+            <Input
+              type="url"
+              value={bannerVideoUrl}
+              onChange={(e) => setBannerVideoUrl(e.target.value)}
+              placeholder="https://exemple.com/ma-video.mp4"
+              className="h-11 border-white/10 bg-white/[0.05] text-foreground placeholder:text-muted-foreground/40 focus:border-primary/50"
+            />
+            <p className="text-[10px] text-muted-foreground/60">
+              Lien direct vers une vidéo (.mp4, .webm…) ou un GIF (ex: un lien GIPHY) —
+              affiché en fond de ton profil. Les liens YouTube/Instagram ne fonctionnent pas ici.
+            </p>
+            {bannerVideoUrl && (
+              <div className="relative h-28 w-full overflow-hidden rounded-xl bg-black/40 ring-1 ring-white/10">
+                {bannerMode === 'failed' ? (
+                  <p className="flex h-full items-center justify-center px-4 text-center text-xs text-destructive">
+                    Impossible de charger ce lien — vérifie qu'il pointe directement vers un fichier
+                  </p>
+                ) : bannerMode === 'video' ? (
+                  <video
+                    key={bannerVideoUrl}
+                    src={bannerVideoUrl}
+                    className="h-full w-full object-cover"
+                    autoPlay
+                    muted
+                    loop
+                    playsInline
+                    onError={onBannerVideoError}
+                  />
+                ) : (
+                  <img
+                    key={bannerVideoUrl}
+                    src={bannerVideoUrl}
+                    alt=""
+                    className="h-full w-full object-cover"
+                    onError={onBannerImageError}
+                  />
+                )}
+              </div>
+            )}
+          </div>
 
           {/* Pinned track */}
           <div className="space-y-3 pt-1">

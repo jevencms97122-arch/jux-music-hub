@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import {
-  X, Music2, Sparkles, Upload, Users, ListMusic, Flame,
+  X, Music2, Sparkles, Upload, Users, ListMusic,
   TrendingUp, Tag, Pin, Repeat2, Headphones, UserPlus, Lock,
   Heart, Award, QrCode, ChevronLeft, ChevronRight,
 } from 'lucide-react';
@@ -84,12 +84,11 @@ const SLIDES: Slide[] = [
     ],
   },
   {
-    icon: Flame,
-    emoji: '🔥',
+    icon: Award,
+    emoji: '🏆',
     title: 'Ton univers',
     description: 'Plus tu écoutes, plus ton profil prend vie.',
     items: [
-      { icon: Flame, label: 'Série d\'écoute', text: 'Écoute chaque jour pour faire grimper ta flamme.' },
       { icon: Award, label: 'Rang', text: 'Accomplis des quêtes pour monter de palier, d\'Amateur I au Divin de Nexora.' },
       { icon: Sparkles, label: 'Wrapped', text: 'Tes stats d\'écoute résumées, accessibles depuis ton profil.' },
     ],

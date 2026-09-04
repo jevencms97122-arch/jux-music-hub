@@ -6,10 +6,9 @@ import { usePlayer } from '@/contexts/PlayerContext';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import SongCard from '@/components/SongCard';
-import { ArrowLeft, Repeat2, Flame, Music2, UserPlus, UserCheck, Trophy, Ban, ShieldCheck } from 'lucide-react';
+import { ArrowLeft, Repeat2, Music2, UserPlus, UserCheck, Trophy, Ban, ShieldCheck } from 'lucide-react';
 import { avatarUrl } from '@/lib/storage';
 import { toast } from 'sonner';
-import { getUserStats } from '@/lib/streaks';
 import { getRankProgress, type RankProgress } from '@/lib/ranks';
 import RankBadge from '@/components/RankBadge';
 import ProfileBadge from '@/components/ProfileBadge';
@@ -19,6 +18,7 @@ import SlidingTabIndicator from '@/components/SlidingTabIndicator';
 import { cn } from '@/lib/utils';
 import { normalizeBadge } from '@/lib/badges';
 import type { Profile, Song } from '@/types/music';
+import ProfileBannerVideo from '@/components/ProfileBannerVideo';
 
 function recordToSong(r: any): Song {
   return {
@@ -44,8 +44,6 @@ export default function UserProfile() {
   const [songs, setSongs] = useState<Song[]>([]);
   const [followStatus, setFollowStatus] = useState<'none' | 'pending' | 'accepted'>('none');
   const [counts, setCounts] = useState({ followers: 0, following: 0 });
-  const [streak, setStreak] = useState(0);
-  const [longestStreak, setLongestStreak] = useState(0);
   const [rank, setRank] = useState<RankProgress | null>(null);
   const [repostedSongs, setRepostedSongs] = useState<Song[]>([]);
   const [tab, setTab] = useState<Tab>('tracks');
@@ -59,21 +57,18 @@ export default function UserProfile() {
     setLoading(true);
     try {
       const pRecord = await pbGetFirst('profiles', `user_id = "${userId}"`);
-      setProfile(pRecord ? { id: pRecord.id, user_id: pRecord.user_id, pseudo: pRecord.pseudo, first_name: pRecord.first_name, last_name: pRecord.last_name, avatar: pRecord.avatar ?? null, avatar_url: pRecord.avatar_url ?? null, bio: pRecord.bio, badge: pRecord.badge ?? null, ban_status: pRecord.ban_status ?? false, profile_completed: pRecord.profile_completed, pinned_song_id: pRecord.pinned_song_id ?? null, pinned_start: pRecord.pinned_start ?? null, pinned_end: pRecord.pinned_end ?? null, collectionName: pRecord.collectionName, collectionId: pRecord.collectionId, created_at: pRecord.created, updated_at: pRecord.updated } : null);
+      setProfile(pRecord ? { id: pRecord.id, user_id: pRecord.user_id, pseudo: pRecord.pseudo, first_name: pRecord.first_name, last_name: pRecord.last_name, avatar: pRecord.avatar ?? null, avatar_url: pRecord.avatar_url ?? null, bio: pRecord.bio, badge: pRecord.badge ?? null, ban_status: pRecord.ban_status ?? false, profile_completed: pRecord.profile_completed, pinned_song_id: pRecord.pinned_song_id ?? null, pinned_start: pRecord.pinned_start ?? null, pinned_end: pRecord.pinned_end ?? null, banner_video_url: pRecord.banner_video_url ?? null, collectionName: pRecord.collectionName, collectionId: pRecord.collectionId, created_at: pRecord.created, updated_at: pRecord.updated } : null);
 
-      const [songRes, fers, fing, statsData, rankData, repostsRes] = await Promise.all([
+      const [songRes, fers, fing, rankData, repostsRes] = await Promise.all([
         pb.collection('songs').getList(1, 100, { filter: `uploaded_by = "${userId}"`, sort: '-created', requestKey: null }),
         pb.collection('follows').getList(1, 1, { filter: `following_id = "${userId}" && status = "accepted"`, requestKey: null }),
         pb.collection('follows').getList(1, 1, { filter: `follower_id = "${userId}" && status = "accepted"`, requestKey: null }),
-        getUserStats(userId),
         getRankProgress(userId),
         pb.collection('repost').getList(1, 50, { filter: `user_id = "${userId}"`, sort: '-created', requestKey: null }),
       ]);
 
       setSongs(songRes.items.map(recordToSong));
       setCounts({ followers: fers.totalItems, following: fing.totalItems });
-      setStreak((statsData as any)?.current_streak ?? 0);
-      setLongestStreak((statsData as any)?.longest_streak ?? 0);
       setRank(rankData);
 
       if (repostsRes.items.length > 0) {
@@ -169,8 +164,6 @@ export default function UserProfile() {
   }
 
   const isMe = user?.id === profile.user_id;
-  const displayStreak = streak >= 3 ? streak : longestStreak >= 3 ? longestStreak : 0;
-  const streakActive = streak >= 3;
 
   const tabs: { id: Tab; label: string; icon: typeof Music2; count: number }[] = [
     { id: 'tracks', label: 'Morceaux', icon: Music2, count: songs.length },
@@ -179,22 +172,32 @@ export default function UserProfile() {
 
   return (
     <div className="relative min-h-screen pb-32">
-      {/* Halo héro */}
-      <div className="pointer-events-none absolute inset-x-0 top-0 h-72 bg-gradient-hero" />
+      {/*
+        Header + identité + rang partagent un même fond : le halo par défaut, ou la
+        vidéo/GIF que cette personne a choisie. `relative` ici sert d'ancrage pour
+        que ProfileBannerVideo (position: absolute, inset-0) couvre exactement
+        cette zone, jusqu'en bas de la section Rang, sans hauteur figée à la main.
+        `isolate` est indispensable : sans nouveau contexte d'empilement, le
+        `-z-10` de la vidéo remontait au-delà de ce wrapper et se retrouvait
+        derrière le fond de la page entière — visible une fraction de seconde
+        au premier paint, puis masqué.
+      */}
+      <div className="relative isolate">
+        <ProfileBannerVideo url={profile.banner_video_url} />
 
-      {/* ── Header ── */}
-      <header className="relative flex items-center justify-between px-5 pt-6 animate-fade-slide-up">
-        <Button variant="ghost" size="icon" aria-label="Retour" onClick={() => navigate(-1)}>
-          <ArrowLeft className="h-5 w-5" />
-        </Button>
-        <h1 className={cn('text-base font-bold', normalizeBadge(profile.badge) === 'PDG' && 'text-pdg-gold')}>
-          {profile.pseudo || 'Profil'}
-        </h1>
-        <div className="w-9" />
-      </header>
+        {/* ── Header ── */}
+        <header className="relative flex items-center justify-between px-5 pt-6 animate-fade-slide-up">
+          <Button variant="ghost" size="icon" aria-label="Retour" onClick={() => navigate(-1)}>
+            <ArrowLeft className="h-5 w-5" />
+          </Button>
+          <h1 className={cn('text-base font-bold', normalizeBadge(profile.badge) === 'PDG' && 'text-pdg-gold')}>
+            {profile.pseudo || 'Profil'}
+          </h1>
+          <div className="w-9" />
+        </header>
 
-      {/* ── Identité ── */}
-      <section className="relative flex flex-col items-center px-5 pt-4 text-center animate-fade-slide-up delay-1">
+        {/* ── Identité ── */}
+        <section className="relative flex flex-col items-center px-5 pt-4 text-center animate-fade-slide-up delay-1">
         <div className="relative">
           <div className="rounded-full bg-gradient-primary p-[3px] shadow-elegant-sm">
             <Avatar className="h-28 w-28 border-[3px] border-background">
@@ -202,15 +205,6 @@ export default function UserProfile() {
               <AvatarFallback className="text-3xl font-bold">{profile.pseudo?.[0]?.toUpperCase() ?? '?'}</AvatarFallback>
             </Avatar>
           </div>
-          {displayStreak > 0 && (
-            <div className={cn(
-              'absolute -bottom-1 -right-1 flex items-center gap-0.5 rounded-full bg-background px-2 py-0.5 shadow-soft border border-border/60',
-              streakActive ? 'text-orange-400' : 'text-muted-foreground'
-            )}>
-              <Flame className={cn('h-3.5 w-3.5', streakActive && 'animate-flame')} />
-              <span className="text-xs font-bold">{displayStreak}</span>
-            </div>
-          )}
         </div>
 
         <h2 className={cn('mt-4 text-2xl font-extrabold tracking-tight', normalizeBadge(profile.badge) === 'PDG' && 'text-pdg-gold')}>
@@ -302,7 +296,8 @@ export default function UserProfile() {
             </div>
           </div>
         </section>
-      )}
+        )}
+      </div>
 
       {/* ── Contenu : onglets ── */}
       <section className="relative px-5 mt-6 animate-fade-slide-up delay-3">

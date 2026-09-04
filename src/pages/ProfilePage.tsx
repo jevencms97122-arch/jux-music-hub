@@ -8,7 +8,7 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import {
   Pencil, Sparkles, Trophy, Music2, Settings, PlusCircle, History,
-  Flame, Repeat2, QrCode, ChevronRight, Headphones, ListMusic,
+  Repeat2, QrCode, ChevronRight, Headphones, ListMusic,
   Mic2, Play, Bell, LogOut, Info, Heart, CalendarDays, Trash2, Download,
 } from 'lucide-react';
 import { useLazySection } from '@/hooks/useLazySection';
@@ -18,7 +18,7 @@ import { useEffect, useState } from 'react';
 import { getRankProgress, type RankProgress } from '@/lib/ranks';
 import RankBadge from '@/components/RankBadge';
 import ProfileBadge from '@/components/ProfileBadge';
-import { getUserStats } from '@/lib/streaks';
+import { getUserStats } from '@/lib/listenStats';
 import { pb } from '@/lib/pocketbase';
 import { usePlayer } from '@/contexts/PlayerContext';
 import SongCard from '@/components/SongCard';
@@ -38,6 +38,7 @@ import TabFade from '@/components/TabFade';
 import RequestPublisherRoleModal from '@/components/RequestPublisherRoleModal';
 import { normalizeBadge, canPublish } from '@/lib/badges';
 import { cn } from '@/lib/utils';
+import ProfileBannerVideo from '@/components/ProfileBannerVideo';
 
 
 type Tab = 'tracks' | 'reposts' | 'history';
@@ -53,7 +54,6 @@ export default function ProfilePage() {
   const [rank, setRank] = useState<RankProgress | null>(null);
   const [songs, setSongs] = useState<Song[]>([]);
   const [counts, setCounts] = useState({ followers: 0, following: 0 });
-  const [streak, setStreak] = useState(0);
   const [totalListens, setTotalListens] = useState(0);
   const [recentHistory, setRecentHistory] = useState<{ song: Song; listenedAt: string }[]>([]);
   const [repostedSongs, setRepostedSongs] = useState<Song[]>([]);
@@ -85,7 +85,6 @@ export default function ProfilePage() {
 
     getRankProgress(user.id).then(setRank);
     getUserStats(user.id).then((s: any) => {
-      setStreak(s?.current_streak ?? 0);
       setTotalListens(s?.total_listens ?? 0);
     });
 
@@ -202,8 +201,18 @@ export default function ProfilePage() {
 
   return (
     <div className="relative min-h-screen pb-32">
-      {/* Halo héro en haut de page */}
-      <div className="pointer-events-none absolute inset-x-0 top-0 h-72 bg-gradient-hero" />
+      {/*
+        Header + identité + rang partagent un même fond : le halo par défaut, ou la
+        vidéo/GIF personnalisée. `relative` sert d'ancrage pour que ProfileBannerVideo
+        (position: absolute, inset-0) couvre exactement cette zone, jusqu'en bas de
+        la section Rang, sans hauteur figée à la main.
+        `isolate` est indispensable : sans nouveau contexte d'empilement, le
+        `-z-10` de la vidéo remontait au-delà de ce wrapper et se retrouvait
+        derrière le fond de la page entière — visible une fraction de seconde
+        au premier paint, puis masqué.
+      */}
+      <div className="relative isolate">
+      <ProfileBannerVideo url={profile?.banner_video_url} />
 
       {/* ── Header / Identité ── */}
       <header className="relative px-5 pt-6 animate-fade-slide-up">
@@ -236,12 +245,6 @@ export default function ProfilePage() {
                 <AvatarFallback className="text-2xl font-bold">{profile?.pseudo?.[0]?.toUpperCase() ?? '?'}</AvatarFallback>
               </Avatar>
             </div>
-            {streak >= 3 && (
-              <div className="absolute -bottom-1 -right-1 flex items-center gap-0.5 rounded-full bg-background px-2 py-0.5 shadow-soft border border-border/60">
-                <Flame className="h-3.5 w-3.5 text-orange-400 animate-flame" />
-                <span className="text-xs font-bold text-orange-400">{streak}</span>
-              </div>
-            )}
           </div>
 
           {/* Stats */}
@@ -297,25 +300,14 @@ export default function ProfilePage() {
 
       {/* ── Stats d'écoute + Wrapped ── */}
       <section className="relative px-5 mt-5 animate-fade-slide-up delay-2">
-        {(streak > 0 || totalListens > 0) && (
-          <div className="mb-3 grid grid-cols-2 gap-3">
-            <div className="flex items-center gap-3 rounded-2xl border border-border/50 bg-card/60 p-3.5">
-              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-orange-400/15">
-                <Flame className="h-5 w-5 text-orange-400 animate-flame" />
-              </div>
-              <div className="min-w-0">
-                <div className="text-lg font-extrabold leading-none">{streak}</div>
-                <div className="mt-1 truncate text-[11px] text-muted-foreground">Jours de série</div>
-              </div>
+        {totalListens > 0 && (
+          <div className="mb-3 flex items-center gap-3 rounded-2xl border border-border/50 bg-card/60 p-3.5">
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary/15">
+              <Headphones className="h-5 w-5 text-primary" />
             </div>
-            <div className="flex items-center gap-3 rounded-2xl border border-border/50 bg-card/60 p-3.5">
-              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary/15">
-                <Headphones className="h-5 w-5 text-primary" />
-              </div>
-              <div className="min-w-0">
-                <div className="text-lg font-extrabold leading-none">{totalListens}</div>
-                <div className="mt-1 truncate text-[11px] text-muted-foreground">Écoutes totales</div>
-              </div>
+            <div className="min-w-0">
+              <div className="text-lg font-extrabold leading-none">{totalListens}</div>
+              <div className="mt-1 truncate text-[11px] text-muted-foreground">Écoutes totales</div>
             </div>
           </div>
         )}
@@ -399,7 +391,8 @@ export default function ProfilePage() {
             <ChevronRight className="h-5 w-5 shrink-0 text-muted-foreground transition-transform group-hover:translate-x-0.5" />
           </button>
         </section>
-      )}
+        )}
+      </div>
 
       {/* ── Artistes favoris (dérivés de l'historique d'écoute réel) ── */}
       {!offline && (

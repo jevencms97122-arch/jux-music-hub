@@ -48,7 +48,19 @@ export default function ProfileBannerVideo({ url, className }: Props) {
       <div className="absolute inset-0 h-full w-full bg-gradient-hero" />
 
       {show && (
-        <div className={cn('absolute inset-0 transition-opacity duration-700 ease-out', loaded ? 'opacity-100' : 'opacity-0')}>
+        <div
+          className={cn('absolute inset-0 transition-opacity duration-700 ease-out', loaded ? 'opacity-100' : 'opacity-0')}
+          // Fondu vers la transparence en bas, PAS vers une couleur fixe : le thème
+          // choisi par l'utilisateur peut être n'importe quelle couleur/dégradé
+          // (`to-background` visait une valeur CSS figée, quasi noire — sur un thème
+          // clair ou coloré ça produisait exactement la bande tranchée du screenshot).
+          // En fondant tout le bloc en alpha, c'est le vrai fond de la page qui
+          // apparaît progressivement dessous, donc toujours raccord, sans deviner sa couleur.
+          style={{
+            maskImage: 'linear-gradient(to bottom, black 0%, black 65%, transparent 100%)',
+            WebkitMaskImage: 'linear-gradient(to bottom, black 0%, black 65%, transparent 100%)',
+          }}
+        >
           {mode === 'video' ? (
             <video
               key={`${url}-blur`}
@@ -112,7 +124,21 @@ export default function ProfileBannerVideo({ url, className }: Props) {
           </div>
 
           <div className="absolute inset-0 bg-black/25" />
-          <div className="absolute inset-0 bg-gradient-to-b from-transparent to-background" />
+
+          {/* Flou progressif sur le dernier tiers — un seul calque avec un masque
+              suffit : là où le masque est transparent on voit le média net en
+              dessous, là où il est opaque on voit sa version floutée, et le masque
+              étant lui-même en dégradé, la transition est progressive. Combiné au
+              fondu en alpha du bloc entier (juste au-dessus), la bannière se
+              dissout dans le fond réel de la page, quel que soit le thème actif. */}
+          <div
+            className="absolute inset-x-0 bottom-0 h-2/5 backdrop-blur-xl"
+            style={{
+              maskImage: 'linear-gradient(to bottom, transparent, black 85%)',
+              WebkitMaskImage: 'linear-gradient(to bottom, transparent, black 85%)',
+              WebkitBackdropFilter: 'blur(24px)',
+            }}
+          />
         </div>
       )}
     </div>

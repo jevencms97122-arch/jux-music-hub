@@ -87,7 +87,6 @@ fn apply(client: &mut DiscordIpcClient, data: &PresenceData) -> Result<(), Box<d
 
     let assets = activity::Assets::new()
         .large_image(large_image)
-        .large_text("Jux Music")
         .small_image(small_image)
         .small_text(small_text);
 

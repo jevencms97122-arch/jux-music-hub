@@ -25,6 +25,7 @@ import ShareToFriendSheet from './ShareToFriendSheet';
 import { detectPlatform } from '@/lib/platform';
 import { cn } from '@/lib/utils';
 import ThemeBackgroundLayer from '@/components/ThemeBackgroundLayer';
+import SynchronizedVideoPlayer from '@/components/SynchronizedVideoPlayer';
 import SessionParticipantsSheet from '@/components/SessionParticipantsSheet';
 
 const isAndroidNative = () => detectPlatform() === 'android-app';
@@ -262,7 +263,23 @@ export default function PlayerPage() {
       {/* Backdrop — cover floutée ou fond du thème (animé/Ultra) sans cover. */}
       <div className="absolute -inset-[10%] will-change-transform">
         <AnimatePresence>
-          {coverUrl ? (
+          {currentSong.video_url ? (
+            <motion.div
+              key={currentSong.id + '-video-bg'}
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.6, ease: 'easeInOut' }}
+              className="absolute inset-0"
+            >
+              <SynchronizedVideoPlayer
+                song={currentSong}
+                isPlaying={isPlaying}
+                currentTime={currentTime}
+                asBackground
+              />
+            </motion.div>
+          ) : coverUrl ? (
             <motion.div
               key={currentSong.id + '-bg'}
               initial={{ opacity: 0 }}
@@ -868,15 +885,6 @@ export default function PlayerPage() {
                 <span className="ml-auto text-xs font-bold text-primary">Fin du morceau</span>
               )}
             </button>
-            {currentSong.video_url && (
-              <button
-                onClick={() => { setShowMenu(false); navigate(`/video/${currentSong.id}`); }}
-                className="flex w-full items-center gap-4 rounded-2xl px-4 py-3.5 hover:bg-white/[0.06] transition-colors"
-              >
-                <Music2 className="h-5 w-5 text-muted-foreground" />
-                <span className="text-sm font-medium">Voir la vidéo</span>
-              </button>
-            )}
           </div>
         </SheetContent>
       </Sheet>

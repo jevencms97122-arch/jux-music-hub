@@ -79,6 +79,23 @@ export default function SynchronizedVideoPlayer({
     }
   }, [isPlaying, youtubeId, timedOut]);
 
+  // App minimisée/masquée : coupe la vidéo (économie CPU/GPU/batterie, purement
+  // décorative) sans toucher à l'audio, qui doit continuer normalement. On la
+  // relance et resynchronise sur currentTime quand l'app redevient visible.
+  useEffect(() => {
+    if (!youtubeId || timedOut) return;
+    const handleVisibilityChange = () => {
+      if (document.hidden) {
+        sendCommand('pauseVideo');
+      } else if (isPlaying) {
+        sendCommand('seekTo', [currentTime, true]);
+        sendCommand('playVideo');
+      }
+    };
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
+  }, [youtubeId, timedOut, isPlaying, currentTime]);
+
   if (!youtubeId) {
     // Fallback cover si background mode
     if (asBackground) {
@@ -134,9 +151,9 @@ export default function SynchronizedVideoPlayer({
           onLoad={handleLoad}
           allow="autoplay; encrypted-media; gyroscope; picture-in-picture"
           referrerPolicy="strict-origin-when-cross-origin"
-          style={{ pointerEvents: 'none', opacity: 0.35 }}
+          style={{ pointerEvents: 'none', opacity: 0.65 }}
         />
-          <div className="absolute inset-0 bg-black/35" />
+          <div className="absolute inset-0 bg-black/15" />
       </div>
     );
   }

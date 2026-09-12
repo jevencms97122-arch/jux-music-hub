@@ -7,9 +7,10 @@ import { useSeo } from '@/lib/useSeo';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, ArrowRight, Upload as UploadIcon, Music2, X, User, ShieldAlert, Play, Pause, FolderOpen, Zap, PenLine, Image as ImageIcon, Search, HardDrive, Sparkles } from 'lucide-react';
+import { ArrowLeft, ArrowRight, Upload as UploadIcon, Music2, X, User, ShieldAlert, Play, Pause, FolderOpen, Zap, PenLine, Image as ImageIcon, Search, HardDrive, Sparkles, Youtube } from 'lucide-react';
 import { toast } from 'sonner';
 import { MUSIC_GENRES } from '@/types/music';
+import { extractYoutubeId } from '@/lib/storage';
 import { computeAudioFingerprint } from '@/lib/audioFingerprint';
 import { canPublish } from '@/lib/badges';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
@@ -50,6 +51,8 @@ export default function Upload() {
   const [coverFile, setCoverFile] = useState<File | null>(null);
   const [coverPreview, setCoverPreview] = useState<string | null>(null);
   const [coverSearchOpen, setCoverSearchOpen] = useState(false);
+  const [youtubeUrl, setYoutubeUrl] = useState('');
+  const [youtubeError, setYoutubeError] = useState('');
   const coverInputRef = useRef<HTMLInputElement>(null);
   const [step, setStep] = useState(0);
   const [uploading, setUploading] = useState(false);
@@ -239,6 +242,11 @@ export default function Upload() {
 
   const submit = async () => {
     if (!title.trim() || artists.length === 0) { toast.error('Titre et au moins un artiste requis'); return; }
+    if (youtubeUrl.trim() && !extractYoutubeId(youtubeUrl.trim())) {
+      setYoutubeError('Lien YouTube invalide');
+      toast.error('Lien YouTube invalide');
+      return;
+    }
 
     if (offline) {
       if (!audioFile) { toast.error('Ajoute un fichier audio'); return; }
@@ -271,6 +279,7 @@ export default function Upload() {
       formData.append('author', artists.map(a => a.name).join(', '));
       formData.append('uploaded_by', user.id);
       if (genre) formData.append('genre', genre);
+      if (youtubeUrl.trim()) formData.append('video_url', youtubeUrl.trim());
       formData.append('audio', audioFile);
       setAnalyzing(true);
       try {
@@ -587,6 +596,26 @@ export default function Upload() {
                 author={artists.map((a) => a.name).join(', ')}
                 onSelect={setCoverFile}
               />
+
+              <div className="mt-4">
+                <label htmlFor="youtube" className="text-sm font-medium flex items-center gap-2">
+                  <Youtube className="h-4 w-4 text-red-500" />
+                  Vidéo YouTube (optionnel)
+                </label>
+                <Input
+                  id="youtube"
+                  type="url"
+                  value={youtubeUrl}
+                  onChange={(e) => { setYoutubeUrl(e.target.value); setYoutubeError(''); }}
+                  placeholder="https://www.youtube.com/watch?v=..."
+                />
+                {youtubeError && (
+                  <p className="mt-1 text-xs text-destructive">{youtubeError}</p>
+                )}
+                <p className="mt-1 text-xs text-muted-foreground">
+                  La vidéo sera lue en fond du lecteur, en synchronisation avec la musique (son coupé)
+                </p>
+              </div>
             </div>
           </div>
         </div>

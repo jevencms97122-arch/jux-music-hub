@@ -6,6 +6,9 @@ import { Button } from '@/components/ui/button';
 
 type Phase = 'idle' | 'installing' | 'error';
 
+/** Entre deux vérifications automatiques, tant qu'aucune mise à jour n'est trouvée. */
+const CHECK_INTERVAL_MS = 5 * 60 * 1000;
+
 /** Équivalent Android de TauriUpdateManager : vérifie au lancement, bannière discrète
  * si une mise à jour est dispo, déroulé natif (DownloadManager + écran d'install
  * système) au clic — voir JuxMediaBridge.kt. */
@@ -17,14 +20,29 @@ export default function AndroidUpdateManager() {
 
   useEffect(() => {
     if (getDetectedPlatform() !== 'android-app') return;
-    (async () => {
+
+    let cancelled = false;
+    let timer: ReturnType<typeof setInterval> | undefined;
+
+    const runCheck = async () => {
       try {
         const result = await checkAndroidUpdate();
-        if (result) setUpdate(result);
+        if (cancelled || !result) return;
+        setUpdate(result);
+        // Une mise à jour est déjà proposée à l'utilisateur : inutile de continuer
+        // à sonder en arrière-plan tant qu'elle n'est pas traitée.
+        if (timer) clearInterval(timer);
       } catch (e) {
         console.error('[AndroidUpdateManager] checkAndroidUpdate failed:', e);
       }
-    })();
+    };
+
+    runCheck();
+    // Nouvelle vérification automatique toutes les 5 minutes tant qu'aucune
+    // mise à jour n'a été trouvée.
+    timer = setInterval(runCheck, CHECK_INTERVAL_MS);
+
+    return () => { cancelled = true; if (timer) clearInterval(timer); };
   }, []);
 
   const runUpdate = useCallback(() => {

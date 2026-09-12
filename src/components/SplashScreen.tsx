@@ -220,12 +220,12 @@ export default function SplashScreen({ onComplete, onDismiss }: Props) {
   const mountedAt = useRef(Date.now());
   const [loadingAnim] = useState(() => pickLoadingAnimation());
 
-  // Splash : 2800ms visible → fade 800ms → onComplete à 3600ms
-  // onDismiss à 4400ms : laisse le widget finir ses 4s même si le fetch est lent
+  // Splash : 4000ms visible → fade 800ms → onComplete à 4800ms
+  // onDismiss à 6600ms : laisse le widget finir ses 4s même si le fetch est lent
   useEffect(() => {
-    const hide    = setTimeout(() => setSplashVisible(false), 2800);
-    const done    = setTimeout(() => onComplete(),            3600);
-    const dismiss = setTimeout(() => onDismiss(),             5400);
+    const hide    = setTimeout(() => setSplashVisible(false), 4000);
+    const done    = setTimeout(() => onComplete(),            4800);
+    const dismiss = setTimeout(() => onDismiss(),             6600);
     return () => {
       clearTimeout(hide);
       clearTimeout(done);
@@ -344,14 +344,24 @@ export default function SplashScreen({ onComplete, onDismiss }: Props) {
             exit={{ opacity: 0 }}
             transition={{ duration: 0.8, ease: 'easeInOut' }}
           >
-            <motion.img
-              src="/jux-icon-511.png"
-              alt="Nexora-Music"
-              className="w-48 h-48 rounded-2xl shadow-2xl"
-              initial={{ opacity: 0, scale: 0.85, y: -16 }}
-              animate={{ opacity: 1, scale: 1, y: 0 }}
+            <motion.div
+              className="w-48 h-48 rounded-2xl shadow-2xl overflow-hidden"
+              initial={{ opacity: 0, y: -16 }}
+              animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.6, ease: 'easeOut' }}
-            />
+            >
+              <motion.video
+                src="/MiniMax_H3_00004_.mp4"
+                autoPlay
+                muted
+                loop
+                playsInline
+                className="w-full h-full object-cover"
+                initial={{ scale: 1 }}
+                animate={{ scale: 1.3 }}
+                transition={{ duration: 4, ease: 'linear' }}
+              />
+            </motion.div>
             <motion.h1
               className="text-4xl font-bold tracking-widest text-foreground"
               initial={{ opacity: 0, y: 12 }}

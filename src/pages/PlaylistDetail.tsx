@@ -8,12 +8,13 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
-import { ArrowLeft, Play, Heart, Trash2, ListMusic, Users, UserPlus, X, Settings2, Globe, Lock, Music2 } from 'lucide-react';
+import { ArrowLeft, Play, Heart, Eye, Trash2, ListMusic, Users, UserPlus, X, Settings2, Globe, Lock, Music2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import type { Song, Playlist } from '@/types/music';
 import { recordToSong } from '@/lib/pbUtils';
 import CachedImage from '@/components/CachedImage';
+import { recordPlaylistView, recordPlaylistPlay } from '@/lib/playlistEngagement';
 
 const fmtDuration = (s: number) => {
   if (!s || s <= 0) return '';
@@ -49,6 +50,10 @@ export default function PlaylistDetail() {
       try {
         const p = await pb.collection('playlists').getOne(id);
         setPlaylist({ id: p.id, title: p.title, description: p.description, is_public: p.is_public, owner_id: p.owner_id, view_count: p.view_count, play_count: p.play_count, likes_count: p.likes_count, thumbnail_mode: p.thumbnail_mode, created_at: p.created, updated_at: p.updated } as Playlist);
+
+        // Une vue par personne, jamais recomptée sur ses visites suivantes
+        // (voir playlistEngagement.ts) — inutile d'attendre le résultat.
+        if (user) recordPlaylistView(id, user.id);
 
         // Fetch owner profile
         const ownerRes = await pb.collection('profiles').getList(1, 1, { filter: `user_id = "${p.owner_id}"`, requestKey: null }).catch(() => ({ items: [] as any[] }));
@@ -293,8 +298,12 @@ export default function PlaylistDetail() {
             {songs.length} {songs.length === 1 ? 'titre' : 'titres'}
           </span>
           <span className="flex items-center gap-1 rounded-full bg-secondary px-2.5 py-1 text-[11px] font-semibold text-muted-foreground">
-            <Heart className="h-3 w-3" />
-            {playlist.likes_count ?? 0}
+            <Play className="h-3 w-3" />
+            {playlist.play_count ?? 0}
+          </span>
+          <span className="flex items-center gap-1 rounded-full bg-secondary px-2.5 py-1 text-[11px] font-semibold text-muted-foreground">
+            <Eye className="h-3 w-3" />
+            {playlist.view_count ?? 0}
           </span>
         </div>
 
@@ -318,7 +327,10 @@ export default function PlaylistDetail() {
         {songs.length > 0 && (
           <Button
             className="mt-5 w-full rounded-xl bg-gradient-primary font-semibold shadow-elegant-sm"
-            onClick={() => playSongFromList(songs[0], songs)}
+            onClick={() => {
+              playSongFromList(songs[0], songs);
+              if (user && id) recordPlaylistPlay(id, user.id);
+            }}
           >
             <Play className="mr-2 h-4 w-4 fill-primary-foreground" />Lecture
           </Button>

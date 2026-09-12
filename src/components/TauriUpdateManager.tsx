@@ -10,6 +10,9 @@ import { Button } from '@/components/ui/button';
 
 type Phase = 'idle' | 'downloading' | 'installing' | 'error';
 
+/** Entre deux vérifications automatiques, tant qu'aucune mise à jour n'est trouvée. */
+const CHECK_INTERVAL_MS = 5 * 60 * 1000;
+
 /** Gère la mise à jour desktop (Tauri) : vérifie au démarrage, force ou notifie selon `forced`. */
 export default function TauriUpdateManager() {
   const [update, setUpdate] = useState<Update | null>(null);
@@ -22,18 +25,33 @@ export default function TauriUpdateManager() {
   useEffect(() => {
     // tauri-plugin-updater ne supporte pas Android — géré séparément par AndroidUpdateManager
     if (!isTauri() || getDetectedPlatform() === 'android-app') return;
-    (async () => {
+
+    let cancelled = false;
+    let timer: ReturnType<typeof setInterval> | undefined;
+
+    const runCheck = async () => {
       try {
         const result = await check();
-        if (!result) return;
+        if (cancelled || !result) return;
         setUpdate(result);
         const raw = result.rawJson as Record<string, unknown> | undefined;
         setForced(raw?.forced === true);
+        // Une mise à jour est déjà proposée à l'utilisateur : inutile de continuer
+        // à sonder en arrière-plan tant qu'elle n'est pas traitée.
+        if (timer) clearInterval(timer);
       } catch (e) {
         const msg = e instanceof Error ? e.message : String(e);
         console.error('[TauriUpdateManager] check() failed:', msg, e);
       }
-    })();
+    };
+
+    runCheck();
+    // Nouvelle vérification automatique toutes les 5 minutes tant qu'aucune
+    // mise à jour n'a été trouvée — sans ça, une app laissée ouverte des heures
+    // ne redemande jamais et l'utilisateur ne voit la maj qu'au prochain lancement.
+    timer = setInterval(runCheck, CHECK_INTERVAL_MS);
+
+    return () => { cancelled = true; if (timer) clearInterval(timer); };
   }, []);
 
   const runUpdate = useCallback(async () => {

@@ -47,6 +47,15 @@ export default function MiniPlayer() {
     ? { top: 'calc(env(safe-area-inset-top, 0px) + 12px)' }
     : { bottom: 'calc(env(safe-area-inset-bottom, 0px) + 76px)' };
 
+  // Réarmé dès le DÉBUT du drag (pas seulement à la fin) : sur souris, le clic
+  // natif qui suit le relâchement peut se déclencher avant que onDragEnd n'ait
+  // eu la main, ce qui laissait passer l'ouverture du lecteur après un swipe.
+  // En posant le timestamp dès que Framer Motion détecte un mouvement, le
+  // garde-fou est actif avant qu'un clic ne puisse jamais se produire.
+  const handleDragStart = () => {
+    draggedAt.current = Date.now();
+  };
+
   const handleDragEnd = (_: unknown, info: PanInfo) => {
     draggedAt.current = Date.now();
     const { offset, velocity } = info;
@@ -103,6 +112,7 @@ export default function MiniPlayer() {
             dragSnapToOrigin
             dragElastic={{ top: 0.5, bottom: 0.5, left: 0.85, right: 0.85 }}
             dragConstraints={{ left: 0, right: 0, top: 0, bottom: 0 }}
+            onDragStart={handleDragStart}
             onDragEnd={handleDragEnd}
             className="glass fixed left-3 right-3 z-40 cursor-grab overflow-hidden rounded-2xl active:cursor-grabbing"
             style={offsets}

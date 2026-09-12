@@ -5,9 +5,9 @@ import { songCoverUrl, avatarUrl } from '@/lib/storage';
 import SongCard from '@/components/SongCard';
 import CachedImage from '@/components/CachedImage';
 import StoryCircles from '@/components/StoryCircles';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import {
-  Play, Heart, Clock, Sparkles,
+  Play, Clock, Sparkles,
   ListMusic, Globe, ArrowRight, Music2, Upload, Bell, Tag, ChevronDown, ScrollText, Mic2, Car, History, TrendingUp, Radio
 } from 'lucide-react';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
@@ -30,6 +30,8 @@ import { useSeo } from '@/lib/useSeo';
 import { cn } from '@/lib/utils';
 import { recordToSong } from '@/lib/pbUtils';
 import { toast } from 'sonner';
+import { fetchPlaylistCovers } from '@/lib/playlistCovers';
+import PlaylistCoverMosaic from '@/components/PlaylistCoverMosaic';
 
 // Shuffle déterministe : même ordre toute la journée, change chaque jour
 function seededShuffle<T>(arr: T[], seed: number): T[] {
@@ -102,6 +104,7 @@ export default function Home() {
   const { offline } = useOfflineMode();
   const { playSongFromList, activeSession, isSessionGuest, joinSession, openPlayer } = usePlayer();
   const navigate = useNavigate();
+  const location = useLocation();
   const [songs, setSongs] = useState<Song[]>([]);
   const [trending, setTrending] = useState<Song[]>([]);
   const [dailyMix, setDailyMix] = useState<Song[]>([]);
@@ -112,6 +115,7 @@ export default function Home() {
   const [publisherRoleModalOpen, setPublisherRoleModalOpen] = useState(false);
   const [publicPlaylists, setPublicPlaylists] = useState<Playlist[]>([]);
   const [playlistsLoading, setPlaylistsLoading] = useState(true);
+  const [playlistCovers, setPlaylistCovers] = useState<Record<string, string[]>>({});
   const [unreadCount, setUnreadCount] = useState(0);
   const [selectedGenre, setSelectedGenre] = useState<string | null>(null);
   const [discoverSongs, setDiscoverSongs] = useState<Song[]>([]);
@@ -279,28 +283,47 @@ export default function Home() {
     if (offline) { setPlaylistsLoading(false); return; }
     if (!playlistsLazy.visible) return;
     (async () => {
-      const result = await pb.collection('playlists').getList(1, 30, {
-        filter: 'is_public = true',
-        sort: '-likes_count',
-        requestKey: null,
-      });
-      const all = result.items.map((r: any) => ({
-        id: r.id,
-        title: r.title,
-        description: r.description,
-        is_public: r.is_public,
-        owner_id: r.owner_id,
-        view_count: r.view_count,
-        play_count: r.play_count,
-        likes_count: r.likes_count,
-        thumbnail_mode: r.thumbnail_mode,
-        created_at: r.created,
-        updated_at: r.updated,
-      })) as Playlist[];
-      setPublicPlaylists(seededShuffle(all, daySeed()).slice(0, 10));
-      setPlaylistsLoading(false);
+      try {
+        const result = await pb.collection('playlists').getList(1, 30, {
+          filter: 'is_public = true',
+          sort: '-likes_count',
+          requestKey: null,
+        });
+        const all = result.items.map((r: any) => ({
+          id: r.id,
+          title: r.title,
+          description: r.description,
+          is_public: r.is_public,
+          owner_id: r.owner_id,
+          view_count: r.view_count,
+          play_count: r.play_count,
+          likes_count: r.likes_count,
+          thumbnail_mode: r.thumbnail_mode,
+          created_at: r.created,
+          updated_at: r.updated,
+        })) as Playlist[];
+        const shown = seededShuffle(all, daySeed()).slice(0, 10);
+        setPublicPlaylists(shown);
+        fetchPlaylistCovers(shown.map((p) => p.id))
+          .then(setPlaylistCovers)
+          .catch(() => {}); // pas grave si ça échoue — l'icône générique reste en repli
+      } catch (err) {
+        console.error('Chargement des playlists publiques échoué', err);
+      } finally {
+        setPlaylistsLoading(false);
+      }
     })();
-  }, [offline]);
+    // `playlistsLazy.visible` doit être dans les dépendances : sans lui, cet effet
+    // ne se relance jamais quand la section entre enfin dans le viewport (il ne
+    // s'exécutait qu'une fois au montage, voyait `visible = false` et s'arrêtait
+    // net — la requête ne partait donc jamais, d'où le squelette de chargement
+    // qui restait figé indéfiniment).
+    // `location.key` change à chaque fois qu'on arrive sur cette page (même en
+    // revenant sur le même chemin) — sans lui, si Home reste monté en arrière-plan
+    // pendant qu'on visite une autre page, cet effet ne se relance jamais au retour
+    // et les compteurs d'écoutes/vues affichés restent figés sur leur valeur du
+    // tout premier chargement.
+  }, [offline, playlistsLazy.visible, location.key]);
 
   useEffect(() => {
     if (!user || offline) { setDailyMixLoading(false); return; }
@@ -997,14 +1020,18 @@ export default function Home() {
                 onClick={() => navigate(`/playlist/${p.id}`)}
                 className="group flex w-44 flex-shrink-0 snap-start items-center gap-3 rounded-xl border border-white/[0.06] bg-white/[0.04] p-2.5 text-left backdrop-blur-md transition-[background-color,border-color,transform] duration-150 ease-out hover:border-white/10 hover:bg-white/[0.07] active:scale-[0.98]"
               >
-                <div className="flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-lg bg-gradient-primary shadow-elegant-sm">
-                  <ListMusic className="h-5 w-5 text-primary-foreground" />
+                <div className="flex h-12 w-12 flex-shrink-0 items-center justify-center overflow-hidden rounded-lg bg-gradient-primary shadow-elegant-sm">
+                  {playlistCovers[p.id]?.length ? (
+                    <PlaylistCoverMosaic covers={playlistCovers[p.id]} />
+                  ) : (
+                    <ListMusic className="h-5 w-5 text-primary-foreground" />
+                  )}
                 </div>
                 <div className="min-w-0 flex-1">
                   <p className="truncate text-sm font-semibold text-foreground">{p.title}</p>
                   <p className="flex items-center gap-1 text-xs text-muted-foreground">
-                    <Heart className="h-2.5 w-2.5" />
-                    {p.likes_count}
+                    <Play className="h-2.5 w-2.5" />
+                    {p.play_count ?? 0}
                   </p>
                 </div>
               </button>

@@ -294,7 +294,7 @@ function PlaylistGrid({ playlists, onOpen, showVisibility, coversMap }: { playli
                   <span aria-hidden>·</span>
                 </>
               )}
-              <Heart className="h-2.5 w-2.5 shrink-0" />{p.likes_count ?? 0}
+              <Play className="h-2.5 w-2.5 shrink-0" />{p.play_count ?? 0}
             </p>
           </div>
         </button>

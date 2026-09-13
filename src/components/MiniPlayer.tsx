@@ -22,7 +22,7 @@ const MOVE_VELOCITY = 450;
 const SPRING = { type: 'spring' as const, stiffness: 420, damping: 36, mass: 0.8 };
 
 export default function MiniPlayer() {
-  const { currentSong, isPlaying, isBuffering, togglePlay, next, openPlayer, currentTime, duration } = usePlayer();
+  const { currentSong, isPlaying, isBuffering, isCrossfading, togglePlay, next, openPlayer, currentTime, duration } = usePlayer();
   const [volumeOpen, setVolumeOpen] = useState(false);
 
   const [anchor, setAnchor] = useState<Anchor>(() =>
@@ -178,8 +178,9 @@ export default function MiniPlayer() {
                 </button>
                 <button
                   onClick={guardClick(togglePlay)}
-                  className="rounded-xl bg-gradient-primary p-2.5 text-primary-foreground shadow-elegant-sm hover:shadow-glow active:scale-95"
-                  aria-label={isBuffering ? 'Chargement' : isPlaying ? 'Pause' : 'Play'}
+                  disabled={isCrossfading}
+                  className="rounded-xl bg-gradient-primary p-2.5 text-primary-foreground shadow-elegant-sm hover:shadow-glow active:scale-95 disabled:opacity-40 disabled:grayscale disabled:pointer-events-none"
+                  aria-label={isCrossfading ? 'Fondu enchaîné en cours' : isBuffering ? 'Chargement' : isPlaying ? 'Pause' : 'Play'}
                 >
                   {isBuffering
                     ? <div className="h-4.5 w-4.5 rounded-full border-2 border-primary-foreground/30 border-t-primary-foreground animate-spin" />
@@ -189,7 +190,8 @@ export default function MiniPlayer() {
                 </button>
                 <button
                   onClick={guardClick(next)}
-                  className="rounded-xl p-2 text-muted-foreground hover:text-foreground hover:bg-white/5"
+                  disabled={isCrossfading}
+                  className="rounded-xl p-2 text-muted-foreground hover:text-foreground hover:bg-white/5 disabled:opacity-40 disabled:grayscale disabled:pointer-events-none"
                   aria-label="Suivant"
                 >
                   <SkipForward className="h-4.5 w-4.5" />

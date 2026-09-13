@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from '@/components/ui/sheet';
 import { Switch } from '@/components/ui/switch';
 import { useAuth } from '@/contexts/AuthContext';
@@ -40,11 +40,34 @@ export default function SettingsSheet({ trigger }: { trigger: React.ReactNode })
   const { enabled: performanceMode, setEnabled: setPerformanceMode } = usePerformanceMode();
   const { enabled: vrMode, setEnabled: setVrMode } = useVRMode();
   const { currentTheme } = useTheme();
-  const { crossfadeSeconds, transitionMode, currentEqPreset, permanentSessionEnabled, setPermanentSessionEnabled } = usePlayer();
+  const {
+    crossfadeSeconds, setCrossfadeSeconds, transitionMode, setTransitionMode,
+    manualCrossfadeSeconds, setManualCrossfadeSeconds, manualTransitionMode, setManualTransitionMode,
+    currentEqPreset, permanentSessionEnabled, setPermanentSessionEnabled,
+  } = usePlayer();
   const [showEq, setShowEq] = useState(false);
   const currentCrossfadeLabel = crossfadeSeconds > 0
     ? (TRANSITION_MODES.find((m) => m.value === transitionMode)?.label ?? 'Linear')
     : 'Aucun';
+  const currentManualCrossfadeLabel = manualCrossfadeSeconds > 0
+    ? (TRANSITION_MODES.find((m) => m.value === manualTransitionMode)?.label ?? 'Linear')
+    : 'Aucun';
+  const crossfadeEnabled = crossfadeSeconds > 0;
+  const manualCrossfadeEnabled = manualCrossfadeSeconds > 0;
+  const lastCrossfadeSecondsRef = useRef(crossfadeSeconds > 0 ? crossfadeSeconds : 3);
+  useEffect(() => {
+    if (crossfadeSeconds > 0) lastCrossfadeSecondsRef.current = crossfadeSeconds;
+  }, [crossfadeSeconds]);
+  const handleCrossfadeToggle = (v: boolean) => {
+    setCrossfadeSeconds(v ? lastCrossfadeSecondsRef.current : 0);
+  };
+  const lastManualCrossfadeSecondsRef = useRef(manualCrossfadeSeconds > 0 ? manualCrossfadeSeconds : 3);
+  useEffect(() => {
+    if (manualCrossfadeSeconds > 0) lastManualCrossfadeSecondsRef.current = manualCrossfadeSeconds;
+  }, [manualCrossfadeSeconds]);
+  const handleManualCrossfadeToggle = (v: boolean) => {
+    setManualCrossfadeSeconds(v ? lastManualCrossfadeSecondsRef.current : 0);
+  };
   const [themesChanged, setThemesChanged] = useState(false);
   const [gamepadEnabled, setGamepadEnabledState] = useState(() => isGamepadEnabled());
   const [closeToTray, setCloseToTrayState] = useState(() => isCloseToTrayEnabled());
@@ -249,6 +272,74 @@ export default function SettingsSheet({ trigger }: { trigger: React.ReactNode })
                 />
               </div>
             )}
+          </div>
+
+          {/* Crossfade */}
+          <div className="rounded-2xl border border-white/[0.06] bg-card/60 backdrop-blur-md overflow-hidden">
+            <div className="flex items-center gap-3 px-4 py-3.5">
+              <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-cyan-500/15">
+                <AudioLines className="h-4.5 w-4.5 text-cyan-400" />
+              </div>
+              <div>
+                <p className="text-sm font-semibold">Crossfade</p>
+                <p className="text-xs text-muted-foreground">Fondu enchaîné au lieu d'une coupure nette</p>
+              </div>
+            </div>
+
+            {/* Fin de piste : transition automatique juste avant la fin naturelle du morceau */}
+            <div className="border-t border-border/40 px-4 py-3">
+              <div className="flex items-center justify-between">
+                <div className="pr-3">
+                  <p className="text-sm font-medium">Fin de piste</p>
+                  <p className="text-xs text-muted-foreground">Fondu automatique juste avant la fin d'un morceau</p>
+                </div>
+                <Switch checked={crossfadeEnabled} onCheckedChange={handleCrossfadeToggle} />
+              </div>
+              {crossfadeEnabled && (
+                <CrossfadeSelectorSheet
+                  crossfadeSeconds={crossfadeSeconds}
+                  setCrossfadeSeconds={setCrossfadeSeconds}
+                  transitionMode={transitionMode}
+                  setTransitionMode={setTransitionMode}
+                  title="Fondu en fin de piste"
+                  description="Choisis comment les morceaux s'enchaînent quand un morceau se termine naturellement."
+                  triggerLabel={
+                    <button className="mt-2 flex w-full items-center gap-3 rounded-xl bg-secondary/50 px-3 py-2.5 transition-[background-color,transform] duration-150 ease-out hover:bg-secondary/80 active:scale-[0.98]">
+                      <span className="text-sm font-medium flex-1 text-left">{currentCrossfadeLabel}</span>
+                      <ChevronRight className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+                    </button>
+                  }
+                />
+              )}
+            </div>
+
+            {/* Changement manuel : bouton/geste suivant-précédent avant la fin du morceau */}
+            <div className="border-t border-border/40 px-4 py-3">
+              <div className="flex items-center justify-between">
+                <div className="pr-3">
+                  <p className="text-sm font-medium">Changement manuel</p>
+                  <p className="text-xs text-muted-foreground">Fondu quand tu passes au morceau suivant ou précédent avant la fin</p>
+                </div>
+                <Switch checked={manualCrossfadeEnabled} onCheckedChange={handleManualCrossfadeToggle} />
+              </div>
+              {manualCrossfadeEnabled && (
+                <CrossfadeSelectorSheet
+                  crossfadeSeconds={manualCrossfadeSeconds}
+                  setCrossfadeSeconds={setManualCrossfadeSeconds}
+                  transitionMode={manualTransitionMode}
+                  setTransitionMode={setManualTransitionMode}
+                  allowAutoMix={false}
+                  title="Fondu au changement manuel"
+                  description="Choisis comment les morceaux s'enchaînent quand tu passes au suivant ou au précédent toi-même."
+                  triggerLabel={
+                    <button className="mt-2 flex w-full items-center gap-3 rounded-xl bg-secondary/50 px-3 py-2.5 transition-[background-color,transform] duration-150 ease-out hover:bg-secondary/80 active:scale-[0.98]">
+                      <span className="text-sm font-medium flex-1 text-left">{currentManualCrossfadeLabel}</span>
+                      <ChevronRight className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+                    </button>
+                  }
+                />
+              )}
+            </div>
           </div>
 
           {/* Session permanente — accessible sur toutes les plateformes */}
@@ -468,32 +559,6 @@ export default function SettingsSheet({ trigger }: { trigger: React.ReactNode })
               )}
             </div>
           )}
-
-          {/* Crossfade */}
-          <div className="rounded-2xl border border-white/[0.06] bg-card/60 backdrop-blur-md overflow-hidden">
-            <div className="flex items-center justify-between px-4 py-3.5">
-              <div className="flex items-center gap-3">
-                <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-cyan-500/15">
-                  <AudioLines className="h-4.5 w-4.5 text-cyan-400" />
-                </div>
-                <div>
-                  <p className="text-sm font-semibold">Crossfade</p>
-                  <p className="text-xs text-muted-foreground">Enchaînement entre les morceaux</p>
-                </div>
-              </div>
-            </div>
-
-            <div className="border-t border-border/40 px-4 pb-3.5 pt-2">
-              <CrossfadeSelectorSheet
-                triggerLabel={
-                  <button className="flex w-full items-center gap-3 rounded-xl bg-secondary/50 px-3 py-2.5 transition-[background-color,transform] duration-150 ease-out hover:bg-secondary/80 active:scale-[0.98]">
-                    <span className="text-sm font-medium flex-1 text-left">{currentCrossfadeLabel}</span>
-                    <ChevronRight className="h-4 w-4 text-muted-foreground flex-shrink-0" />
-                  </button>
-                }
-              />
-            </div>
-          </div>
 
           {/* Séparateur */}
           <div className="my-6 h-px bg-border/50" />

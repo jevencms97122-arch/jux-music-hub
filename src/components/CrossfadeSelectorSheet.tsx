@@ -8,27 +8,38 @@ import {
   SheetTrigger,
 } from '@/components/ui/sheet';
 import { Slider } from '@/components/ui/slider';
-import { usePlayer, TRANSITION_MODES } from '@/contexts/PlayerContext';
+import { TRANSITION_MODES, type TransitionMode } from '@/contexts/PlayerContext';
 import { cn } from '@/lib/utils';
 import { Check } from 'lucide-react';
 
-const DEFAULT_TRANSITION_MODE = 'linear';
-
-const VISIBLE_MODES = ['linear', 'equalPower', 'vinylStop', 'filterSweep', 'autoMix'];
-
-const OPTIONS = [
-  { value: 'none' as const, label: 'Aucun', description: 'Coupure nette, sans fondu entre les morceaux' },
-  ...TRANSITION_MODES.filter((m) => VISIBLE_MODES.includes(m.value)),
-];
+const DEFAULT_TRANSITION_MODE = 'filterSweep';
 
 export default function CrossfadeSelectorSheet({
   triggerLabel,
   triggerClassName,
+  crossfadeSeconds,
+  setCrossfadeSeconds,
+  transitionMode,
+  setTransitionMode,
+  title = 'Fondu enchaîné (crossfade)',
+  description = "Choisis comment les morceaux s'enchaînent.",
+  allowAutoMix = true,
 }: {
   triggerLabel: React.ReactNode;
   triggerClassName?: string;
+  crossfadeSeconds: number;
+  setCrossfadeSeconds: (s: number) => void;
+  transitionMode: TransitionMode;
+  setTransitionMode: (mode: TransitionMode) => void;
+  title?: string;
+  description?: string;
+  allowAutoMix?: boolean;
 }) {
-  const { crossfadeSeconds, setCrossfadeSeconds, transitionMode, setTransitionMode } = usePlayer();
+  const visibleModes = ['linear', 'equalPower', 'vinylStop', 'filterSweep', ...(allowAutoMix ? ['autoMix'] : [])];
+  const options = [
+    { value: 'none' as const, label: 'Aucun', description: 'Coupure nette, sans fondu entre les morceaux' },
+    ...TRANSITION_MODES.filter((m) => visibleModes.includes(m.value)),
+  ];
 
   const selectedValue = crossfadeSeconds > 0 ? transitionMode : 'none';
 
@@ -37,7 +48,7 @@ export default function CrossfadeSelectorSheet({
       setCrossfadeSeconds(0);
       return;
     }
-    setTransitionMode(value as typeof transitionMode);
+    setTransitionMode(value as TransitionMode);
     if (crossfadeSeconds <= 0) setCrossfadeSeconds(3);
   };
 
@@ -55,14 +66,12 @@ export default function CrossfadeSelectorSheet({
 
       <SheetContent side="left" className="w-full sm:max-w-md">
         <SheetHeader>
-          <SheetTitle>Fondu enchaîné (crossfade)</SheetTitle>
-          <SheetDescription>
-            Choisis comment les morceaux s'enchaînent.
-          </SheetDescription>
+          <SheetTitle>{title}</SheetTitle>
+          <SheetDescription>{description}</SheetDescription>
         </SheetHeader>
 
         <div className="mt-4 space-y-2">
-          {OPTIONS.map((opt) => {
+          {options.map((opt) => {
             const isActive = opt.value === selectedValue;
             const isDefault = opt.value === DEFAULT_TRANSITION_MODE;
 

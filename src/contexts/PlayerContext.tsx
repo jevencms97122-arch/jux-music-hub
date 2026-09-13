@@ -115,6 +115,8 @@ interface PlayerContextType {
   playbackRate: number;
   crossfadeSeconds: number;
   transitionMode: TransitionMode;
+  manualCrossfadeSeconds: number;
+  manualTransitionMode: TransitionMode;
   activeSession: ListenSessionRow | null;
   isSessionHost: boolean;
   isSessionGuest: boolean;
@@ -123,6 +125,7 @@ interface PlayerContextType {
   joinSession: (session: ListenSessionRow) => Promise<boolean>;
   connectionStatus: ConnectionStatus;
   isBuffering: boolean;
+  isCrossfading: boolean;
   refreshSession: () => Promise<void>;
   setActiveSession: (s: ListenSessionRow | null) => void;
   stopAudio: () => void;
@@ -148,6 +151,8 @@ interface PlayerContextType {
   setPlaybackRate: (r: number) => void;
   setCrossfadeSeconds: (s: number) => void;
   setTransitionMode: (mode: TransitionMode) => void;
+  setManualCrossfadeSeconds: (s: number) => void;
+  setManualTransitionMode: (mode: TransitionMode) => void;
   addToQueue: (song: Song) => void;
   startRadio: (seed: Song) => Promise<void>;
   signalVideoReady: () => void;
@@ -163,6 +168,8 @@ const PlayerContext = createContext<PlayerContextType | null>(null);
 
 const CROSSFADE_KEY = 'jux:crossfade';
 const TRANSITION_MODE_KEY = 'jux:transitionMode';
+const MANUAL_CROSSFADE_KEY = 'jux:manualCrossfade';
+const MANUAL_TRANSITION_MODE_KEY = 'jux:manualTransitionMode';
 
 export const TRANSITION_MODES: { value: TransitionMode; label: string; description: string }[] = [
   { value: 'linear', label: 'Linear', description: 'Transition linéaire classique' },
@@ -243,10 +250,24 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
   });
   const [transitionMode, setTransitionModeState] = useState<TransitionMode>(() => {
     const mode = localStorage.getItem(TRANSITION_MODE_KEY) as TransitionMode | null;
-    return (mode && TRANSITION_MODES.some(m => m.value === mode)) ? mode : 'linear';
+    return (mode && TRANSITION_MODES.some(m => m.value === mode)) ? mode : 'filterSweep';
+  });
+  // Crossfade manuel (bouton/geste suivant-précédent) : réglages indépendants du
+  // crossfade automatique de fin de piste ci-dessus — les deux se personnalisent
+  // séparément dans les paramètres.
+  const [manualCrossfadeSeconds, setManualCrossfadeSecondsState] = useState<number>(() => {
+    const v = parseFloat(localStorage.getItem(MANUAL_CROSSFADE_KEY) || '3');
+    return isNaN(v) ? 3 : Math.max(0, Math.min(12, v));
+  });
+  const [manualTransitionMode, setManualTransitionModeState] = useState<TransitionMode>(() => {
+    const mode = localStorage.getItem(MANUAL_TRANSITION_MODE_KEY) as TransitionMode | null;
+    return (mode && TRANSITION_MODES.some(m => m.value === mode)) ? mode : 'filterSweep';
   });
   const [connectionStatus, setConnectionStatus] = useState<ConnectionStatus>('stable');
   const [isBuffering, setIsBuffering] = useState(false);
+  // Reflet réactif de crossfadingRef, pour que l'UI puisse désactiver play/pause/
+  // suivant/précédent/changement de morceau pendant un fondu enchaîné en cours.
+  const [isCrossfading, setIsCrossfading] = useState(false);
   const [currentEqPreset, setCurrentEqPreset] = useState<string>(() => localStorage.getItem(EQ_STORAGE_KEY) ?? 'flat');
   const [sleepTimerMinutes, setSleepTimerMinutes] = useState<number | null>(null);
   const [sleepTimerRemaining, setSleepTimerRemaining] = useState<number | null>(null);
@@ -395,6 +416,8 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
   const stopAudioRef = useRef<() => void>(() => {});
   const crossfadeSecondsRef = useRef(crossfadeSeconds);
   const transitionModeRef = useRef(transitionMode);
+  const manualCrossfadeSecondsRef = useRef(manualCrossfadeSeconds);
+  const manualTransitionModeRef = useRef(manualTransitionMode);
   const repeatModeRef = useRef(repeatMode);
   const isSessionGuestRef = useRef(isSessionGuest);
   const queueRef = useRef(queue);
@@ -407,6 +430,8 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
   const sessionGuestRecordedRef = useRef<string | null>(null);
   useEffect(() => { crossfadeSecondsRef.current = crossfadeSeconds; }, [crossfadeSeconds]);
   useEffect(() => { transitionModeRef.current = transitionMode; }, [transitionMode]);
+  useEffect(() => { manualCrossfadeSecondsRef.current = manualCrossfadeSeconds; }, [manualCrossfadeSeconds]);
+  useEffect(() => { manualTransitionModeRef.current = manualTransitionMode; }, [manualTransitionMode]);
   useEffect(() => { repeatModeRef.current = repeatMode; }, [repeatMode]);
   useEffect(() => { isSessionGuestRef.current = isSessionGuest; }, [isSessionGuest]);
   useEffect(() => { queueRef.current = queue; }, [queue]);
@@ -420,24 +445,18 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
   const recordPlayRef = useRef<(s: Song) => void>(() => {});
   const broadcastSongRef = useRef<(s: Song) => void>(() => {});
 
-  const triggerCrossfadeRef = useRef<() => void>(() => {
-    if (crossfadingRef.current) return;
-    const fadeSec = crossfadeSecondsRef.current;
-    if (fadeSec <= 0) return;
-    if (isSessionGuestRef.current) return;
-    const q = queueRef.current;
-    const idx = queueIndexRef.current;
-    if (q.length === 0) return;
-    let nextIdx: number;
-    if (repeatModeRef.current === 'one') return;
-    else nextIdx = idx + 1;
-    if (nextIdx >= q.length) { if (repeatModeRef.current === 'all') nextIdx = 0; else return; }
-    const nextSong = q[nextIdx];
-    if (!nextSong) return;
+  // Coeur du fondu enchaîné : joue `nextSong` (déjà déterminé par l'appelant — fin de
+  // piste naturelle, ou next()/previous() déclenchés manuellement avant la fin) par
+  // dessus la piste active puis bascule dessus. Partagé par triggerCrossfadeRef
+  // (transition automatique en fin de piste, avec ses propres réglages) et
+  // manualSkipCrossfadeRef (skip manuel, réglages indépendants) — chacun passe sa
+  // durée et son mode, réglables séparément dans les paramètres.
+  const runCrossfadeRef = useRef<(nextIdx: number, nextSong: Song, fadeSec: number, mode: TransitionMode) => void>((nextIdx, nextSong, fadeSec, mode) => {
     crossfadingRef.current = true;
+    setIsCrossfading(true);
     const active = getActive();
     const inactive = getInactive();
-    const isAutoMix = transitionModeRef.current === 'autoMix';
+    const isAutoMix = mode === 'autoMix';
     const hasPreAnalysis = preAnalysisSongIdRef.current === nextSong.id;
     // AutoMix : durée + type de transition décidés selon la compatibilité de tempo
     // entre le morceau en cours (BPM accumulé en direct depuis le début de sa
@@ -463,7 +482,6 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
     inactive.currentTime = isAutoMix && hasPreAnalysis ? preAnalysisEstimatorRef.current?.getIntroSilenceSec() ?? 0 : 0;
     const startFade = () => {
       const startTs = performance.now();
-      const mode = transitionModeRef.current;
       const fadeMs = effectiveFadeSec * 1000;
       const startVol = active.volume;
       const targetVol = volumeRef.current;
@@ -549,6 +567,7 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
             broadcastSongRef.current(nextSong);
           }
           crossfadingRef.current = false;
+          setIsCrossfading(false);
           return;
         }
         crossfadeIntervalRef.current = scheduleTick(tick);
@@ -565,10 +584,48 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
         const waitMs = autoMixPlan?.beatAligned ? activeEstimator?.getMsUntilNextBeat(AUTOMIX_BEAT_ALIGN_MAX_WAIT_MS) ?? null : null;
         if (waitMs && waitMs > 20) setTimeout(startFade, waitMs);
         else startFade();
-      }).catch((e) => { console.error('Crossfade play failed', e); crossfadingRef.current = false; });
+      }).catch((e) => { console.error('Crossfade play failed', e); crossfadingRef.current = false; setIsCrossfading(false); });
     };
     inactive.addEventListener('canplay', onReady);
     inactive.load();
+  });
+
+  // Transition automatique déclenchée en approchant la fin naturelle de la piste
+  // (voir checkTrackProgress) : détermine le morceau suivant puis délègue à runCrossfadeRef.
+  const triggerCrossfadeRef = useRef<() => void>(() => {
+    if (crossfadingRef.current) return;
+    const fadeSec = crossfadeSecondsRef.current;
+    if (fadeSec <= 0) return;
+    if (isSessionGuestRef.current) return;
+    const q = queueRef.current;
+    const idx = queueIndexRef.current;
+    if (q.length === 0) return;
+    let nextIdx: number;
+    if (repeatModeRef.current === 'one') return;
+    else nextIdx = idx + 1;
+    if (nextIdx >= q.length) { if (repeatModeRef.current === 'all') nextIdx = 0; else return; }
+    const nextSong = q[nextIdx];
+    if (!nextSong) return;
+    runCrossfadeRef.current(nextIdx, nextSong, fadeSec, transitionModeRef.current);
+  });
+
+  // Skip manuel (bouton suivant/précédent) avant la fin naturelle de la piste : si le
+  // crossfade manuel est activé, on l'utilise aussi ici (avec ses propres réglages,
+  // indépendants du crossfade automatique de fin de piste) au lieu d'une coupure nette.
+  // Retourne true si le fondu a démarré (l'appelant ne doit alors rien faire de plus),
+  // false s'il faut retomber sur le changement de piste habituel (crossfade manuel
+  // désactivé, déjà en cours, invité de session, ou index hors limites).
+  const manualSkipCrossfadeRef = useRef<(targetIdx: number) => boolean>((targetIdx) => {
+    if (crossfadingRef.current) return false;
+    const fadeSec = manualCrossfadeSecondsRef.current;
+    if (fadeSec <= 0) return false;
+    if (isSessionGuestRef.current) return false;
+    const q = queueRef.current;
+    if (targetIdx < 0 || targetIdx >= q.length) return false;
+    const targetSong = q[targetIdx];
+    if (!targetSong) return false;
+    runCrossfadeRef.current(targetIdx, targetSong, fadeSec, manualTransitionModeRef.current);
+    return true;
   });
 
   // Init audio
@@ -966,6 +1023,19 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
     transitionModeRef.current = mode;
   }, []);
 
+  const setManualCrossfadeSeconds = useCallback((s: number) => {
+    const v = s <= 0 ? 0 : Math.max(1, Math.min(12, s));
+    setManualCrossfadeSecondsState(v);
+    localStorage.setItem(MANUAL_CROSSFADE_KEY, String(v));
+    manualCrossfadeSecondsRef.current = v;
+  }, []);
+
+  const setManualTransitionMode = useCallback((mode: TransitionMode) => {
+    setManualTransitionModeState(mode);
+    localStorage.setItem(MANUAL_TRANSITION_MODE_KEY, mode);
+    manualTransitionModeRef.current = mode;
+  }, []);
+
   // PocketBase helpers
   const pbGetFirst = async (collection: string, filter: string) => {
     try {
@@ -1086,6 +1156,7 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
     setIsBuffering(true);
     if (crossfadeIntervalRef.current) { clearTimeout(crossfadeIntervalRef.current); crossfadeIntervalRef.current = null; }
     crossfadingRef.current = false;
+    setIsCrossfading(false);
     const inactive = getInactive();
     if (inactive) { try { inactive.pause(); inactive.volume = 0; inactive.removeAttribute('src'); inactive.load(); } catch {} }
     const a = getActive();
@@ -1114,6 +1185,7 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
   const loadAndPlayExternalAudio = useCallback(async (payload: { videoId: string; title: string; author: string; coverUrl: string; audioUrl: string; autoPlay?: boolean }) => {
     if (crossfadeIntervalRef.current) { clearTimeout(crossfadeIntervalRef.current); crossfadeIntervalRef.current = null; }
     crossfadingRef.current = false;
+    setIsCrossfading(false);
     const inactive = getInactive();
     if (inactive) { try { inactive.pause(); inactive.volume = 0; inactive.removeAttribute('src'); inactive.load(); } catch {} }
     const a = getActive();
@@ -1167,6 +1239,7 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
   }, [checkConnectionStatus]);
 
   const playSong = useCallback((song: Song) => {
+    if (crossfadingRef.current) return;
     if (isSessionGuestRef.current) { notifyGuestBlocked("Seul l'hôte peut changer la musique de la session"); return; }
     if (audioCtxRef.current?.state === 'suspended') audioCtxRef.current.resume().catch(() => {});
     originalQueueRef.current = [song];
@@ -1208,6 +1281,7 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
   }, [loadAndPlay, authUser, broadcastSong]);
 
   const playSongFromList = useCallback((song: Song, list: Song[]) => {
+    if (crossfadingRef.current) return;
     if (isSessionGuestRef.current) { notifyGuestBlocked("Seul l'hôte peut changer la musique de la session"); return; }
     if (audioCtxRef.current?.state === 'suspended') audioCtxRef.current.resume().catch(() => {});
     const idx = Math.max(0, list.findIndex((s) => s.id === song.id));
@@ -1219,6 +1293,7 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
   }, [loadAndPlay, authUser, broadcastSong, checkConnectionStatus]);
 
   const togglePlay = useCallback(() => {
+    if (crossfadingRef.current) return;
     const a = getActive();
     if (!a || !currentSong) return;
     if (isSessionGuestRef.current) { notifyGuestBlocked("Seul l'hôte peut contrôler la lecture"); return; }
@@ -1248,6 +1323,7 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
   }, [playedSongIds, queue]);
 
   const playAtIndex = useCallback((idx: number) => {
+    if (crossfadingRef.current) return;
     if (idx < 0 || idx >= queue.length) return;
     const song = queue[idx];
     setQueueIndex(idx); setCurrentSong(song); setPlayedSongIds((prev) => new Set([...prev, song.id]));
@@ -1256,11 +1332,15 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
   }, [queue, loadAndPlay, authUser, broadcastSong]);
 
   const next = useCallback(() => {
+    if (crossfadingRef.current) return;
     if (queue.length === 0) return;
     if (repeatMode === 'one') { playAtIndex(queueIndex); return; }
     const nextIdx = queueIndex + 1;
     if (nextIdx >= queue.length) {
-      if (repeatMode === 'all') { playAtIndex(0); return; }
+      if (repeatMode === 'all') {
+        if (manualSkipCrossfadeRef.current(0)) return;
+        playAtIndex(0); return;
+      }
       if (currentSong) {
         findRecommendedSongs(currentSong).then((rec) => {
           if (rec.length > 0) {
@@ -1272,14 +1352,20 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
           } else getActive()?.pause();
         });
       } else getActive()?.pause();
-    } else playAtIndex(nextIdx);
+    } else {
+      if (manualSkipCrossfadeRef.current(nextIdx)) return;
+      playAtIndex(nextIdx);
+    }
   }, [queue, queueIndex, repeatMode, playAtIndex, currentSong, findRecommendedSongs, loadAndPlay, authUser, broadcastSong]);
 
   const previous = useCallback(() => {
+    if (crossfadingRef.current) return;
     const a = getActive();
     if (a && a.currentTime > 3) { a.currentTime = 0; return; }
     const prevIdx = queueIndex - 1;
-    if (prevIdx >= 0) playAtIndex(prevIdx);
+    if (prevIdx < 0) return;
+    if (manualSkipCrossfadeRef.current(prevIdx)) return;
+    playAtIndex(prevIdx);
   }, [queueIndex, playAtIndex]);
 
   const seek = useCallback((t: number) => {
@@ -1562,10 +1648,11 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
   return (
     <PlayerContext.Provider value={{
       currentSong, isPlaying, currentTime, duration, volume, queue, queueIndex, isShuffled, repeatMode, isPlayerOpen, playbackRate, crossfadeSeconds, transitionMode,
-      activeSession, isSessionHost, isSessionGuest, connectionStatus, isBuffering, refreshSession, setActiveSession, stopAudio, refreshSongStats,
+      manualCrossfadeSeconds, manualTransitionMode,
+      activeSession, isSessionHost, isSessionGuest, connectionStatus, isBuffering, isCrossfading, refreshSession, setActiveSession, stopAudio, refreshSongStats,
       permanentSessionEnabled, setPermanentSessionEnabled, joinSession,
       playSong, playSongFromList, playExternalAudio, togglePlay, next, previous, seek, setVolume, toggleShuffle, cycleRepeat,
-      openPlayer, closePlayer, setPlaybackRate, setCrossfadeSeconds, setTransitionMode, addToQueue, startRadio, signalVideoReady,
+      openPlayer, closePlayer, setPlaybackRate, setCrossfadeSeconds, setTransitionMode, setManualCrossfadeSeconds, setManualTransitionMode, addToQueue, startRadio, signalVideoReady,
       getAnalyserNode: () => analyserRef.current,
       currentEqPreset, setEqPreset,
       sleepTimerMinutes, sleepTimerRemaining, setSleepTimer,

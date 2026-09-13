@@ -34,7 +34,7 @@ export default function PlayerPage() {
   const { user } = useAuth();
   const navigate = useNavigate();
   const {
-    currentSong, isPlaying, isBuffering, currentTime, duration, queue, queueIndex,
+    currentSong, isPlaying, isBuffering, isCrossfading, currentTime, duration, queue, queueIndex,
     playSong, togglePlay, next, previous, seek, setVolume, volume,
     closePlayer, isShuffled, toggleShuffle, repeatMode, cycleRepeat,
     playbackRate, isPlayerOpen, connectionStatus,
@@ -472,15 +472,17 @@ export default function PlayerPage() {
 
           <button
             onClick={previous}
-            className="rounded-xl p-2.5 text-muted-foreground transition-colors duration-150 hover:text-foreground hover:bg-white/[0.07] active:scale-95"
+            disabled={isCrossfading}
+            className="rounded-xl p-2.5 text-muted-foreground transition-colors duration-150 hover:text-foreground hover:bg-white/[0.07] active:scale-95 disabled:opacity-40 disabled:grayscale disabled:pointer-events-none"
           >
             <SkipBack className="h-6 w-6" />
           </button>
 
           <button
             onClick={togglePlay}
-            className="flex h-16 w-16 items-center justify-center rounded-2xl bg-gradient-primary text-primary-foreground shadow-elegant transition-[box-shadow,transform] duration-150 hover:shadow-glow active:scale-95"
-            aria-label={isBuffering ? 'Chargement' : isPlaying ? 'Pause' : 'Play'}
+            disabled={isCrossfading}
+            className="flex h-16 w-16 items-center justify-center rounded-2xl bg-gradient-primary text-primary-foreground shadow-elegant transition-[box-shadow,transform] duration-150 hover:shadow-glow active:scale-95 disabled:opacity-40 disabled:grayscale disabled:pointer-events-none"
+            aria-label={isCrossfading ? 'Fondu enchaîné en cours' : isBuffering ? 'Chargement' : isPlaying ? 'Pause' : 'Play'}
           >
             {isBuffering
               ? <div className="h-7 w-7 rounded-full border-[3px] border-primary-foreground/30 border-t-primary-foreground animate-spin" />
@@ -491,7 +493,8 @@ export default function PlayerPage() {
 
           <button
             onClick={next}
-            className="rounded-xl p-2.5 text-muted-foreground transition-colors duration-150 hover:text-foreground hover:bg-white/[0.07] active:scale-95"
+            disabled={isCrossfading}
+            className="rounded-xl p-2.5 text-muted-foreground transition-colors duration-150 hover:text-foreground hover:bg-white/[0.07] active:scale-95 disabled:opacity-40 disabled:grayscale disabled:pointer-events-none"
           >
             <SkipForward className="h-6 w-6" />
           </button>
@@ -511,6 +514,21 @@ export default function PlayerPage() {
             )}
           </button>
         </div>
+
+        <AnimatePresence>
+          {isCrossfading && (
+            <motion.div
+              initial={{ opacity: 0, y: -4 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -4 }}
+              transition={{ duration: 0.2, ease: 'easeOut' }}
+              className="flex items-center justify-center gap-1.5 pb-3"
+            >
+              <span className="flex h-1.5 w-1.5 rounded-full bg-primary animate-pulse" />
+              <span className="text-xs font-medium text-muted-foreground">Fondu enchaîné en cours…</span>
+            </motion.div>
+          )}
+        </AnimatePresence>
 
         {/* Reposters — compact pill */}
         {reposters.length > 0 && (

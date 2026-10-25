@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { pb } from '@/lib/pocketbase';
 import { songCoverUrl, avatarUrl, songAudioUrl } from '@/lib/storage';
-import { usePlayer } from '@/contexts/PlayerContext';
+import { usePlayer, usePlayerTime } from '@/contexts/PlayerContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import CachedImage from '@/components/CachedImage';
@@ -34,12 +34,13 @@ export default function PlayerPage() {
   const { user } = useAuth();
   const navigate = useNavigate();
   const {
-    currentSong, isPlaying, isBuffering, isCrossfading, currentTime, duration, queue, queueIndex,
+    currentSong, isPlaying, isBuffering, isCrossfading, queue, queueIndex,
     playSong, togglePlay, next, previous, seek, setVolume, volume,
     closePlayer, isShuffled, toggleShuffle, repeatMode, cycleRepeat,
     playbackRate, isPlayerOpen, connectionStatus,
-    sleepTimerMinutes, sleepTimerRemaining, activeSession, isSessionGuest,
+    sleepTimerMinutes, activeSession, isSessionGuest,
   } = usePlayer();
+  const { currentTime, duration, sleepTimerRemaining } = usePlayerTime();
 
   const statusInfo = {
     stable: { label: 'Stable', icon: <Wifi className="h-3.5 w-3.5 text-green-400" /> },

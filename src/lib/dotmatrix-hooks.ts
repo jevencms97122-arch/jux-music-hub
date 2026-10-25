@@ -31,42 +31,6 @@ export interface UseCyclePhaseOptions {
   speed?: number;
 }
 
-export function useCyclePhase({ active, cycleMsBase, speed = 1 }: UseCyclePhaseOptions): number {
-  const [phase, setPhase] = useState(0);
-
-  useEffect(() => {
-    if (!active) {
-      setPhase(0);
-      return;
-    }
-
-    const safeSpeed = speed > 0 ? speed : 1;
-    const raw = cycleMsBase / safeSpeed;
-    const cycleMs = raw > 0 && Number.isFinite(raw) ? raw : 1000;
-    const start = performance.now();
-    let rafId = 0;
-
-    const tick = (now: number) => {
-      const elapsed = ((now - start) % cycleMs + cycleMs) % cycleMs;
-      setPhase(elapsed / cycleMs);
-      rafId = requestAnimationFrame(tick);
-    };
-
-    rafId = requestAnimationFrame(tick);
-    return () => cancelAnimationFrame(rafId);
-  }, [active, cycleMsBase, speed]);
-
-  return phase;
-}
-
-interface UseSteppedCycleOptions {
-  active: boolean;
-  cycleMsBase: number;
-  steps: number;
-  speed?: number;
-  idleStep?: number;
-}
-
 type FrameListener = (now: number) => void;
 
 const listeners = new Set<FrameListener>();
@@ -99,6 +63,57 @@ function subscribeFrame(listener: FrameListener) {
       rafId = null;
     }
   };
+}
+
+/**
+ * Phase d'un cycle, entre 0 et 1.
+ *
+ * La phase est quantifiée (`PHASE_STEPS` paliers) et passe par la boucle
+ * d'animation partagée plus bas. Auparavant ce hook appelait `setPhase` à
+ * CHAQUE frame, avec sa propre boucle `requestAnimationFrame` : chaque
+ * composant qui l'utilise déclenchait donc un rendu React complet 60 fois par
+ * seconde, et plusieurs composants montés en même temps multipliaient autant
+ * de boucles. Quantifier ne change rien à l'œil (les paliers sont plus fins que
+ * ce qu'une animation de points laisse voir) mais divise le nombre de rendus.
+ */
+const PHASE_STEPS = 30;
+
+export function useCyclePhase({ active, cycleMsBase, speed = 1 }: UseCyclePhaseOptions): number {
+  const [phase, setPhase] = useState(0);
+
+  useEffect(() => {
+    if (!active) {
+      setPhase(0);
+      return;
+    }
+
+    const safeSpeed = speed > 0 ? speed : 1;
+    const raw = cycleMsBase / safeSpeed;
+    const cycleMs = raw > 0 && Number.isFinite(raw) ? raw : 1000;
+    const start = performance.now();
+    let lastStep = -1;
+
+    const update = (now: number) => {
+      const elapsed = ((now - start) % cycleMs + cycleMs) % cycleMs;
+      const step = Math.floor((elapsed / cycleMs) * PHASE_STEPS) % PHASE_STEPS;
+      if (step === lastStep) return;
+      lastStep = step;
+      setPhase(step / PHASE_STEPS);
+    };
+
+    update(performance.now());
+    return subscribeFrame(update);
+  }, [active, cycleMsBase, speed]);
+
+  return phase;
+}
+
+interface UseSteppedCycleOptions {
+  active: boolean;
+  cycleMsBase: number;
+  steps: number;
+  speed?: number;
+  idleStep?: number;
 }
 
 export function useSteppedCycle({

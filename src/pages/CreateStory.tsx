@@ -2,7 +2,7 @@ import { useState, useRef, useCallback, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { pb } from '@/lib/pocketbase';
 import { useAuth } from '@/contexts/AuthContext';
-import { usePlayer } from '@/contexts/PlayerContext';
+import { usePlayer, usePlayerTime } from '@/contexts/PlayerContext';
 import { songCoverUrl, songAudioUrl } from '@/lib/storage';
 import { ArrowLeft, Play, Pause, ImagePlus, Trash2, Camera } from 'lucide-react';
 import { toast } from 'sonner';
@@ -31,7 +31,8 @@ const MAX_IMAGE_BYTES = 8 * 1024 * 1024;
 export default function CreateStory() {
   const navigate = useNavigate();
   const { user } = useAuth();
-  const { currentSong, duration } = usePlayer();
+  const { currentSong } = usePlayer();
+  const { duration } = usePlayerTime();
 
   const [comment, setComment] = useState('');
   const [startTime, setStartTime] = useState(0);

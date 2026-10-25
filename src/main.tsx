@@ -5,6 +5,11 @@ import App from "./App";
 import "./index.css";
 import { registerSW } from "virtual:pwa-register";
 import { syncCloseToTray } from "./lib/closeToTray";
+import { applyPerfAttribute } from "./lib/perfProfile";
+
+// Posé avant le premier rendu : le CSS du palier bas (voir index.css) est actif
+// dès la première frame, sans afficher puis dégrader une interface riche.
+applyPerfAttribute();
 
 // Rust ne connaît pas la préférence "fermer dans la barre des tâches" (stockée en
 // localStorage côté JS) tant qu'on ne la lui communique pas explicitement.

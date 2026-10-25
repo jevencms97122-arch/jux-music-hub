@@ -327,14 +327,14 @@ export default function UserProfile() {
         {tab === 'tracks' ? (
           songs.length > 0 ? (
             <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3">
-              {songs.map((s, i) => (<SongCard key={s.id} song={s} index={i} onPlay={() => playSongFromList(s, songs)} />))}
+              {songs.map((s, i) => (<SongCard key={s.id} song={s} index={i} list={songs} onPlay={playSongFromList} />))}
             </div>
           ) : (
             <EmptyState icon={<Music2 className="h-6 w-6 text-primary" />} title="Aucun morceau" subtitle="Cet artiste n'a encore rien publié." />
           )
         ) : repostedSongs.length > 0 ? (
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3">
-            {repostedSongs.map((s, i) => (<SongCard key={s.id} song={s} index={i} onPlay={() => playSongFromList(s, repostedSongs)} />))}
+            {repostedSongs.map((s, i) => (<SongCard key={s.id} song={s} index={i} list={repostedSongs} onPlay={playSongFromList} />))}
           </div>
         ) : (
           <EmptyState icon={<Repeat2 className="h-6 w-6 text-primary" />} title="Aucune republication" subtitle="Les sons repostés apparaîtront ici." />

@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { memo, useState, useEffect, useRef } from 'react';
 import { loadMedia } from '@/lib/mediaCache';
 import { isPerformanceModeEnabled } from '@/hooks/usePerformanceMode';
 import { Music2 } from 'lucide-react';
@@ -11,7 +11,7 @@ interface CachedImageProps extends React.ImgHTMLAttributes<HTMLImageElement> {
   exempt?: boolean;
 }
 
-export default function CachedImage({
+function CachedImage({
   src,
   className = '',
   alt = '',
@@ -88,3 +88,10 @@ export default function CachedImage({
     />
   );
 }
+
+/**
+ * Mémoïsé : une liste de couvertures en instancie plusieurs dizaines, chacune
+ * avec son propre état de chargement. `className` et `src` sont des chaînes
+ * littérales côté appelants, donc la comparaison superficielle suffit.
+ */
+export default memo(CachedImage);

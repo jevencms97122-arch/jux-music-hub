@@ -264,7 +264,7 @@ export default function Search() {
                     </h2>
                   )}
                   <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5">
-                    {songs.map((s, i) => (<SongCard key={s.id} song={s} index={i} onPlay={() => playSongFromList(s, songs)} />))}
+                    {songs.map((s, i) => (<SongCard key={s.id} song={s} index={i} list={songs} onPlay={playSongFromList} />))}
                   </div>
                 </div>
               )}

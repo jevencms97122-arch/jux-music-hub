@@ -1,3 +1,5 @@
+import { memo, useCallback } from 'react';
+
 import { songCoverUrl } from '@/lib/storage';
 import type { Song } from '@/types/music';
 import { Play, Video, Trash2 } from 'lucide-react';
@@ -5,7 +7,17 @@ import CachedImage from '@/components/CachedImage';
 
 interface Props {
   song: Song;
-  onPlay: () => void;
+  /**
+   * Liste dans laquelle lire ce morceau (elle devient la file d'attente).
+   *
+   * Passée en prop plutôt que capturée dans une closure `onPlay={() => …}` :
+   * une closure est recréée à chaque rendu du parent, ce qui rendrait la
+   * mémoïsation ci-dessous inopérante — une page d'accueil de 40 cartes
+   * reconstruisait alors ses 40 cartes (et leurs ~10 nœuds chacune) au moindre
+   * changement d'état de la page.
+   */
+  list: Song[];
+  onPlay: (song: Song, list: Song[]) => void;
   onDelete?: () => void;
   /** Position dans la liste — décale l'animation d'apparition pour un effet en cascade. */
   index?: number;
@@ -17,10 +29,12 @@ function formatPlayCount(count: number): string {
   return `${count}`;
 }
 
-export default function SongCard({ song, onPlay, onDelete, index }: Props) {
+function SongCard({ song, list, onPlay, onDelete, index }: Props) {
+  const handlePlay = useCallback(() => onPlay(song, list), [onPlay, song, list]);
+
   return (
     <button
-      onClick={onPlay}
+      onClick={handlePlay}
       className="group flex flex-col items-start gap-2 text-left w-full animate-card-in"
       style={index != null ? { animationDelay: `${Math.min(index, 12) * 30}ms` } : undefined}
     >
@@ -80,3 +94,11 @@ export default function SongCard({ song, onPlay, onDelete, index }: Props) {
     </button>
   );
 }
+
+/**
+ * Mémoïsé : les cartes ne dépendent que de leur morceau et de leur liste, et une
+ * page en affiche plusieurs dizaines. Sans ça, chaque changement d'état du
+ * parent (chargement d'une section, compteur de notifications, filtre de genre)
+ * les reconstruisait toutes.
+ */
+export default memo(SongCard);

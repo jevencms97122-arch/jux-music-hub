@@ -29,6 +29,52 @@ interface CacheEntry {
 let dbInstance: IDBDatabase | null = null;
 
 /**
+ * Registre des blob URLs déjà créées, indexé par URL source.
+ *
+ * Sans lui, chaque montage d'un <img> appelait `URL.createObjectURL` et créait
+ * une nouvelle référence vers une copie complète des octets de l'image, sans
+ * jamais la révoquer. En défilant une liste de couvertures, la même image
+ * s'accumulait autant de fois qu'elle avait été montée : sur un appareil à 2 Go
+ * de RAM, la mémoire se remplit, le ramasse-miettes tourne en continu et
+ * l'interface se met à saccader sans que rien d'autre n'ait changé.
+ *
+ * On garde donc une seule blob URL par source, et on plafonne le registre : les
+ * entrées les plus anciennes sont révoquées (ce qui libère réellement les
+ * octets) quand la limite est atteinte.
+ */
+const MAX_LIVE_BLOB_URLS = 120;
+const liveBlobUrls = new Map<string, string>();
+
+function rememberBlobUrl(sourceUrl: string, blobUrl: string): string {
+  // Déjà présent : on révoque le doublon qu'on vient de créer plutôt que
+  // d'écraser l'entrée (sinon l'ancienne fuit).
+  const existing = liveBlobUrls.get(sourceUrl);
+  if (existing) {
+    if (existing !== blobUrl) URL.revokeObjectURL(blobUrl);
+    return existing;
+  }
+
+  while (liveBlobUrls.size >= MAX_LIVE_BLOB_URLS) {
+    // Map conserve l'ordre d'insertion : la première clé est la plus ancienne.
+    const oldestKey = liveBlobUrls.keys().next().value as string | undefined;
+    if (oldestKey === undefined) break;
+    const oldest = liveBlobUrls.get(oldestKey);
+    if (oldest) URL.revokeObjectURL(oldest);
+    liveBlobUrls.delete(oldestKey);
+  }
+
+  liveBlobUrls.set(sourceUrl, blobUrl);
+  return blobUrl;
+}
+
+/**
+ * Chargements en cours, indexés par URL source : plusieurs cartes affichant la
+ * même couverture partagent une seule requête réseau et une seule lecture
+ * IndexedDB au lieu d'en lancer une chacune.
+ */
+const inFlight = new Map<string, Promise<string | null>>();
+
+/**
  * Ouvre (ou crée) la base de données IndexedDB.
  */
 function openDB(): Promise<IDBDatabase> {
@@ -131,8 +177,7 @@ async function getFromCache(url: string): Promise<string | null> {
         if (entry) {
           // Convertir ArrayBuffer en Blob URL
           const blob = new Blob([entry.data], { type: entry.contentType });
-          const blobUrl = URL.createObjectURL(blob);
-          resolve(blobUrl);
+          resolve(rememberBlobUrl(url, URL.createObjectURL(blob)));
         } else {
           resolve(null);
         }
@@ -186,6 +231,29 @@ export async function loadMedia(url: string): Promise<string | null> {
   // Ne pas cacher les vidéos YouTube
   if (isYoutubeUrl(url)) return url;
 
+  // 0. Déjà résolue pendant cette session : on rend la même blob URL, sans
+  // retoucher ni IndexedDB ni le réseau (cas du défilement d'une liste, où les
+  // mêmes couvertures sont démontées puis remontées en boucle).
+  const live = liveBlobUrls.get(url);
+  if (live) {
+    // Réinsertion : l'ordre de la Map devient un ordre d'utilisation, donc
+    // l'éviction ci-dessous frappe les images les moins récemment demandées
+    // plutôt que les plus anciennement chargées — qui peuvent très bien être
+    // encore à l'écran.
+    liveBlobUrls.delete(url);
+    liveBlobUrls.set(url, live);
+    return live;
+  }
+
+  const pending = inFlight.get(url);
+  if (pending) return pending;
+
+  const task = resolveMedia(url).finally(() => { inFlight.delete(url); });
+  inFlight.set(url, task);
+  return task;
+}
+
+async function resolveMedia(url: string): Promise<string | null> {
   // 1. Essayer le cache d'abord
   const cached = await getFromCache(url);
   if (cached) return cached;
@@ -207,8 +275,7 @@ export async function loadMedia(url: string): Promise<string | null> {
     enforceMaxSize();
 
     // Créer un blob URL pour l'affichage immédiat
-    const blobUrl = URL.createObjectURL(blob);
-    return blobUrl;
+    return rememberBlobUrl(url, URL.createObjectURL(blob));
   } catch {
     return url;
   }
@@ -226,6 +293,13 @@ export async function preloadImage(url: string): Promise<string | null> {
  * Supprime une entrée spécifique du cache.
  */
 export async function removeFromCache(url: string): Promise<void> {
+  // La blob URL en mémoire doit partir avec l'entrée, sinon elle continuerait à
+  // être servie (et à occuper la RAM) après la suppression.
+  const live = liveBlobUrls.get(url);
+  if (live) {
+    URL.revokeObjectURL(live);
+    liveBlobUrls.delete(url);
+  }
   try {
     const db = await openDB();
     const tx = db.transaction(IMAGE_STORE, 'readwrite');
@@ -240,6 +314,8 @@ export async function removeFromCache(url: string): Promise<void> {
  * Vide complètement le cache média.
  */
 export async function clearCache(): Promise<void> {
+  for (const blobUrl of liveBlobUrls.values()) URL.revokeObjectURL(blobUrl);
+  liveBlobUrls.clear();
   try {
     const db = await openDB();
     const tx = db.transaction(IMAGE_STORE, 'readwrite');

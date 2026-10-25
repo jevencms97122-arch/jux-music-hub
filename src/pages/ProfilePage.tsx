@@ -496,7 +496,8 @@ export default function ProfilePage() {
                   key={s.id}
                   song={s}
                   index={i}
-                  onPlay={() => playSongFromList(s, songs)}
+                  list={songs}
+                  onPlay={playSongFromList}
                   onDelete={offline ? () => handleDeleteLocalTrack(s.id) : undefined}
                 />
               ))}
@@ -512,7 +513,7 @@ export default function ProfilePage() {
         ) : tab === 'reposts' ? (
           repostedSongs.length > 0 ? (
             <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3">
-              {repostedSongs.map((s, i) => (<SongCard key={s.id} song={s} index={i} onPlay={() => playSongFromList(s, repostedSongs)} />))}
+              {repostedSongs.map((s, i) => (<SongCard key={s.id} song={s} index={i} list={repostedSongs} onPlay={playSongFromList} />))}
             </div>
           ) : (
             <EmptyState

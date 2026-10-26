@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { AnimatePresence, motion, type PanInfo } from 'framer-motion';
-import { usePlayer, usePlayerTime } from '@/contexts/PlayerContext';
+import { usePlayer } from '@/contexts/PlayerContext';
 import { songCoverUrl } from '@/lib/storage';
 import { Play, Pause, SkipForward, Volume2 } from 'lucide-react';
 import CachedImage from '@/components/CachedImage';
@@ -22,8 +22,7 @@ const MOVE_VELOCITY = 450;
 const SPRING = { type: 'spring' as const, stiffness: 420, damping: 36, mass: 0.8 };
 
 export default function MiniPlayer() {
-  const { currentSong, isPlaying, isBuffering, isCrossfading, togglePlay, next, openPlayer } = usePlayer();
-  const { currentTime, duration } = usePlayerTime();
+  const { currentSong, isPlaying, isBuffering, isCrossfading, togglePlay, next, openPlayer, currentTime, duration } = usePlayer();
   const [volumeOpen, setVolumeOpen] = useState(false);
 
   const [anchor, setAnchor] = useState<Anchor>(() =>

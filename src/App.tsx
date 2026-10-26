@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, lazy, Suspense } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import SplashScreen from '@/components/SplashScreen';
 import ErrorBoundary from '@/components/ErrorBoundary';
 import { AuthProvider, useAuth } from '@/contexts/AuthContext';
@@ -11,11 +11,6 @@ import { pb } from '@/lib/pocketbase';
 import { isTauri } from '@tauri-apps/api/core';
 import { toast } from 'sonner';
 import { playInterfaceSound } from '@/lib/interfaceSounds';
-import { isLowPerf } from '@/lib/perfProfile';
-import { startVisibilityPolling } from '@/lib/visibilityPolling';
-
-// Lu une seule fois : le palier ne change pas en cours de session (cf. perfProfile).
-const LOW_PERF = isLowPerf();
 
 // Le module 'sonner' exporte un singleton `toast` — patcher ses méthodes ici
 // suffit à jouer le SFX pour tous les toast.success/toast.error de l'app,
@@ -35,36 +30,26 @@ import { sendSmartNotification } from '@/lib/smartNotifications';
 import { precacheLibraryForOffline } from '@/lib/offlinePrecache';
 import { usePlayer } from '@/contexts/PlayerContext';
 import { songCoverUrl } from '@/lib/storage';
-
-// Pages chargées à la demande. Sans ce découpage, le bundle initial contenait
-// les 24 pages de l'app : sur un appareil modeste, le simple parsing/compilation
-// de ce JavaScript bloque le thread principal plusieurs secondes avant le
-// premier affichage. Login et Home restent dans le bundle initial, ce sont les
-// deux premiers écrans possibles — les charger en différé ajouterait un aller-
-// retour réseau visible au démarrage.
-const Upload = lazy(() => import('@/pages/Upload'));
-const ProfileSetup = lazy(() => import('@/pages/ProfileSetup'));
-const ProfilePage = lazy(() => import('@/pages/ProfilePage'));
-const ProfileEdit = lazy(() => import('@/pages/ProfileEdit'));
-const UserProfile = lazy(() => import('@/pages/UserProfile'));
-const Playlists = lazy(() => import('@/pages/Playlists'));
-const PlaylistDetail = lazy(() => import('@/pages/PlaylistDetail'));
-const Social = lazy(() => import('@/pages/Social'));
-const Chat = lazy(() => import('@/pages/Chat'));
-const ListenTogether = lazy(() => import('@/pages/ListenTogether'));
-const Search = lazy(() => import('@/pages/Search'));
-const Notifications = lazy(() => import('@/pages/Notifications'));
-const Favorites = lazy(() => import('@/pages/Favorites'));
-const Wrapped = lazy(() => import('@/pages/Wrapped'));
-const CarMode = lazy(() => import('@/pages/CarMode'));
-const Rank = lazy(() => import('@/pages/Rank'));
-const SongPlayer = lazy(() => import('@/pages/SongPlayer'));
-const CreateStory = lazy(() => import('@/pages/CreateStory'));
-const OfflinePlaylists = lazy(() => import('@/pages/OfflinePlaylists'));
-const OfflinePlaylistDetail = lazy(() => import('@/pages/OfflinePlaylistDetail'));
-
 import Login from '@/pages/Login';
 import Home from '@/pages/Home';
+import Upload from '@/pages/Upload';
+import ProfileSetup from '@/pages/ProfileSetup';
+import ProfilePage from '@/pages/ProfilePage';
+import ProfileEdit from '@/pages/ProfileEdit';
+import UserProfile from '@/pages/UserProfile';
+import Playlists from '@/pages/Playlists';
+import PlaylistDetail from '@/pages/PlaylistDetail';
+import Social from '@/pages/Social';
+import Chat from '@/pages/Chat';
+import ListenTogether from '@/pages/ListenTogether';
+import Search from '@/pages/Search';
+import Notifications from '@/pages/Notifications';
+import Favorites from '@/pages/Favorites';
+import Wrapped from '@/pages/Wrapped';
+import CarMode from '@/pages/CarMode';
+import Rank from '@/pages/Rank';
+import SongPlayer from '@/pages/SongPlayer';
+import CreateStory from '@/pages/CreateStory';
 import MiniPlayer from '@/components/MiniPlayer';
 import PlayerPage from '@/components/PlayerPage';
 import BottomNav from '@/components/BottomNav';
@@ -76,6 +61,8 @@ import WebDeprecatedScreen from '@/components/WebDeprecatedScreen';
 import GamepadController from '@/components/GamepadController';
 import BannedScreen from '@/components/BannedScreen';
 import RequiresBackend from '@/components/RequiresBackend';
+import OfflinePlaylists from '@/pages/OfflinePlaylists';
+import OfflinePlaylistDetail from '@/pages/OfflinePlaylistDetail';
 import { isVRModeEnabled } from '@/hooks/useVRMode';
 import { Toaster } from '@/components/ui/sonner';
 import ChatNotifier from '@/components/ChatNotifier';
@@ -91,44 +78,10 @@ const pageVariants = {
   out: { opacity: 0, y: -6, scale: 0.99, transition: { duration: 0.14, ease: [0.4, 0, 1, 1] } },
 };
 
-// Sur un appareil modeste, la transition de page est le pire moment pour
-// demander du travail supplémentaire : l'ancienne page et la nouvelle sont
-// montées en même temps, et framer-motion animerait opacity + transform + scale
-// sur tout l'arbre pendant que la nouvelle page lance ses requêtes et décode ses
-// images. On rend alors la page directement.
-const PageWrap = ({ children }: { children: React.ReactNode }) => {
-  if (LOW_PERF) return <>{children}</>;
-  return (
-    <motion.div initial="initial" animate="in" exit="out" variants={pageVariants}>
-      {children}
-    </motion.div>
-  );
-};
-
-/** Affiché le temps que le code d'une page chargée à la demande arrive. */
-const PageFallback = () => (
-  <div className="flex min-h-screen items-center justify-center">
-    <div className="h-8 w-8 rounded-full border-2 border-primary border-t-transparent animate-spin" />
-  </div>
-);
-
-/**
- * Enveloppe des routes : Suspense pour le chargement différé du code de page, et
- * AnimatePresence uniquement là où une transition est effectivement jouée (son
- * mode "wait" retient le montage de la nouvelle page le temps que l'ancienne
- * finisse de sortir — un délai pur quand il n'y a rien à animer).
- *
- * Suspense reste à l'extérieur : AnimatePresence suit les clés de ses enfants
- * directs pour savoir qui sort, et un Suspense intercalé les lui masquerait.
- */
-const RouteTransition = ({ children }: { children: React.ReactNode }) => (
-  <Suspense fallback={<PageFallback />}>
-    {LOW_PERF ? children : (
-      <AnimatePresence mode="wait" initial={false}>
-        {children}
-      </AnimatePresence>
-    )}
-  </Suspense>
+const PageWrap = ({ children }: { children: React.ReactNode }) => (
+  <motion.div initial="initial" animate="in" exit="out" variants={pageVariants}>
+    {children}
+  </motion.div>
 );
 
 function PresenceHeartbeat() {
@@ -196,7 +149,9 @@ function AppContent() {
         setUnreadCount(res.totalItems);
       } catch {}
     };
-    return startVisibilityPolling(fetchUnread, 30000);
+    fetchUnread();
+    const interval = setInterval(fetchUnread, 30000);
+    return () => clearInterval(interval);
   }, [user]);
 
 
@@ -359,7 +314,7 @@ function AppContent() {
           <AndroidUpdateManager />
           <UpdateAppliedNotice />
           <main>
-            <RouteTransition>
+            <AnimatePresence mode="wait" initial={false}>
               <Routes location={location} key={location.pathname}>
                 <Route path="/" element={<Navigate to="/jux" replace />} />
                 <Route path="/profile-setup" element={<PageWrap><ProfileSetup /></PageWrap>} />
@@ -385,7 +340,7 @@ function AppContent() {
                 <Route path="/create-story" element={backendGuard(<CreateStory />)} />
                 <Route path="*" element={<Navigate to="/jux" replace />} />
               </Routes>
-            </RouteTransition>
+            </AnimatePresence>
           </main>
           {!fullScreenPage && <MiniPlayer />}
           <PlayerPage />
@@ -431,15 +386,13 @@ function AppWithTheme() {
   const { currentTheme } = useTheme();
   const location = useLocation();
   const isAnimated = currentTheme.backgroundAnimation != null;
-  // Les fonds Ultra ne sont pas montés sur le palier bas (cf. ThemeContext) :
-  // sans ça, le conteneur resterait transparent devant un fond absent.
-  const isUltra = currentTheme.isUltra === true && !LOW_PERF;
+  const isUltra = currentTheme.isUltra === true;
   return (
     <div
       style={{
         background: isAnimated || isUltra ? 'transparent' : currentTheme.background,
         backgroundSize: isAnimated ? '200% 200%' : undefined,
-        animation: isAnimated && !LOW_PERF ? currentTheme.backgroundAnimation : undefined,
+        animation: isAnimated ? currentTheme.backgroundAnimation : undefined,
         minHeight: '100vh',
       }}
       data-animated-bg={isAnimated ? '' : undefined}

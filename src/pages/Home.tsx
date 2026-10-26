@@ -31,7 +31,6 @@ import { cn } from '@/lib/utils';
 import { recordToSong } from '@/lib/pbUtils';
 import { toast } from 'sonner';
 import { fetchPlaylistCovers } from '@/lib/playlistCovers';
-import { startVisibilityPolling } from '@/lib/visibilityPolling';
 import PlaylistCoverMosaic from '@/components/PlaylistCoverMosaic';
 
 // Shuffle déterministe : même ordre toute la journée, change chaque jour
@@ -423,8 +422,9 @@ export default function Home() {
         if (!cancelled) setFriendSessions([]);
       }
     };
-    const stop = startVisibilityPolling(load, 8000);
-    return () => { cancelled = true; stop(); };
+    load();
+    const interval = setInterval(load, 8000);
+    return () => { cancelled = true; clearInterval(interval); };
   }, [user, offline, isSessionGuest]);
 
   const handleJoinFriendSession = async (session: ListenSessionRow) => {
@@ -446,15 +446,13 @@ export default function Home() {
         requestKey: null,
       }).then((r) => setUnreadCount(r.totalItems)).catch(() => {});
     };
-    return startVisibilityPolling(fetchUnread, 30_000);
+    fetchUnread();
+    const interval = setInterval(fetchUnread, 30_000);
+    return () => clearInterval(interval);
   }, [user]);
 
-  // Build genre groups from songs.
-  // Mémoïsé : ce regroupement reconstruit un tableau par genre, et ces tableaux
-  // servent de file d'attente aux cartes. Recalculés à chaque rendu, ils
-  // changeaient d'identité et faisaient re-rendre toutes les sections par genre
-  // au moindre changement d'état de la page.
-  const genreGroups = useMemo(() => {
+  // Build genre groups from songs
+  const genreGroups = (() => {
     const map: Record<string, Song[]> = {};
     for (const s of songs) {
       const g = s.genre?.trim();
@@ -466,9 +464,9 @@ export default function Home() {
       .filter(([, arr]) => arr.length >= 2)
       .sort((a, b) => b[1].length - a[1].length)
       .slice(0, 8);
-  }, [songs]);
+  })();
 
-  const allGenres = useMemo(() => genreGroups.map(([g]) => g), [genreGroups]);
+  const allGenres = genreGroups.map(([g]) => g);
 
   const topArtists = useMemo(() => {
     const map: Record<string, { name: string; totalPlays: number; songs: Song[] }> = {};
@@ -484,15 +482,9 @@ export default function Home() {
       .slice(0, 10);
   }, [artistSongs]);
 
-  // Mémoïsé : `SongCard` est mémoïsé sur l'identité de sa liste, et un nouveau
-  // tableau à chaque rendu ferait re-rendre toutes les cartes de la section.
-  const filteredSongs = useMemo(
-    () => (selectedGenre ? songs.filter((s) => s.genre?.trim() === selectedGenre) : songs),
-    [songs, selectedGenre],
-  );
-
-  // Les trois premiers morceaux ont leur propre mise en avant juste au-dessus.
-  const discoverRest = useMemo(() => discoverSongs.slice(3), [discoverSongs]);
+  const filteredSongs = selectedGenre
+    ? songs.filter((s) => s.genre?.trim() === selectedGenre)
+    : songs;
 
   const hour = new Date().getHours();
   const hello = hour >= 5 && hour < 18 ? 'Bonjour' : 'Bonsoir';
@@ -612,7 +604,7 @@ export default function Home() {
           <SectionHeader icon={History} title="Écoutés Récemment" />
           <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6">
             {replaySongs.map((s, i) => (
-              <SongCard key={s.id} song={s} index={i} list={replaySongs} onPlay={playSongFromList} />
+              <SongCard key={s.id} song={s} index={i} onPlay={() => playSongFromList(s, replaySongs)} />
             ))}
           </div>
         </section>
@@ -760,7 +752,7 @@ export default function Home() {
             <>
               <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5">
                 {songs.slice(0, offlineVisibleCount).map((s, i) => (
-                  <SongCard key={s.id} song={s} index={i} list={songs} onPlay={playSongFromList} />
+                  <SongCard key={s.id} song={s} index={i} onPlay={() => playSongFromList(s, songs)} />
                 ))}
               </div>
               {offlineVisibleCount < songs.length && (
@@ -856,8 +848,8 @@ export default function Home() {
               </div>
 
               <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5">
-                {discoverRest.map((s, i) => (
-                  <SongCard key={s.id} song={s} index={i} list={discoverSongs} onPlay={playSongFromList} />
+                {discoverSongs.slice(3).map((s, i) => (
+                  <SongCard key={s.id} song={s} index={i} onPlay={() => playSongFromList(s, discoverSongs)} />
                 ))}
               </div>
               {discoverHasMore && (
@@ -944,7 +936,7 @@ export default function Home() {
             <div className="px-4">
               <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5">
                 {filteredSongs.map((s, i) => (
-                  <SongCard key={s.id} song={s} index={i} list={filteredSongs} onPlay={playSongFromList} />
+                  <SongCard key={s.id} song={s} index={i} onPlay={() => playSongFromList(s, filteredSongs)} />
                 ))}
               </div>
             </div>

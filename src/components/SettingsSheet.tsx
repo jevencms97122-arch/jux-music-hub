@@ -5,8 +5,8 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useThemeEnabled } from '@/hooks/useThemeEnabled';
 import { useTheme } from '@/contexts/ThemeContext';
 import { usePlayer, TRANSITION_MODES } from '@/contexts/PlayerContext';
-import { LogOut, Palette, ChevronRight, RefreshCw, Zap, AudioLines, Glasses, Sliders, Volume2, Gamepad2, BellOff, PictureInPicture2, Cpu, Code2, Download, Radio, ImageOff } from 'lucide-react';
-import { usePerformanceMode, useHideImages } from '@/hooks/usePerformanceMode';
+import { LogOut, Palette, ChevronRight, RefreshCw, Zap, AudioLines, Glasses, Sliders, Volume2, Gamepad2, BellOff, PictureInPicture2, Cpu, Code2, Download, Radio } from 'lucide-react';
+import { usePerformanceMode } from '@/hooks/usePerformanceMode';
 import { useVRMode } from '@/hooks/useVRMode';
 import ThemeSelectorSheet from '@/components/ThemeSelectorSheet';
 import CrossfadeSelectorSheet from '@/components/CrossfadeSelectorSheet';
@@ -29,13 +29,6 @@ import EqualizerSheet from '@/components/EqualizerSheet';
 import { EQ_PRESETS } from '@/lib/eqPresets';
 import { isAutoDownloadEnabled, setAutoDownloadEnabled } from '@/lib/autoDownloadManager';
 import DownloadedSongsSheet from '@/components/DownloadedSongsSheet';
-import type { PerfPreference } from '@/lib/perfProfile';
-
-const PERF_OPTIONS: { value: PerfPreference; label: string }[] = [
-  { value: 'auto', label: 'Auto' },
-  { value: 'low', label: 'Allégé' },
-  { value: 'high', label: 'Complet' },
-];
 
 export default function SettingsSheet({ trigger }: { trigger: React.ReactNode }) {
   const { logout } = useAuth();
@@ -44,8 +37,7 @@ export default function SettingsSheet({ trigger }: { trigger: React.ReactNode })
   const isWindows = isWindowsPlatform(platform);
   const canAutoDownload = canDownloadNatively(platform);
   const { enabled: themesEnabled, setEnabled: setThemesEnabled } = useThemeEnabled();
-  const { preference: perfPreference, setPreference: setPerfPreference, detected: detectedPerfTier } = usePerformanceMode();
-  const { enabled: hideImages, setEnabled: setHideImages } = useHideImages();
+  const { enabled: performanceMode, setEnabled: setPerformanceMode } = usePerformanceMode();
   const { enabled: vrMode, setEnabled: setVrMode } = useVRMode();
   const { currentTheme } = useTheme();
   const {
@@ -148,67 +140,19 @@ export default function SettingsSheet({ trigger }: { trigger: React.ReactNode })
 
         <div className="flex-1 overflow-y-auto pr-1">
           <div className="space-y-2">
-          {/* Mode Performance — allège les effets visuels les plus coûteux */}
+          {/* Mode Performance */}
           <div className="rounded-2xl border border-white/[0.06] bg-card/60 backdrop-blur-md overflow-hidden">
-            <div className="px-4 py-3.5">
+            <div className="flex items-center justify-between px-4 py-3.5">
               <div className="flex items-center gap-3">
                 <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-green-500/15">
                   <Zap className="h-4.5 w-4.5 text-green-400" />
                 </div>
                 <div>
                   <p className="text-sm font-semibold">Mode Performance</p>
-                  <p className="text-xs text-muted-foreground">
-                    Allège les flous, les fonds animés et les transitions
-                  </p>
+                  <p className="text-xs text-muted-foreground">Désactive le chargement des images</p>
                 </div>
               </div>
-              <div className="mt-3 grid grid-cols-3 gap-1.5 rounded-xl bg-background/40 p-1">
-                {PERF_OPTIONS.map((opt) => (
-                  <button
-                    key={opt.value}
-                    onClick={() => {
-                      if (opt.value === perfPreference) return;
-                      setPerfPreference(opt.value);
-                      // Le palier est figé au démarrage pour ne pas monter et
-                      // démonter des fonds animés en pleine navigation.
-                      window.location.reload();
-                    }}
-                    className={cn(
-                      'rounded-lg px-2 py-1.5 text-xs font-semibold transition-colors',
-                      opt.value === perfPreference
-                        ? 'bg-primary text-primary-foreground'
-                        : 'text-muted-foreground hover:text-foreground',
-                    )}
-                  >
-                    {opt.label}
-                  </button>
-                ))}
-              </div>
-              <p className="mt-2 text-[11px] text-muted-foreground">
-                {perfPreference === 'auto'
-                  ? detectedPerfTier === 'low'
-                    ? 'Automatique : cet appareil est détecté comme modeste, les effets lourds sont désactivés.'
-                    : 'Automatique : cet appareil tient tous les effets.'
-                  : perfPreference === 'low'
-                    ? 'Forcé : effets lourds désactivés, même sur un appareil puissant.'
-                    : 'Forcé : tous les effets actifs, même si l\'appareil peine.'}
-              </p>
-            </div>
-          </div>
-
-          {/* Masquage des images — réglage distinct, cf. usePerformanceMode */}
-          <div className="rounded-2xl border border-white/[0.06] bg-card/60 backdrop-blur-md overflow-hidden">
-            <div className="flex items-center justify-between px-4 py-3.5">
-              <div className="flex items-center gap-3">
-                <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-green-500/15">
-                  <ImageOff className="h-4.5 w-4.5 text-green-400" />
-                </div>
-                <div>
-                  <p className="text-sm font-semibold">Masquer les images</p>
-                  <p className="text-xs text-muted-foreground">Ni pochettes ni bannières — pour une connexion très lente</p>
-                </div>
-              </div>
-              <Switch checked={hideImages} onCheckedChange={(v) => { setHideImages(v); window.location.reload(); }} />
+              <Switch checked={performanceMode} onCheckedChange={(v) => { setPerformanceMode(v); window.location.reload(); }} />
             </div>
           </div>
 

@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react';
-import { usePlayer, usePlayerTime } from '@/contexts/PlayerContext';
+import { usePlayer } from '@/contexts/PlayerContext';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 import { overlaySignal } from '@/lib/gamepadOverlaySignal';
@@ -157,12 +157,11 @@ function setCursorClick(el: HTMLDivElement, clicked: boolean) {
 
 export function useGamepad() {
   const player   = usePlayer();
-  const time     = usePlayerTime();
   const navigate = useNavigate();
 
   // Everything dynamic is in a ref so the rAF loop never captures stale values
-  const stateRef = useRef({ player, time, navigate });
-  stateRef.current = { player, time, navigate };
+  const stateRef = useRef({ player, navigate });
+  stateRef.current = { player, navigate };
 
   const prevRef    = useRef<boolean[]>([]);           // previous button states
   const leftNav    = useRef({ active: false, lastTime: 0 });
@@ -244,7 +243,7 @@ export function useGamepad() {
           return;
         }
 
-        const { player: p, time: t, navigate: nav } = stateRef.current;
+        const { player: p, navigate: nav } = stateRef.current;
         const { buttons, axes } = gp;
         const prev = prevRef.current;
         const mapping = mappingRef.current;
@@ -324,10 +323,10 @@ export function useGamepad() {
         if (triggered('next')) p.next();
 
         // ── Reculer 10s ───────────────────────────────────────────────────
-        if (triggered('seekBack')) p.seek(Math.max(0, t.currentTime - 10));
+        if (triggered('seekBack')) p.seek(Math.max(0, p.currentTime - 10));
 
         // ── Avancer 10s ───────────────────────────────────────────────────
-        if (triggered('seekForward')) p.seek(Math.min(t.duration, t.currentTime + 10));
+        if (triggered('seekForward')) p.seek(Math.min(p.duration, p.currentTime + 10));
 
         prevRef.current = Array.from(buttons).map((b) => b.pressed);
       }

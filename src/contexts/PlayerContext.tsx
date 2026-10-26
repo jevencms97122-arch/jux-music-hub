@@ -1,4 +1,4 @@
-﻿import React, { createContext, useContext, useState, useRef, useEffect, useCallback, useMemo } from 'react';
+﻿import React, { createContext, useContext, useState, useRef, useEffect, useCallback } from 'react';
 import { pb, getPbUrl } from '@/lib/pocketbase';
 import { songAudioUrl, songCoverUrl, songAudioUrlWithCache } from '@/lib/storage';
 import { useAuth } from '@/contexts/AuthContext';
@@ -104,6 +104,8 @@ export interface ListenSessionRow {
 interface PlayerContextType {
   currentSong: Song | null;
   isPlaying: boolean;
+  currentTime: number;
+  duration: number;
   volume: number;
   queue: Song[];
   queueIndex: number;
@@ -158,33 +160,11 @@ interface PlayerContextType {
   currentEqPreset: string;
   setEqPreset: (id: string) => void;
   sleepTimerMinutes: number | null;
+  sleepTimerRemaining: number | null;
   setSleepTimer: (minutes: number | null) => void;
 }
 
-/**
- * Position de lecture, durée et compte à rebours de l'arrêt programmé : les
- * seules valeurs du lecteur qui changent en continu (`timeupdate` arrive environ
- * 4 fois par seconde, le minuteur chaque seconde).
- *
- * Elles vivent dans un contexte séparé parce qu'un contexte React notifie TOUS
- * ses abonnés dès que sa valeur change. Mélangées aux autres, elles faisaient
- * re-rendre les 27 composants qui appellent `usePlayer()` — dont la page
- * d'accueil et ses listes de cartes — plusieurs fois par seconde pendant toute
- * la lecture. Séparées, seuls les 4 composants qui affichent réellement le temps
- * se re-rendent.
- */
-interface PlayerTimeContextType {
-  currentTime: number;
-  duration: number;
-  sleepTimerRemaining: number | null;
-}
-
 const PlayerContext = createContext<PlayerContextType | null>(null);
-const PlayerTimeContext = createContext<PlayerTimeContextType>({
-  currentTime: 0,
-  duration: 0,
-  sleepTimerRemaining: null,
-});
 
 const CROSSFADE_KEY = 'jux:crossfade';
 const TRANSITION_MODE_KEY = 'jux:transitionMode';
@@ -1665,46 +1645,19 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
     loadAndPlayExternalAudio({ ...payload, autoPlay: true });
   }, [loadAndPlayExternalAudio]);
 
-  const getAnalyserNode = useCallback(() => analyserRef.current, []);
-
-  // Toutes les fonctions exposées sont déjà stabilisées par useCallback, et les
-  // valeurs listées ici ne changent qu'à une action de l'utilisateur ou à un
-  // changement de piste. Mémoriser l'objet évite d'en recréer un à chaque rendu
-  // du provider : sans ce useMemo, le simple fait que le provider se re-rende
-  // (ne serait-ce que pour la position de lecture) invaliderait le contexte et
-  // re-rendrait tous ses abonnés.
-  const value = useMemo<PlayerContextType>(() => ({
-    currentSong, isPlaying, volume, queue, queueIndex, isShuffled, repeatMode, isPlayerOpen, playbackRate, crossfadeSeconds, transitionMode,
-    manualCrossfadeSeconds, manualTransitionMode,
-    activeSession, isSessionHost, isSessionGuest, connectionStatus, isBuffering, isCrossfading, refreshSession, setActiveSession, stopAudio, refreshSongStats,
-    permanentSessionEnabled, setPermanentSessionEnabled, joinSession,
-    playSong, playSongFromList, playExternalAudio, togglePlay, next, previous, seek, setVolume, toggleShuffle, cycleRepeat,
-    openPlayer, closePlayer, setPlaybackRate, setCrossfadeSeconds, setTransitionMode, setManualCrossfadeSeconds, setManualTransitionMode, addToQueue, startRadio, signalVideoReady,
-    getAnalyserNode,
-    currentEqPreset, setEqPreset,
-    sleepTimerMinutes, setSleepTimer,
-  }), [
-    currentSong, isPlaying, volume, queue, queueIndex, isShuffled, repeatMode, isPlayerOpen, playbackRate, crossfadeSeconds, transitionMode,
-    manualCrossfadeSeconds, manualTransitionMode,
-    activeSession, isSessionHost, isSessionGuest, connectionStatus, isBuffering, isCrossfading, refreshSession, setActiveSession, stopAudio, refreshSongStats,
-    permanentSessionEnabled, setPermanentSessionEnabled, joinSession,
-    playSong, playSongFromList, playExternalAudio, togglePlay, next, previous, seek, setVolume, toggleShuffle, cycleRepeat,
-    openPlayer, closePlayer, setPlaybackRate, setCrossfadeSeconds, setTransitionMode, setManualCrossfadeSeconds, setManualTransitionMode, addToQueue, startRadio, signalVideoReady,
-    getAnalyserNode,
-    currentEqPreset, setEqPreset,
-    sleepTimerMinutes, setSleepTimer,
-  ]);
-
-  const timeValue = useMemo<PlayerTimeContextType>(
-    () => ({ currentTime, duration, sleepTimerRemaining }),
-    [currentTime, duration, sleepTimerRemaining],
-  );
-
   return (
-    <PlayerContext.Provider value={value}>
-      <PlayerTimeContext.Provider value={timeValue}>
-        {children}
-      </PlayerTimeContext.Provider>
+    <PlayerContext.Provider value={{
+      currentSong, isPlaying, currentTime, duration, volume, queue, queueIndex, isShuffled, repeatMode, isPlayerOpen, playbackRate, crossfadeSeconds, transitionMode,
+      manualCrossfadeSeconds, manualTransitionMode,
+      activeSession, isSessionHost, isSessionGuest, connectionStatus, isBuffering, isCrossfading, refreshSession, setActiveSession, stopAudio, refreshSongStats,
+      permanentSessionEnabled, setPermanentSessionEnabled, joinSession,
+      playSong, playSongFromList, playExternalAudio, togglePlay, next, previous, seek, setVolume, toggleShuffle, cycleRepeat,
+      openPlayer, closePlayer, setPlaybackRate, setCrossfadeSeconds, setTransitionMode, setManualCrossfadeSeconds, setManualTransitionMode, addToQueue, startRadio, signalVideoReady,
+      getAnalyserNode: () => analyserRef.current,
+      currentEqPreset, setEqPreset,
+      sleepTimerMinutes, sleepTimerRemaining, setSleepTimer,
+    }}>
+      {children}
     </PlayerContext.Provider>
   );
 }
@@ -1713,13 +1666,4 @@ export function usePlayer() {
   const ctx = useContext(PlayerContext);
   if (!ctx) throw new Error('usePlayer must be used within PlayerProvider');
   return ctx;
-}
-
-/**
- * Position de lecture / durée / minuteur. À n'appeler que depuis un composant
- * qui affiche vraiment ces valeurs : s'y abonner impose un re-rendu à chaque
- * `timeupdate` (≈4 fois par seconde pendant la lecture).
- */
-export function usePlayerTime() {
-  return useContext(PlayerTimeContext);
 }

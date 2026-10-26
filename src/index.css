@@ -96,28 +96,14 @@
   ::-webkit-scrollbar-thumb { background: hsl(var(--border)); border-radius: 99px; }
   ::-webkit-scrollbar-thumb:hover { background: hsl(var(--muted-foreground)); }
 
-  /* Transition par défaut réservée aux éléments qui réagissent réellement à une
-     interaction. Appliquée sur `*`, elle forçait le navigateur à tenir une
-     entrée de transition pour CHAQUE nœud du document (plusieurs milliers sur
-     une page de listes) : le recalcul de style d'un simple survol parcourait
-     alors tout l'arbre, ce qui bloquait la frame sur un CPU faible. */
-  a,
-  button,
-  input,
-  textarea,
-  select,
-  label,
-  summary,
-  [role="button"],
-  [role="tab"],
-  [role="menuitem"],
-  [role="option"],
-  [role="switch"],
-  [role="checkbox"],
-  [data-transition] {
+  * {
     transition-property: color, background-color, border-color, opacity, transform, box-shadow;
-    transition-duration: 180ms;
+    transition-duration: 160ms;
     transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+  }
+
+  input, button, a, [role="button"] {
+    transition-duration: 180ms;
   }
 }
 
@@ -147,11 +133,8 @@
     position: relative;
     isolation: isolate;
     background: rgba(255, 255, 255, 0.055);
-    /* Rayon volontairement modeste : le coût d'un backdrop-filter croît avec le
-       rayon de flou, et au-delà de ~20px la différence visuelle sur un fond
-       sombre est imperceptible alors que le coût par frame continue de monter. */
-    backdrop-filter: blur(20px) saturate(180%) brightness(1.06);
-    -webkit-backdrop-filter: blur(20px) saturate(180%) brightness(1.06);
+    backdrop-filter: blur(44px) saturate(180%) brightness(1.06);
+    -webkit-backdrop-filter: blur(44px) saturate(180%) brightness(1.06);
     box-shadow:
       0 1px 0 rgba(255, 255, 255, 0.13) inset,
       0 -1px 0 rgba(0, 0, 0, 0.08) inset,
@@ -202,8 +185,8 @@
     position: relative;
     isolation: isolate;
     background: rgba(255, 255, 255, 0.07);
-    backdrop-filter: blur(28px) saturate(200%) brightness(1.08);
-    -webkit-backdrop-filter: blur(28px) saturate(200%) brightness(1.08);
+    backdrop-filter: blur(64px) saturate(200%) brightness(1.08);
+    -webkit-backdrop-filter: blur(64px) saturate(200%) brightness(1.08);
     box-shadow:
       0 1px 0 rgba(255, 255, 255, 0.16) inset,
       0 -1px 0 rgba(0, 0, 0, 0.06) inset,
@@ -1077,115 +1060,4 @@ html[data-vr-mode] {
 [data-vr-mode] :focus-visible {
   outline: 3px solid hsl(var(--primary));
   outline-offset: 3px;
-}
-/* ──────────────────────────────────────────────────────────────────────────
-   Palier de performance bas (`<html data-perf="low">`, voir lib/perfProfile.ts)
-
-   Appareils d'entrée de gamme (≈2 Go de RAM, GPU/CPU faible). On ne retire pas
-   des fonctionnalités : on retire les effets de composition dont le coût est
-   proportionnel à la surface de l'écran et qui se repaient à chaque frame.
-   L'ordre d'importance est celui des règles ci-dessous.
-   ────────────────────────────────────────────────────────────────────────── */
-
-/* 1. Flou de fond. C'est le poste le plus lourd : chaque élément flouté fait
-   recapturer puis reflouter la zone sous lui à chaque frame où quelque chose
-   bouge derrière (défilement, lecture audio, animation). Remplacé par une
-   surface opaque, qui coûte un simple remplissage. */
-[data-perf="low"] .glass,
-[data-perf="low"] .glass-strong,
-[data-perf="low"] [class*="backdrop-blur"] {
-  backdrop-filter: none !important;
-  -webkit-backdrop-filter: none !important;
-}
-
-[data-perf="low"] .glass,
-[data-perf="low"] .glass-strong {
-  background: hsl(var(--card) / 0.92);
-}
-
-/* Les reflets des panneaux de verre sont deux pseudo-éléments en plus par
-   panneau (dont un masqué, donc une couche de composition supplémentaire). */
-[data-perf="low"] .glass::before,
-[data-perf="low"] .glass::after,
-[data-perf="low"] .glass-strong::before,
-[data-perf="low"] .glass-strong::after {
-  display: none;
-}
-
-/* 2. Fonds animés plein écran. Animer `background-position` ou `filter` ne peut
-   pas être délégué au compositeur : c'est un repaint de tout l'écran à chaque
-   frame. Le dégradé reste, figé sur sa première position. */
-[data-perf="low"] [data-animated-bg],
-[data-perf="low"] .ultra-starfall-rain,
-[data-perf="low"] .ultra-nebula,
-[data-perf="low"] .ultra-nebula::after,
-[data-perf="low"] .ultra-matrix-column,
-[data-perf="low"] .ultra-symbols-grid > span {
-  animation: none !important;
-}
-
-/* Le `filter: blur(1em) brightness(6)` de la pluie stellaire est animé en
-   continu sur une couche plein écran : impayable sur un GPU faible. */
-[data-perf="low"] .ultra-starfall-rain {
-  filter: none !important;
-  will-change: auto !important;
-}
-
-/* 3. Animations décoratives en boucle infinie. Chacune garde une couche de
-   composition vivante et réveille le compositeur en permanence, même quand
-   l'utilisateur ne regarde pas l'élément. */
-[data-perf="low"] .animate-glow-swell,
-[data-perf="low"] .animate-equalizer,
-[data-perf="low"] .text-pdg-gold,
-[data-perf="low"] #gamepad-cursor {
-  animation: none !important;
-}
-
-/* Le pseudo doré reste lisible sans le dégradé défilant (le clip sur le texte
-   impose un repaint par frame). */
-[data-perf="low"] .text-pdg-gold {
-  background: none;
-  -webkit-text-fill-color: #ffd700;
-  color: #ffd700;
-}
-
-/* L'égaliseur animait `height`, ce qui déclenche une mise en page complète à
-   chaque frame. Figé sur une hauteur moyenne. */
-[data-perf="low"] .animate-equalizer {
-  height: 12px;
-  will-change: auto;
-}
-
-/* 4. Animations d'apparition. Elles ne tournent qu'une fois, mais elles se
-   déclenchent par dizaines simultanément au montage d'une liste — le moment
-   précis où l'appareil est déjà occupé à décoder les images. */
-[data-perf="low"] .animate-fade-slide-up,
-[data-perf="low"] .animate-fade-in,
-[data-perf="low"] .animate-scale-in,
-[data-perf="low"] .animate-card-in,
-[data-perf="low"] .animate-slide-up-stagger,
-[data-perf="low"] .animate-bg-reveal {
-  animation: none !important;
-}
-
-/* Les délais en cascade n'ont plus d'objet sans animation d'entrée, et un
-   `animation-delay` résiduel laisserait des éléments invisibles. */
-[data-perf="low"] [class*="delay-"] {
-  animation-delay: 0s !important;
-}
-
-/* 5. Ombres portées larges. Une ombre de 48px de diffusion est un flou gaussien
-   recalculé dès que l'élément bouge ; sur une liste qui défile, c'est une par
-   carte. On garde une ombre courte, qui reste perceptible. */
-[data-perf="low"] .glass,
-[data-perf="low"] .glass-strong {
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.45);
-}
-
-/* 6. Le zoom VR multiplie la surface à peindre ; cumulé avec un GPU faible il
-   doublerait le coût de chaque frame. On laisse le choix à l'utilisateur mais
-   on n'ajoute pas de flou par-dessus. */
-[data-perf="low"] {
-  --transition-smooth: all 0.15s linear;
-  --transition-spring: all 0.2s linear;
 }

@@ -3,7 +3,6 @@ import TabFade from '@/components/TabFade';
 import SlidingTabIndicator from '@/components/SlidingTabIndicator';
 import { pb } from '@/lib/pocketbase';
 import { useAuth } from '@/contexts/AuthContext';
-import { startVisibilityPolling } from '@/lib/visibilityPolling';
 import { useNavigate } from 'react-router-dom';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
@@ -173,7 +172,9 @@ export default function Social() {
         return next;
       });
     };
-    return startVisibilityPolling(doPoll, 8000, { immediate: initialLoadDone.current });
+    const interval = setInterval(doPoll, 8000);
+    if (initialLoadDone.current) doPoll();
+    return () => clearInterval(interval);
   }, [user, following]);
 
   const openSession = useCallback(() => {

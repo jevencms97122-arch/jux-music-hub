@@ -16,12 +16,6 @@ import {
   type NebulaColors,
 } from '@/lib/ultraNebulaPalette';
 import { SYMBOL_PRESET_DEFAULT_ID } from '@/lib/ultraSymbolPresets';
-import { isLowPerf } from '@/lib/perfProfile';
-
-// Palier figé pour la session (cf. perfProfile) : il décide quels fonds animés
-// sont montés, et un changement en cours de route les monterait/démonterait en
-// pleine navigation.
-const LOW_PERF = isLowPerf();
 
 export const CUSTOM_VIDEO_THEME_ID = 'custom-video';
 
@@ -403,10 +397,7 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
 
   return (
     <ThemeContext.Provider value={value}>
-      {/* Backdrop animé : fixe, z-index -1, toujours visible derrière tout le contenu.
-          Sur le palier bas, le dégradé est conservé mais figé : animer
-          `background-position` sur une surface plein écran est un repaint complet
-          à chaque frame, que le compositeur ne peut pas prendre en charge. */}
+      {/* Backdrop animé : fixe, z-index -1, toujours visible derrière tout le contenu */}
       {currentTheme.backgroundAnimation && (
         <div
           aria-hidden
@@ -417,16 +408,12 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
             pointerEvents: 'none',
             background: currentTheme.background,
             backgroundSize: '300% 300%',
-            animation: LOW_PERF ? undefined : currentTheme.backgroundAnimation,
+            animation: currentTheme.backgroundAnimation,
             animationPlayState: animPaused ? 'paused' : 'running',
           }}
         />
       )}
-      {/* Thèmes Ultra : pluie de particules floutée, colonnes de texte animées,
-          nébuleuse en `hue-rotate` — tous en plein écran et par frame. C'est le
-          poste le plus lourd de l'interface ; on ne les monte pas sur un
-          appareil modeste (le thème garde ses couleurs, il perd son animation). */}
-      {currentTheme.isUltra && !LOW_PERF && (
+      {currentTheme.isUltra && (
         <UltraBackground
           theme={currentTheme}
           paused={animPaused}

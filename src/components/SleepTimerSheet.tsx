@@ -1,5 +1,5 @@
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
-import { usePlayer, usePlayerTime } from '@/contexts/PlayerContext';
+import { usePlayer } from '@/contexts/PlayerContext';
 import { cn } from '@/lib/utils';
 import { Moon, X } from 'lucide-react';
 
@@ -20,8 +20,7 @@ const OPTIONS: { label: string; minutes: number | null }[] = [
 ];
 
 export default function SleepTimerSheet({ open, onClose }: Props) {
-  const { sleepTimerMinutes, setSleepTimer } = usePlayer();
-  const { sleepTimerRemaining } = usePlayerTime();
+  const { sleepTimerMinutes, sleepTimerRemaining, setSleepTimer } = usePlayer();
 
   const formatRemaining = (sec: number) => {
     const m = Math.floor(sec / 60);
